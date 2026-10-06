@@ -1,0 +1,23 @@
+# Security
+
+[简体中文](SECURITY.zh-CN.md)
+
+Siyin grants remote access to local coding runtimes. Deploy it only for an owner and clients you trust. Herdr can run arbitrary commands as the local OS user. A workspace path is not a sandbox. Managed Codex policy limits apply only to that instance; attaching to a native server preserves its native permissions.
+
+## Trust boundaries
+
+- One owner per deployment. Every authorized MCP client can access every approved instance, including later approvals. Multi-tenant hosting and mutually untrusted clients are unsupported.
+- Owner signing keys stay on the owner's machine. Relay hosts receive only the public key. Protect private keys, Connector credentials, deployment configuration and backups with filesystem permissions and encrypted storage where appropriate.
+- Public endpoints require HTTPS/WSS. VPS HTTP listeners belong behind a trusted HTTPS proxy and must not be directly exposed. Host checks do not replace TLS.
+- Device approval requires comparison with the device's own fingerprint. Changing an instance scope requires a fresh approval.
+- A compromised Relay operator can observe traffic and alter authorization. This is not end-to-end encryption against the Relay host.
+- Revocation prevents subsequent access and pending-result delivery; already-started native work continues. Cancel it through the native runtime if needed.
+- No automatic write replay after timeout or disconnect. Inspect native state when the outcome is uncertain.
+
+Avoid logging OAuth redirects, bearer tokens, native output or approval contents. The default Cloudflare manifest disables observability logging. Keep reverse-proxy access logs disabled or redact sensitive URLs. Production secrets must never appear in issues or test fixtures.
+
+## Reporting a vulnerability
+
+If this repository's host provides private vulnerability reporting, use that channel. Otherwise contact the maintainer privately through the contact information on their profile to establish a secure channel before sharing details. Do not open a public issue containing credentials, exploit details or private runtime output. Include the affected revision, deployment target, prerequisites and a minimal safe reproducer. No response-time or bounty commitment is implied.
+
+This early release has no independent security audit. Run `npm audit`, keep the supported runtimes current within tested compatibility, and review updates before production rollout. A dependency override for `sharp` fixes the transitive Wrangler image-decoding advisory; remove it when Wrangler's supported dependency range includes a fixed version.
