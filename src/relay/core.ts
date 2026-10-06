@@ -292,7 +292,8 @@ export class Relay {
         else {
           if (
             !instanceId ||
-            !d.instances.some((i) => i.instanceId === instanceId)
+            (!d.instances.some((i) => i.instanceId === instanceId) &&
+              !Object.hasOwn(d.approved, instanceId))
           )
             throw new Fault("not_found", "Instance not found");
           delete d.approved[instanceId];

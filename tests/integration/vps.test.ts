@@ -282,6 +282,33 @@ test(
       },
     });
     assert.match(JSON.stringify(result), /native/);
+    // A temporarily absent instance must still have its retained approval revoked.
+    let changed = once(ws, "message");
+    ws.send(JSON.stringify({ v: 1, type: "instances_changed", instances: [] }));
+    await changed;
+    await admin("/api/admin/revoke", {
+      kind: "instance",
+      id: device.deviceId,
+      instanceId: "test",
+    });
+    changed = once(ws, "message");
+    ws.send(
+      JSON.stringify({
+        v: 1,
+        type: "instances_changed",
+        instances: [instance],
+      }),
+    );
+    await changed;
+    const reappeared = await mcp.callTool({
+      name: "runtime_call",
+      arguments: {
+        deviceId: device.deviceId,
+        instanceId: "test",
+        method: "agent.list",
+      },
+    });
+    assert.equal(reappeared.isError, true);
     await admin("/api/admin/revoke", { kind: "device", id: device.deviceId });
     const denied = await mcp.callTool({
       name: "runtime_call",
