@@ -12,7 +12,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
-COPY package.json ./
+COPY package.json LICENSE NOTICE ./
 USER node
 EXPOSE 8080
 ENTRYPOINT ["node", "dist/cli.js"]
