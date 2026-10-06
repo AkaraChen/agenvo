@@ -93,7 +93,11 @@ export const configSchema = z
   );
 export type Config = z.infer<typeof configSchema>;
 export const configDir = () =>
-  resolve(process.env.SIYIN_CONFIG_DIR ?? join(homedir(), ".config", "siyin"));
+  resolve(
+    process.env.AGENVO_CONFIG_DIR ??
+      process.env.SIYIN_CONFIG_DIR ??
+      join(homedir(), ".config", "agenvo"),
+  );
 export async function atomicJson(path: string, value: unknown) {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
   await chmod(dirname(path), 0o700);
@@ -174,7 +178,7 @@ export async function acquireLock(
   } catch {
     throw new Fault(
       "connector_locked",
-      "Connector lock exists; run siyin doctor to inspect it.",
+      "Connector lock exists; run agenvo doctor to inspect it.",
     );
   }
   await handle.writeFile(

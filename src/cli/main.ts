@@ -139,7 +139,7 @@ async function main() {
   if (options.version) return output({ version: VERSION });
   if (options.help || !command)
     return console.log(
-      `Siyin ${VERSION}\n\nsiyin deploy --origin https://WORKER.SUBDOMAIN.workers.dev [--name siyin] [--owner EMAIL --issuer URL --aud AUD]\nsiyin relay init --origin https://RELAY --data-dir PATH --output CONFIG [--host 127.0.0.1 --port 8080 --trusted-proxy]\nsiyin relay serve --config CONFIG\nsiyin admin state --origin https://RELAY\nsiyin admin approve-instance --device-id ID --instance-id ID --fingerprint SHA256 --origin https://RELAY\nsiyin admin revoke device|instance|grant --id ID [--instance-id ID] --origin https://RELAY\nsiyin instance add herdr --id work --config-root PATH [--cwd PATH]\nsiyin instance add codex --id coding --home PATH [--mode managed-stdio|attach-unix] [--socket PATH] [--sandbox read-only|workspace-write]\nsiyin connect https://RELAY [--name DEVICE]\nsiyin connect --cancel\nsiyin pairing list --origin https://RELAY\nsiyin pairing approve CODE --fingerprint SHA256 --origin https://RELAY\nsiyin client inspect AUTHORIZATION_URL --origin https://RELAY\nsiyin client approve AUTHORIZATION_URL --origin https://RELAY --client-id ID --redirect-uri URI --output PRIVATE_FILE\nsiyin run\nsiyin service install|uninstall\nsiyin status --json\nsiyin doctor [--recover-lock]\nsiyin disconnect\n\nConfig: ${dir}\nManaged Codex homes default to a separate local directory. attach-unix uses an existing server and preserves native thread permissions; it never starts or stops that server. Log in there with CODEX_HOME=PATH codex login.\nAfter changing instances, explicitly restart the connector and approve new scopes with siyin admin approve-instance.`,
+      `Agenvo ${VERSION}\n\nagenvo deploy --origin https://WORKER.SUBDOMAIN.workers.dev [--name agenvo] [--owner EMAIL --issuer URL --aud AUD]\nagenvo relay init --origin https://RELAY --data-dir PATH --output CONFIG [--host 127.0.0.1 --port 8080 --trusted-proxy]\nagenvo relay serve --config CONFIG\nagenvo admin state --origin https://RELAY\nagenvo admin approve-instance --device-id ID --instance-id ID --fingerprint SHA256 --origin https://RELAY\nagenvo admin revoke device|instance|grant --id ID [--instance-id ID] --origin https://RELAY\nagenvo instance add herdr --id work --config-root PATH [--cwd PATH]\nagenvo instance add codex --id coding --home PATH [--mode managed-stdio|attach-unix] [--socket PATH] [--sandbox read-only|workspace-write]\nagenvo connect https://RELAY [--name DEVICE]\nagenvo connect --cancel\nagenvo pairing list --origin https://RELAY\nagenvo pairing approve CODE --fingerprint SHA256 --origin https://RELAY\nagenvo client inspect AUTHORIZATION_URL --origin https://RELAY\nagenvo client approve AUTHORIZATION_URL --origin https://RELAY --client-id ID --redirect-uri URI --output PRIVATE_FILE\nagenvo run\nagenvo service install|uninstall\nagenvo status --json\nagenvo doctor [--recover-lock]\nagenvo disconnect\n\nConfig: ${dir}\nManaged Codex homes default to a separate local directory. attach-unix uses an existing server and preserves native thread permissions; it never starts or stops that server. Log in there with CODEX_HOME=PATH codex login.\nAfter changing instances, explicitly restart the connector and approve new scopes with agenvo admin approve-instance.`,
     );
   if (command === "relay")
     return output(await relayCommand(subcommand, options));
@@ -238,9 +238,9 @@ async function main() {
       ...(c.relay
         ? {
             next:
-              "Restart the connector, inspect siyin admin state --origin " +
+              "Restart the connector, inspect agenvo admin state --origin " +
               c.relay +
-              ", then use siyin admin approve-instance.",
+              ", then use agenvo admin approve-instance.",
           }
         : {}),
     });
@@ -329,7 +329,7 @@ async function main() {
         c.name = p.name;
         await saveConfig(c, dir);
         await unlink(join(dir, "pairing.json"));
-        output({ paired: true, deviceId: c.deviceId, next: "siyin run" });
+        output({ paired: true, deviceId: c.deviceId, next: "agenvo run" });
         return;
       }
       await new Promise((r) => setTimeout(r, 2000));
@@ -502,7 +502,7 @@ async function main() {
         ? {}
         : {
             next:
-              "When connectivity returns, run siyin admin revoke device --id " +
+              "When connectivity returns, run agenvo admin revoke device --id " +
               revokedDeviceId +
               " --origin " +
               c.relay,

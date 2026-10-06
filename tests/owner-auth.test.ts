@@ -16,7 +16,7 @@ test("Access owner requires signature, issuer, audience, expiry and exact identi
   });
   const env = {
     ACCESS_ISSUER: "https://test.cloudflareaccess.com",
-    ACCESS_AUD: "siyin",
+    ACCESS_AUD: "agenvo",
     OWNER_EMAIL: "owner@example.com",
   };
   const token = (patch: Record<string, unknown> = {}, key = pair.privateKey) =>
@@ -48,16 +48,16 @@ test("Access owner requires signature, issuer, audience, expiry and exact identi
     { code: "permission_denied" },
   );
   await assert.rejects(
-    owner(new Request("https://siyin.test/admin"), {} as Env),
+    owner(new Request("https://agenvo.test/admin"), {} as Env),
     { code: "owner_not_configured" },
   );
   assert.throws(
     () =>
       sameOrigin(
-        new Request("https://siyin.test/admin", {
+        new Request("https://agenvo.test/admin", {
           headers: { Origin: "https://evil.test" },
         }),
-        { ORIGIN: "https://siyin.test" } as Env,
+        { ORIGIN: "https://agenvo.test" } as Env,
       ),
     { code: "csrf_rejected" },
   );

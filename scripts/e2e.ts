@@ -20,8 +20,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { herdrFixture } from "../tests/fixtures/herdr-runtime.ts";
 const exec = promisify(execFile);
 const sleep = (ms = 100) => new Promise((r) => setTimeout(r, ms));
-if (!process.env.SIYIN_E2E_DIR) {
-  const dir = await mkdtemp("/tmp/siyin-e-");
+if (!process.env.AGENVO_E2E_DIR) {
+  const dir = await mkdtemp("/tmp/agenvo-e-");
   try {
     await exec("openssl", [
       "req",
@@ -47,7 +47,7 @@ if (!process.env.SIYIN_E2E_DIR) {
         stdio: "inherit",
         env: {
           ...process.env,
-          SIYIN_E2E_DIR: dir,
+          AGENVO_E2E_DIR: dir,
           NODE_EXTRA_CA_CERTS: join(dir, "cert.pem"),
         },
       },
@@ -58,7 +58,7 @@ if (!process.env.SIYIN_E2E_DIR) {
     await rm(dir, { recursive: true, force: true });
   }
 } else {
-  const dir = process.env.SIYIN_E2E_DIR;
+  const dir = process.env.AGENVO_E2E_DIR;
   const cfg = join(dir, "config");
   await mkdir(join(dir, "herdr"));
   const nativeServer = herdrFixture(
@@ -105,7 +105,7 @@ if (!process.env.SIYIN_E2E_DIR) {
   };
   const cli = (...args: string[]) =>
     exec(process.execPath, ["dist/cli.js", ...args], {
-      env: { ...process.env, SIYIN_CONFIG_DIR: cfg },
+      env: { ...process.env, AGENVO_CONFIG_DIR: cfg },
       timeout: 30000,
     });
   try {
@@ -125,7 +125,7 @@ if (!process.env.SIYIN_E2E_DIR) {
       child.once("exit", () => reject(new Error(output)));
     });
     let relay = base;
-    if (process.env.SIYIN_E2E_BLACKHOLE) {
+    if (process.env.AGENVO_E2E_BLACKHOLE) {
       proxy = net.createServer((down) => {
         const up = net.connect(Number(new URL(base).port), "127.0.0.1");
         const pair = { down, up };
@@ -165,7 +165,7 @@ if (!process.env.SIYIN_E2E_DIR) {
       "--cwd",
       await realpath(dir),
     );
-    if (process.env.SIYIN_E2E_CODEX_HOME)
+    if (process.env.AGENVO_E2E_CODEX_HOME)
       await cli(
         "instance",
         "add",
@@ -175,7 +175,7 @@ if (!process.env.SIYIN_E2E_DIR) {
         "--cwd",
         await realpath(dir),
         "--home",
-        await realpath(process.env.SIYIN_E2E_CODEX_HOME),
+        await realpath(process.env.AGENVO_E2E_CODEX_HOME),
       );
     const connecting = cli(
       "connect",
@@ -222,7 +222,7 @@ if (!process.env.SIYIN_E2E_DIR) {
     await resumed;
     evidence.pairingResumed = true;
     const connector = spawn(process.execPath, ["dist/cli.js", "run"], {
-      env: { ...process.env, SIYIN_CONFIG_DIR: cfg },
+      env: { ...process.env, AGENVO_CONFIG_DIR: cfg },
       stdio: "ignore",
     });
     children.push(connector);
@@ -260,7 +260,7 @@ if (!process.env.SIYIN_E2E_DIR) {
       state: "local-test",
       code_challenge: createHash("sha256").update(verifier).digest("base64url"),
       code_challenge_method: "S256",
-      resource: "https://siyin.test/mcp",
+      resource: "https://agenvo.test/mcp",
     }).toString();
     const consent = await fetch(auth, {
       headers: { "x-test-owner": "local-owner" },
@@ -273,7 +273,7 @@ if (!process.env.SIYIN_E2E_DIR) {
       redirect: "manual",
       headers: {
         "x-test-owner": "local-owner",
-        Origin: "https://siyin.test",
+        Origin: "https://agenvo.test",
         Cookie: consent.headers
           .getSetCookie()
           .map((c) => c.split(";")[0])
@@ -291,12 +291,12 @@ if (!process.env.SIYIN_E2E_DIR) {
         )!,
         code_verifier: verifier,
         redirect_uri: "http://127.0.0.1:8899/callback",
-        resource: "https://siyin.test/mcp",
+        resource: "https://agenvo.test/mcp",
       }),
     });
     assert.equal(tokenResponse.status, 200);
     const tokens: any = await tokenResponse.json();
-    client = new Client({ name: "siyin-e2e", version: "0.1.0" });
+    client = new Client({ name: "agenvo-e2e", version: "0.1.0" });
     await client.connect(
       new StreamableHTTPClientTransport(new URL(base + "/mcp"), {
         requestInit: {
@@ -354,10 +354,10 @@ if (!process.env.SIYIN_E2E_DIR) {
     await native("pane.run", {
       ...ref,
       paneId,
-      command: "printf 'SIYIN_E2E_OK\\n'",
+      command: "printf 'AGENVO_E2E_OK\\n'",
     });
     const read = await native("pane.read", { ...ref, paneId });
-    assert.match(JSON.stringify(read), /SIYIN_E2E_OK/);
+    assert.match(JSON.stringify(read), /AGENVO_E2E_OK/);
     evidence.nativeRoundTrip = true;
     const method = await tool("instance_describe", {
       deviceId: target.deviceId,
@@ -371,14 +371,14 @@ if (!process.env.SIYIN_E2E_DIR) {
     await native("pane.send-text", {
       ...ref,
       paneId,
-      text: "printf 'SIYIN_MCP_%s\\n' 'INPUT_OK'",
+      text: "printf 'AGENVO_MCP_%s\\n' 'INPUT_OK'",
     });
     await native("pane.send-keys", { ...ref, paneId, keys: ["enter"] });
     let inputObserved = false;
     for (let i = 0; i < 30; i++) {
       if (
         JSON.stringify(await native("pane.read", { ...ref, paneId })).includes(
-          "SIYIN_MCP_INPUT_OK",
+          "AGENVO_MCP_INPUT_OK",
         )
       ) {
         inputObserved = true;
@@ -388,7 +388,7 @@ if (!process.env.SIYIN_E2E_DIR) {
     }
     assert.ok(inputObserved);
     evidence.nativeInputRoundTrip = true;
-    if (process.env.SIYIN_E2E_CODEX_HOME) {
+    if (process.env.AGENVO_E2E_CODEX_HOME) {
       const codex = (method: string, params: Record<string, unknown> = {}) =>
         native(method, params, "coding");
       const model = (await codex("model/list", { limit: 1 })).data[0].model;
@@ -402,7 +402,7 @@ if (!process.env.SIYIN_E2E_DIR) {
       evidence.codexControlThroughMcp = { threadId, readAndArchived: true };
     }
 
-    if (process.env.SIYIN_E2E_BLACKHOLE) {
+    if (process.env.AGENVO_E2E_BLACKHOLE) {
       const counter = join(await realpath(dir), "counter.txt");
       await native("pane.run", {
         ...ref,
@@ -455,7 +455,7 @@ if (!process.env.SIYIN_E2E_DIR) {
     connector.kill("SIGTERM");
     await once(connector, "exit");
     const replacement = spawn(process.execPath, ["dist/cli.js", "run"], {
-      env: { ...process.env, SIYIN_CONFIG_DIR: cfg },
+      env: { ...process.env, AGENVO_CONFIG_DIR: cfg },
       stdio: "ignore",
     });
     children.push(replacement);
@@ -466,7 +466,7 @@ if (!process.env.SIYIN_E2E_DIR) {
     }
     assert.match(
       JSON.stringify(await native("pane.read", { ...ref, paneId })),
-      /SIYIN_E2E_OK/,
+      /AGENVO_E2E_OK/,
     );
     evidence.nativeReferenceAfterRestart = true;
     await nativeServer.stop();
@@ -508,15 +508,15 @@ if (!process.env.SIYIN_E2E_DIR) {
         await Promise.race([once(c, "exit"), sleep(2000)]);
       }
     const evidenceDir =
-      process.env.SIYIN_EVIDENCE_DIR ?? join(tmpdir(), "siyin-evidence");
+      process.env.AGENVO_EVIDENCE_DIR ?? join(tmpdir(), "agenvo-evidence");
     await mkdir(evidenceDir, { recursive: true });
     await writeFile(
       join(
         evidenceDir,
         "implementation-e2e-" +
-          (process.env.SIYIN_E2E_BLACKHOLE
+          (process.env.AGENVO_E2E_BLACKHOLE
             ? "blackhole"
-            : process.env.SIYIN_E2E_CODEX_HOME
+            : process.env.AGENVO_E2E_CODEX_HOME
               ? "codex"
               : process.platform) +
           ".json",

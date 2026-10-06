@@ -75,6 +75,7 @@ export async function signOwnerRequest(
   body = "",
   purpose: "pairing" | "oauth" = "pairing",
 ) {
+  // The signing domain is part of protocol 1, independent of the CLI name.
   return new SignJWT({ method, path, body: await digest(body) })
     .setProtectedHeader({ alg: "ES256", typ: `siyin-${purpose}+jwt` })
     .setIssuer("siyin-owner")

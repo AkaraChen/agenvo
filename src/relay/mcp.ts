@@ -32,7 +32,7 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
       isError: Boolean(outcome.error),
     };
   };
-  const server = new McpServer({ name: "siyin", version: VERSION });
+  const server = new McpServer({ name: "agenvo", version: VERSION });
   server.registerTool(
     "instances_list",
     {

@@ -143,7 +143,7 @@ function createProvider(origin: string, verifyOwner: typeof owner) {
         if (managed) return managed;
         if (path === "/health" && request.method === "GET")
           return Response.json({
-            service: "siyin",
+            service: "agenvo",
             version: VERSION,
             protocol: PROTOCOL,
             ownerConfigured: Boolean(
@@ -293,7 +293,7 @@ function createProvider(origin: string, verifyOwner: typeof owner) {
           import("./relay.js").SiyinRelay["adminState"]
         >;
         return html(
-          "Siyin administration / 嗣音管理",
+          "Agenvo administration / Agenvo 管理",
           `${scopeWarning}<p>MCP endpoint / 地址：<code>${e(env.ORIGIN)}/mcp</code></p><h2>Device pairing / 设备配对</h2>${
             state.pairings
               .filter((p) => !p.deviceId)

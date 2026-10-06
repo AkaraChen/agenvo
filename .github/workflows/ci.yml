@@ -27,5 +27,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -f deploy/vps/Dockerfile -t siyin:test .
-      - run: docker run --rm siyin:test --help
+      - run: docker build -f deploy/vps/Dockerfile -t agenvo:test .
+      - run: docker run --rm agenvo:test --help

@@ -2,7 +2,7 @@
 
 [简体中文](SECURITY.zh-CN.md)
 
-Siyin grants remote access to local coding runtimes. Deploy it only for an owner and clients you trust. Herdr can run arbitrary commands as the local OS user. A workspace path is not a sandbox. Managed Codex policy limits apply only to that instance; attaching to a native server preserves its native permissions.
+Agenvo grants remote access to local coding runtimes. Deploy it only for an owner and clients you trust. Herdr can run arbitrary commands as the local OS user. A workspace path is not a sandbox. Managed Codex policy limits apply only to that instance; attaching to a native server preserves its native permissions.
 
 ## Trust boundaries
 

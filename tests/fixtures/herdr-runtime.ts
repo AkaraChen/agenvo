@@ -1,4 +1,4 @@
-// Test-owned native service. Runtime provisioning deliberately bypasses Siyin.
+// Test-owned native service. Runtime provisioning deliberately bypasses Agenvo.
 import { execFile, spawn } from "node:child_process";
 import { mkdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";

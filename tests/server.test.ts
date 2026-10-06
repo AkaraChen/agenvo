@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { SqliteStore } from "../src/server/store.js";
 
 test("SQLite permits one owner and rolls back a failed nested operation", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "siyin-store-"));
+  const dir = await mkdtemp(join(tmpdir(), "agenvo-store-"));
   const path = join(dir, "state.sqlite");
   let store = new SqliteStore(path);
   try {
@@ -37,7 +37,7 @@ test("SQLite permits one owner and rolls back a failed nested operation", async 
 test("unapproved OAuth registrations expire instead of permanently exhausting capacity", async (t) => {
   const { VpsOAuth } = await import("../src/server/oauth.js");
   const { Relay } = await import("../src/relay/core.js");
-  const dir = await mkdtemp(join(tmpdir(), "siyin-clients-"));
+  const dir = await mkdtemp(join(tmpdir(), "agenvo-clients-"));
   const store = new SqliteStore(join(dir, "state.sqlite"));
   t.after(async () => {
     store.close();

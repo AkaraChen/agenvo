@@ -1,13 +1,13 @@
 [Unit]
-Description=Siyin runtime relay
+Description=Agenvo runtime relay
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=siyin
-Group=siyin
-WorkingDirectory=/opt/siyin
-ExecStart=/usr/bin/node /opt/siyin/dist/cli.js relay serve --config /etc/siyin/relay.json
+User=agenvo
+Group=agenvo
+WorkingDirectory=/opt/agenvo
+ExecStart=/usr/bin/node /opt/agenvo/dist/cli.js relay serve --config /etc/agenvo/relay.json
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=20
@@ -16,7 +16,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/var/lib/siyin
+ReadWritePaths=/var/lib/agenvo
 
 [Install]
 WantedBy=multi-user.target

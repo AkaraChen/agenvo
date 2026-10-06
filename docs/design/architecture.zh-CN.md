@@ -1,6 +1,6 @@
-# 嗣音架构与协议
+# Agenvo 架构与协议
 
-嗣音将远程 MCP 请求送到用户批准的本地运行时。Relay 持有连接与访问授权，Connector 持有原生运行时连接，任务生命周期归 Herdr 或 Codex。首版支持单所有者、多个设备、Cloudflare 和单 VPS 两种部署。
+Agenvo 将远程 MCP 请求送到用户批准的本地运行时。Relay 持有连接与访问授权，Connector 持有原生运行时连接，任务生命周期归 Herdr 或 Codex。首版支持单所有者、多个设备、Cloudflare 和单 VPS 两种部署。
 
 ## 职责与实现
 
@@ -56,3 +56,7 @@ Herdr 适配器连接独立的原生服务，不提供 session.start/stop。原�
 持续回归包括协议和权限单元测试、原生输入与审批 fixture、实际 workerd 绑定测试，以及实际 Node HTTP/OAuth/MCP/WebSocket 与 SQLite 重启测试。原生适配器测试另需安装已验证版本的 Herdr/Codex；不能用 fixture 结果声称特定客户端或云账号已通过生产验收。
 
 Docker 构建用于检查 Linux 分发产物，真实公网证书、DNS、Cloudflare Access 策略和各 MCP 客户端登录仍由部署者在自己的环境验收。CI 不连接维护者的个人运行时、账号或生产 Relay。
+
+## 改名与兼容标识
+
+Agenvo 延续嗣音的协议版本 1。CLI、文案及新安装默认值采用新名称；线上协议字符串、所有者签名用途域、Durable Object 类名和 VPS 数据库文件名保持不变，避免将品牌调整变成协议或数据迁移。旧 `SIYIN_CONFIG_DIR` 仅作为显式配置的后备入口，新变量优先；不自动扫描或搬移旧目录。部署者按[迁移说明](../migration.zh-CN.md)切换服务，仓库改名不触发生产升级。

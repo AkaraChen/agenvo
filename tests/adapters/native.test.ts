@@ -15,7 +15,7 @@ async function executable(name: string) {
 }
 
 test("Herdr isolated sessions preserve references across connector reconstruction", async (t) => {
-  const base = await realpath(await mkdtemp("/tmp/siyin-h-"));
+  const base = await realpath(await mkdtemp("/tmp/agenvo-h-"));
   const root = join(base, "herdr");
   await mkdir(root);
   const binary = await executable("herdr");
@@ -67,20 +67,20 @@ test("Herdr isolated sessions preserve references across connector reconstructio
   await a.call("pane.run", {
     ...ref,
     paneId: nativePane,
-    command: "printf 'SIYIN_NATIVE_HERDR_OK\\n'",
+    command: "printf 'AGENVO_NATIVE_HERDR_OK\\n'",
   });
   const b = new HerdrAdapter(cfg);
   await b.init();
   assert.equal(await b.generation("test"), ref.backendGeneration);
   let output = "";
-  for (let i = 0; i < 20 && !output.includes("SIYIN_NATIVE_HERDR_OK"); i++) {
+  for (let i = 0; i < 20 && !output.includes("AGENVO_NATIVE_HERDR_OK"); i++) {
     output = JSON.stringify(
       await b.call("pane.read", { ...ref, paneId: nativePane }),
     );
-    if (!output.includes("SIYIN_NATIVE_HERDR_OK"))
+    if (!output.includes("AGENVO_NATIVE_HERDR_OK"))
       await new Promise((r) => setTimeout(r, 100));
   }
-  assert.match(output, /SIYIN_NATIVE_HERDR_OK/);
+  assert.match(output, /AGENVO_NATIVE_HERDR_OK/);
   // Native discovery and diagnostics work for panes created outside agent.start.
   assert.equal((await b.call("agent.list", ref)).execution, "accepted");
   assert.equal(
@@ -147,7 +147,7 @@ test("Herdr isolated sessions preserve references across connector reconstructio
   await b.call("pane.send-text", {
     ...ref,
     paneId: nativePane,
-    text: "printf 'SIYIN_INPUT_%s\\n' 'RECOVERED'",
+    text: "printf 'AGENVO_INPUT_%s\\n' 'RECOVERED'",
   });
   await b.call("pane.send-keys", {
     ...ref,
@@ -157,7 +157,7 @@ test("Herdr isolated sessions preserve references across connector reconstructio
   let recovered = false;
   for (let i = 0; i < 30; i++) {
     const read = await b.call("pane.read", { ...ref, paneId: nativePane });
-    if (JSON.stringify(read).includes("SIYIN_INPUT_RECOVERED")) {
+    if (JSON.stringify(read).includes("AGENVO_INPUT_RECOVERED")) {
       recovered = true;
       break;
     }
@@ -218,7 +218,7 @@ test("Herdr isolated sessions preserve references across connector reconstructio
 });
 
 test("Codex native initialization and policy rejection at the adapter entry", async (t) => {
-  const home = await realpath(await mkdtemp(join(tmpdir(), "siyin-codex-")));
+  const home = await realpath(await mkdtemp(join(tmpdir(), "agenvo-codex-")));
   const cfg = instanceConfigSchema.parse({
     kind: "codex",
     id: "coding",

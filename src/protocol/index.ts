@@ -2,6 +2,8 @@ import { z } from "zod";
 
 export const VERSION = "0.1.0";
 export const PROTOCOL = 1;
+// Protocol 1 retains its Siyin wire identifiers so independently upgraded
+// relays and connectors remain compatible. Branding is not a protocol version.
 export const LIMITS = {
   frame: 64 * 1024,
   parse: 1024 * 1024,

@@ -129,7 +129,7 @@ export class CodexAdapter implements Adapter {
     this.child.on("exit", () => this.fail());
     this.child.stdin.on("error", () => this.fail());
     await this.rpc("initialize", {
-      clientInfo: { name: "siyin", version: "0.1.0" },
+      clientInfo: { name: "agenvo", version: "0.1.0" },
       capabilities: { experimentalApi: true },
     });
     this.write({ jsonrpc: "2.0", method: "initialized" });
@@ -176,7 +176,7 @@ export class CodexAdapter implements Adapter {
       ws.once("close", () => reject(new Fault("runtime_unavailable")));
     });
     const init: any = await this.rpc("initialize", {
-      clientInfo: { name: "siyin", version: "0.1.0" },
+      clientInfo: { name: "agenvo", version: "0.1.0" },
       capabilities: { experimentalApi: true },
     });
     if (!/\/0\.160\.1(?: |$)/.test(init.userAgent ?? ""))
@@ -354,7 +354,7 @@ export class CodexAdapter implements Adapter {
           id: packet.id,
           error: {
             code: -32000,
-            message: "Siyin input capacity exceeded; use the local runtime.",
+            message: "Agenvo input capacity exceeded; use the local runtime.",
           },
         });
         return;

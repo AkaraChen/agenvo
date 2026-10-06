@@ -14,7 +14,7 @@ test(
   "actual Worker routes enforce pairing, epochs, byte bounds and revocation",
   { timeout: 60000 },
   async (t) => {
-    const dir = await mkdtemp(join(tmpdir(), "siyin-worker-test-"));
+    const dir = await mkdtemp(join(tmpdir(), "agenvo-worker-test-"));
     const ownerKeys = await generateKeyPair("ES256", { extractable: true });
     const ownerPrivate = await exportJWK(ownerKeys.privateKey);
     const child = spawn(
@@ -72,7 +72,7 @@ test(
       await rm(dir, { recursive: true, force: true });
     });
     const fixture = async (method: string, ...args: unknown[]) => {
-      const r = await mf.dispatchFetch("https://siyin.test/fixture", {
+      const r = await mf.dispatchFetch("https://agenvo.test/fixture", {
         method: "POST",
         body: JSON.stringify({ method, args }),
       });
@@ -89,23 +89,23 @@ test(
         path = "/api/admin/revoke";
       const token = await signOwnerRequest(
         ownerPrivate,
-        "https://siyin.test",
+        "https://agenvo.test",
         "POST",
         path,
         body,
       );
-      const response = await mf.dispatchFetch("https://siyin.test" + path, {
+      const response = await mf.dispatchFetch("https://agenvo.test" + path, {
         method: "POST",
         headers: { Authorization: "Bearer " + token },
         body,
       });
       assert.equal(response.status, status, await response.text());
     }
-    const cliConsent = await mf.dispatchFetch("https://siyin.test/authorize");
+    const cliConsent = await mf.dispatchFetch("https://agenvo.test/authorize");
     assert.equal(cliConsent.status, 200);
-    assert.match(await cliConsent.text(), /siyin client inspect/);
+    assert.match(await cliConsent.text(), /agenvo client inspect/);
     const registration = await mf.dispatchFetch(
-      "https://siyin.test/oauth/register",
+      "https://agenvo.test/oauth/register",
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -131,7 +131,7 @@ test(
       state: "test-state",
       code_challenge: challenge,
       code_challenge_method: "S256",
-      resource: "https://siyin.test/mcp",
+      resource: "https://agenvo.test/mcp",
     }).toString();
     const consent = await fetch(authorization, {
       headers: { "x-test-owner": "local-owner" },
@@ -148,7 +148,7 @@ test(
       redirect: "manual",
       headers: {
         "x-test-owner": "local-owner",
-        Origin: "https://siyin.test",
+        Origin: "https://agenvo.test",
         Cookie: cookie,
       },
       body: new URLSearchParams({ handle, decision: "approve" }),
@@ -156,7 +156,7 @@ test(
     assert.equal(approved.status, 302, await approved.clone().text());
     const authUrl = new URL(authorization);
     authUrl.protocol = "https:";
-    authUrl.host = "siyin.test";
+    authUrl.host = "agenvo.test";
     authUrl.port = "";
     const cliAuthorization = async (
       action: string,
@@ -176,13 +176,13 @@ test(
       });
       const signed = await signOwnerRequest(
         ownerPrivate,
-        "https://siyin.test",
+        "https://agenvo.test",
         "POST",
         path,
         body,
         purpose,
       );
-      return mf.dispatchFetch("https://siyin.test" + path, {
+      return mf.dispatchFetch("https://agenvo.test" + path, {
         method: "POST",
         body,
         headers: { Authorization: "Bearer " + signed },
@@ -210,7 +210,7 @@ test(
     assert.equal(
       (
         await cliAuthorization("approve", {
-          authorizationUrl: authUrl.href.replace("siyin.test", "evil.test"),
+          authorizationUrl: authUrl.href.replace("agenvo.test", "evil.test"),
         })
       ).status,
       400,
@@ -230,7 +230,7 @@ test(
           code,
           code_verifier: verifier,
           redirect_uri: "http://127.0.0.1:8899/callback",
-          resource: "https://siyin.test/mcp",
+          resource: "https://agenvo.test/mcp",
         }),
       });
     const exchanged = await exchange();
@@ -299,7 +299,7 @@ test(
       available: true,
     };
     const pairing: any = await (
-      await mf.dispatchFetch("https://siyin.test/pairings", {
+      await mf.dispatchFetch("https://agenvo.test/pairings", {
         method: "POST",
         body: JSON.stringify({
           digest: await digest(secret),
@@ -332,7 +332,7 @@ test(
     });
     const approvalToken = await signOwnerRequest(
       ownerPrivate,
-      "https://siyin.test",
+      "https://agenvo.test",
       "POST",
       apiPath,
       approvalBody,
@@ -343,7 +343,7 @@ test(
       pairing.pollSecret,
       tokens.access_token,
     ]) {
-      const response = await mf.dispatchFetch("https://siyin.test" + apiPath, {
+      const response = await mf.dispatchFetch("https://agenvo.test" + apiPath, {
         method: "POST",
         headers: { Authorization: "Bearer " + unauthorized },
         body: approvalBody,
@@ -351,14 +351,14 @@ test(
       assert.equal(response.status, 403);
     }
     const listed = await mf.dispatchFetch(
-      "https://siyin.test/api/admin/pairings",
+      "https://agenvo.test/api/admin/pairings",
       {
         headers: {
           Authorization:
             "Bearer " +
             (await signOwnerRequest(
               ownerPrivate,
-              "https://siyin.test",
+              "https://agenvo.test",
               "GET",
               "/api/admin/pairings",
             )),
@@ -374,7 +374,7 @@ test(
       code: pairing.code,
       digest: "0".repeat(64),
     });
-    const mismatch = await mf.dispatchFetch("https://siyin.test" + apiPath, {
+    const mismatch = await mf.dispatchFetch("https://agenvo.test" + apiPath, {
       method: "POST",
       body: mismatchedBody,
       headers: {
@@ -382,7 +382,7 @@ test(
           "Bearer " +
           (await signOwnerRequest(
             ownerPrivate,
-            "https://siyin.test",
+            "https://agenvo.test",
             "POST",
             apiPath,
             mismatchedBody,
@@ -395,7 +395,7 @@ test(
       "pairing_expired",
     );
     const approve = () =>
-      mf.dispatchFetch("https://siyin.test" + apiPath, {
+      mf.dispatchFetch("https://agenvo.test" + apiPath, {
         method: "POST",
         headers: { Authorization: "Bearer " + approvalToken },
         body: approvalBody,
@@ -410,7 +410,7 @@ test(
     assert.equal((await approve()).status, 400); // Replaying cannot create a second device.
     assert.equal(
       (
-        await mf.dispatchFetch("https://siyin.test/mcp", {
+        await mf.dispatchFetch("https://agenvo.test/mcp", {
           method: "POST",
           headers: { Authorization: "Bearer " + approvalToken },
           body: "{}",
@@ -419,7 +419,7 @@ test(
       401,
     );
     const poll = () =>
-      mf.dispatchFetch("https://siyin.test/pairings/poll", {
+      mf.dispatchFetch("https://agenvo.test/pairings/poll", {
         method: "POST",
         headers: { Authorization: "Bearer " + pairing.pollSecret },
         body: JSON.stringify({ code: pairing.code }),
@@ -427,12 +427,12 @@ test(
     assert.equal(((await (await poll()).json()) as any).deviceId, deviceId);
     assert.equal((await poll()).status, 400);
     assert.equal(
-      (await mf.dispatchFetch("https://siyin.test/admin")).status,
+      (await mf.dispatchFetch("https://agenvo.test/admin")).status,
       503,
     );
     assert.equal(
       (
-        await mf.dispatchFetch("https://siyin.test/mcp", {
+        await mf.dispatchFetch("https://agenvo.test/mcp", {
           method: "POST",
           headers: { Authorization: "Bearer " + secret },
           body: "{}",
@@ -575,7 +575,7 @@ test(
     await fixture("revoke", "device", deviceId);
     assert.equal(
       (
-        await mf.dispatchFetch("https://siyin.test/connect", {
+        await mf.dispatchFetch("https://agenvo.test/connect", {
           headers: {
             Authorization: "Bearer " + secret,
             "Siyin-Device-Id": deviceId,

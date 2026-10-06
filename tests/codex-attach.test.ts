@@ -11,7 +11,7 @@ import { instanceConfigSchema } from "../src/connector/config.js";
 
 // A second native client owns resolution; the adapter only owns its connection.
 test("attach preserves native settings, tracks peer resolution and reconnects without replay", async (t) => {
-  const root = await realpath(await mkdtemp("/tmp/siyin-attach-"));
+  const root = await realpath(await mkdtemp("/tmp/agenvo-attach-"));
   const http = createServer();
   const server = new WebSocketServer({ server: http });
   http.listen(root + "/native.sock");
@@ -205,7 +205,7 @@ test("attach preserves native settings, tracks peer resolution and reconnects wi
   assert.equal(
     http.listening,
     true,
-    "closing Siyin must not stop the shared server",
+    "closing Agenvo must not stop the shared server",
   );
 });
 
@@ -239,7 +239,7 @@ test("CLI writes attach configuration only in the selected installation", async 
   const { execFile } = await import("node:child_process");
   const { promisify } = await import("node:util");
   const { readFile } = await import("node:fs/promises");
-  const root = await realpath(await mkdtemp("/tmp/siyin-attach-cli-"));
+  const root = await realpath(await mkdtemp("/tmp/agenvo-attach-cli-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const args = [
     "--import",
@@ -262,7 +262,7 @@ test("CLI writes attach configuration only in the selected installation", async 
     resolve("tests/fixtures/codex-backend.mjs"),
   ];
   const run = promisify(execFile);
-  const env = { ...process.env, SIYIN_CONFIG_DIR: root + "/connector" };
+  const env = { ...process.env, AGENVO_CONFIG_DIR: root + "/connector" };
   await assert.rejects(
     run(process.execPath, [...args, "--sandbox", "read-only"], { env }),
     (error: any) => JSON.parse(error.stdout).error.code === "invalid_arguments",

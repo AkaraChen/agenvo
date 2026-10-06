@@ -7,7 +7,7 @@ import { Fault } from "../protocol/index.js";
 import { provisionOwnerKey, ownerKeyPath } from "./owner-key.js";
 const require = createRequire(import.meta.url);
 export async function deploy(options: Record<string, string | boolean>) {
-  const name = String(options.name ?? "siyin");
+  const name = String(options.name ?? "agenvo");
   if (!/^[a-z][a-z0-9-]{0,49}$/.test(name)) throw new Fault("invalid_name");
   const origin = String(options.origin ?? "");
   if (!/^https:\/\/[a-z0-9.-]+$/.test(origin))
@@ -20,7 +20,7 @@ export async function deploy(options: Record<string, string | boolean>) {
     "wrangler.jsonc",
   );
   const configPath = resolve(
-    String(options.config ?? "siyin-deploy.local.json"),
+    String(options.config ?? "agenvo-deploy.local.json"),
   );
   let config: any;
   try {

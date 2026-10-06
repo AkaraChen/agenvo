@@ -9,12 +9,12 @@ Use one Linux VPS with a public DNS name, ports 80/443 open, Docker Engine and C
 Build the CLI as described in the README. On the owner machine:
 
 ```sh
-siyin relay init --origin https://relay.example.com \
+agenvo relay init --origin https://relay.example.com \
   --data-dir /data --host 0.0.0.0 --port 8080 --trusted-proxy \
   --output deploy/vps/relay.local.json
 ```
 
-This creates a public Relay configuration and a private owner key at `<SIYIN_CONFIG_DIR>/owner/<origin-hash>.json` (`SIYIN_CONFIG_DIR` defaults to `~/.config/siyin`). Keep the private key on your owner machine and back it up securely. Only copy `relay.local.json` to the VPS checkout at `deploy/vps/relay.local.json`. Never put it or keys into Git.
+This creates a public Relay configuration and a private owner key at `<AGENVO_CONFIG_DIR>/owner/<origin-hash>.json` (`AGENVO_CONFIG_DIR` defaults to `~/.config/agenvo`). Keep the private key on your owner machine and back it up securely. Only copy `relay.local.json` to the VPS checkout at `deploy/vps/relay.local.json`. Never put it or keys into Git.
 
 On the VPS, from the repository root:
 
@@ -23,7 +23,7 @@ mkdir -p deploy/vps/data
 sudo chown 1000:1000 deploy/vps/data deploy/vps/relay.local.json
 sudo chmod 700 deploy/vps/data
 sudo chmod 600 deploy/vps/relay.local.json
-export SIYIN_DOMAIN=relay.example.com
+export AGENVO_DOMAIN=relay.example.com
 docker compose -f deploy/vps/compose.yaml up -d --build
 curl --fail https://relay.example.com/health
 ```
@@ -34,7 +34,7 @@ Continue with [device pairing and MCP authorization](usage.md). VPS administrati
 
 ## Without Docker
 
-Install Node.js 24.13+ and build the checkout in `/opt/siyin`. Create a dedicated `siyin` OS user, a `/var/lib/siyin` directory owned by it with mode 0700, and a readable `/etc/siyin/relay.json`. Generate the configuration with `--data-dir /var/lib/siyin --host 127.0.0.1 --trusted-proxy`; copy only this configuration to the server. Adapt and install [siyin.service](../deploy/vps/siyin.service), then start it with systemd. The Node binary path must match your installation. Configure Caddy or another HTTPS proxy to forward to `127.0.0.1:8080` and preserve Host and WebSocket upgrade headers.
+Install Node.js 24.13+ and build the checkout in `/opt/agenvo`. Create a dedicated `agenvo` OS user, a `/var/lib/agenvo` directory owned by it with mode 0700, and a readable `/etc/agenvo/relay.json`. Generate the configuration with `--data-dir /var/lib/agenvo --host 127.0.0.1 --trusted-proxy`; copy only this configuration to the server. Adapt and install [agenvo.service](../deploy/vps/agenvo.service), then start it with systemd. The Node binary path must match your installation. Configure Caddy or another HTTPS proxy to forward to `127.0.0.1:8080` and preserve Host and WebSocket upgrade headers.
 
 `relay serve` also accepts a configuration `tls` object with absolute `cert` and `key` file paths for direct TLS. Certificate renewal and restarting after rotation are the operator's responsibility. HTTP is an internal proxy transport only; public URLs and Connector connections must use HTTPS/WSS.
 

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { CodexAdapter } from "../src/connector/adapters/codex.ts";
 import { instanceConfigSchema } from "../src/connector/config.ts";
 test("public adapter transport mediates native input and all allowed approval types", async (t) => {
-  const root = await realpath(await mkdtemp("/tmp/siyin-approval-"));
+  const root = await realpath(await mkdtemp("/tmp/agenvo-approval-"));
   const config = instanceConfigSchema.parse({
     kind: "codex",
     id: "test",

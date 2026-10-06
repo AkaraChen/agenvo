@@ -71,7 +71,7 @@ const methods: Record<string, NativeMethod> = {
       "--cwd",
       p.cwd ?? cwd,
       "--label",
-      p.label ?? "Siyin",
+      p.label ?? "Agenvo",
       "--no-focus",
     ],
   },
@@ -154,7 +154,7 @@ const methods: Record<string, NativeMethod> = {
     schema: z.strictObject(ref),
     readOnly: true,
     description:
-      "Discover live agents, including agents started outside Siyin. Use a returned live name or pane ID with agent methods. Names identify the current pane occupant, not a durable task.",
+      "Discover live agents, including agents started outside Agenvo. Use a returned live name or pane ID with agent methods. Names identify the current pane occupant, not a durable task.",
     argv: () => ["agent", "list"],
   },
   "agent.start": {

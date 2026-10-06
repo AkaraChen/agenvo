@@ -6,11 +6,11 @@
 
 ```sh
 npx wrangler login
-siyin deploy --name siyin --origin https://siyin.YOUR_SUBDOMAIN.workers.dev
-curl --fail https://siyin.YOUR_SUBDOMAIN.workers.dev/health
+agenvo deploy --name agenvo --origin https://agenvo.YOUR_SUBDOMAIN.workers.dev
+curl --fail https://agenvo.YOUR_SUBDOMAIN.workers.dev/health
 ```
 
-Wrangler 创建配置中的资源。CLI 将资源标识保存到 `siyin-deploy.local.json`，在 `SIYIN_CONFIG_DIR` 中生成所有者私钥。升级时保留两者，使用相同配置和 origin 再次部署。修改名称或 origin 属于独立的部署变更，不是普通升级。
+Wrangler 创建配置中的资源。CLI 将资源标识保存到 `agenvo-deploy.local.json`，在 `AGENVO_CONFIG_DIR` 中生成所有者私钥。升级时保留两者，使用相同配置和 origin 再次部署。修改名称或 origin 属于独立的部署变更，不是普通升级。
 
 签名 CLI 不依赖 Cloudflare Access，按[使用指南](usage.zh-CN.md)完成配对、OAuth 批准和撤销。MCP、OAuth、配对和 Connector 公共端点不能被 Access 登录页拦截。
 
@@ -19,12 +19,12 @@ Wrangler 创建配置中的资源。CLI 将资源标识保存到 `siyin-deploy.l
 需要网页管理时，创建自托管 Cloudflare Access 应用，精确保护 Relay 的 `/admin` 和 `/authorize` 路径，只允许所有者身份。配置 issuer、audience 和邮箱：
 
 ```sh
-siyin deploy --name siyin --origin https://siyin.YOUR_SUBDOMAIN.workers.dev \
+agenvo deploy --name agenvo --origin https://agenvo.YOUR_SUBDOMAIN.workers.dev \
   --owner owner@example.com \
   --issuer https://YOUR_TEAM.cloudflareaccess.com --aud YOUR_ACCESS_AUDIENCE
 ```
 
-Worker 验证 Access 签名、issuer、audience、有效期和准确身份，不单独信任邮箱请求头。配置 Access 不代表 MCP 客户端已被授权，仍需明确同意。未配置 Access 时，通过 `siyin client inspect/approve` 批准授权页面地址。
+Worker 验证 Access 签名、issuer、audience、有效期和准确身份，不单独信任邮箱请求头。配置 Access 不代表 MCP 客户端已被授权，仍需明确同意。未配置 Access 时，通过 `agenvo client inspect/approve` 批准授权页面地址。
 
 ## 状态与恢复
 

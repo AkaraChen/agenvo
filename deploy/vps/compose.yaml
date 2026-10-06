@@ -16,7 +16,7 @@ services:
     image: caddy:2
     restart: unless-stopped
     environment:
-      SIYIN_DOMAIN: ${SIYIN_DOMAIN:?Set SIYIN_DOMAIN to your public DNS name}
+      AGENVO_DOMAIN: ${AGENVO_DOMAIN:?Set AGENVO_DOMAIN to your public DNS name}
     ports: ["80:80", "443:443"]
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro

@@ -1,5 +1,5 @@
 {
-  "name": "siyin-test",
+  "name": "agenvo-test",
   "main": "integration/entry.ts",
   "compatibility_date": "2026-10-06",
   "compatibility_flags": ["nodejs_compat"],
@@ -9,7 +9,7 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SiyinRelay"] }],
   "kv_namespaces": [{ "binding": "OAUTH_KV" }],
   "vars": {
-    "ORIGIN": "https://siyin.test",
+    "ORIGIN": "https://agenvo.test",
     "ACCESS_ISSUER": "",
     "ACCESS_AUD": "",
     "OWNER_EMAIL": "",

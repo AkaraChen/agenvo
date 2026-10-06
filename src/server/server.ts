@@ -73,6 +73,7 @@ export async function startServer(input: ServerConfig) {
       "insecure_data_directory",
       "The data directory must be owned by this user with mode 0700",
     );
+  // Preserve the on-disk identity when an existing Siyin deployment upgrades.
   const dbPath = join(config.dataDir, "siyin.sqlite");
   try {
     const file = await open(dbPath, "wx", 0o600);
@@ -156,7 +157,7 @@ export async function startServer(input: ServerConfig) {
       if (managed) response = managed;
       else if (path === "/health" && req.method === "GET")
         response = Response.json({
-          service: "siyin",
+          service: "agenvo",
           version: VERSION,
           protocol: PROTOCOL,
           ownerConfigured: true,

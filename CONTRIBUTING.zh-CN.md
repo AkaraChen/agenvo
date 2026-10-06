@@ -37,4 +37,4 @@ npm run test:e2e
 
 交付前检查私有路径与凭据，运行相关测试并说明验证缺口。每个 commit 表达一项连贯行为。生成的 schema 或依赖升级需说明来源和必要性。
 
-原生 Codex 覆盖初始化、schema 发现和权限拒绝。显式提供隔离的 `SIYIN_E2E_CODEX_HOME` 时，e2e 还验证 MCP 的 thread 创建、读取与归档。结构化输入和审批由确定性的 app-server fixture 覆盖，不声称可通过真实模型提示稳定触发。
+原生 Codex 覆盖初始化、schema 发现和权限拒绝。显式提供隔离的 `AGENVO_E2E_CODEX_HOME` 时，e2e 还验证 MCP 的 thread 创建、读取与归档。结构化输入和审批由确定性的 app-server fixture 覆盖，不声称可通过真实模型提示稳定触发。

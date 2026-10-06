@@ -1,14 +1,14 @@
-# Siyin · 嗣音
+# Agenvo
 
 [简体中文](README.zh-CN.md)
 
-Siyin connects an MCP client to coding runtimes on your own computers. A small, always-reachable relay forwards requests to outbound device connections. Tasks run on the device, in native Herdr or Codex environments.
+Agenvo connects an MCP client to coding runtimes on your own computers. A small, always-reachable relay forwards requests to outbound device connections. Tasks run on the device, in native Herdr or Codex environments.
 
 **Status:** early release, single owner per deployment. Herdr 0.9.3 and Codex CLI 0.160.1 are the tested adapter versions. Review the [security boundaries](SECURITY.md) before sharing a runtime.
 
 ```mermaid
 flowchart LR
-    C["MCP client"] -->|"HTTPS · OAuth"| R["Siyin Relay"]
+    C["MCP client"] -->|"HTTPS · OAuth"| R["Agenvo Relay"]
     O["Owner CLI"] -->|"Signed approval / revocation"| R
     subgraph Deployment["Choose one deployment"]
       R --- CF["Cloudflare Worker + Durable Object + KV"]
@@ -29,19 +29,21 @@ flowchart LR
 - Reconnects devices without replaying writes. An uncertain result must be checked against native state.
 - Attaches to independently running Herdr servers. The Connector never starts or stops Herdr sessions.
 
-Siyin is a relay, not a task scheduler or a shell sandbox. A permitted Herdr instance can execute commands as its local user. All authorized MCP clients can reach all approved instances in that deployment, including instances approved later.
+Agenvo is a relay, not a task scheduler or a shell sandbox. A permitted Herdr instance can execute commands as its local user. All authorized MCP clients can reach all approved instances in that deployment, including instances approved later.
 
 ## Start from source
 
 Install Node.js **24.13 or newer**, npm, and the runtime you intend to share. macOS and Linux are supported for the Connector; Linux is the intended VPS host.
 
 ```sh
+git clone https://github.com/Xuanwo/agenvo.git
+cd agenvo
 npm ci
 npm run build
 node dist/cli.js --help
 ```
 
-Use `node /absolute/path/to/siyin/dist/cli.js` in place of `siyin` in the guides, or run `npm link` to install the local CLI. There is no published npm package required by these instructions.
+Use `node /absolute/path/to/agenvo/dist/cli.js` in place of `agenvo` in the guides, or run `npm link` to install the local CLI. There is no published npm package required by these instructions.
 
 1. Deploy a relay using [Cloudflare](docs/deployment-cloudflare.md) or a [single VPS](docs/deployment-vps.md).
 2. [Configure and pair a Connector](docs/usage.md) on each computer.
@@ -55,6 +57,8 @@ Use `node /absolute/path/to/siyin/dist/cli.js` in place of `siyin` in the guides
 The VPS process stays running. Cloudflare does not require an always-on container. Neither target runs the coding agent in the relay.
 
 ## Documentation
+
+- [Migrating from Siyin](docs/migration.md) · [中文](docs/migration.zh-CN.md)
 
 - [Usage](docs/usage.md) · [中文](docs/usage.zh-CN.md)
 - [VPS deployment](docs/deployment-vps.md) · [中文](docs/deployment-vps.zh-CN.md)

@@ -33,7 +33,7 @@ export async function relayCommand(action: string, options: Options) {
     return {
       config: path,
       ownerKey: await ownerKeyPath(origin),
-      next: "siyin relay serve --config " + path,
+      next: "agenvo relay serve --config " + path,
     };
   }
   if (action === "serve") {

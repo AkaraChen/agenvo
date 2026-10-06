@@ -37,4 +37,4 @@ New deployment hosts must reuse the routing core and preserve authorization, epo
 
 Before sending a change, review the diff for private paths and credentials, run relevant tests, and state validation gaps. Use commits that each express one coherent behavior. Do not include generated schema or dependency updates without explaining their source and necessity.
 
-Native Codex coverage verifies initialization, schema discovery and policy rejection. With an explicitly supplied isolated `SIYIN_E2E_CODEX_HOME`, the e2e script also checks thread creation/read/archive through MCP. Structured input and approval handling are covered by deterministic app-server fixtures, not by a guaranteed live-model prompt.
+Native Codex coverage verifies initialization, schema discovery and policy rejection. With an explicitly supplied isolated `AGENVO_E2E_CODEX_HOME`, the e2e script also checks thread creation/read/archive through MCP. Structured input and approval handling are covered by deterministic app-server fixtures, not by a guaranteed live-model prompt.

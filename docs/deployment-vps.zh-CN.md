@@ -9,12 +9,12 @@
 先按 README 构建 CLI。在所有者电脑上运行：
 
 ```sh
-siyin relay init --origin https://relay.example.com \
+agenvo relay init --origin https://relay.example.com \
   --data-dir /data --host 0.0.0.0 --port 8080 --trusted-proxy \
   --output deploy/vps/relay.local.json
 ```
 
-命令生成 Relay 的公开配置，以及 `<SIYIN_CONFIG_DIR>/owner/<origin-hash>.json` 中的所有者私钥；`SIYIN_CONFIG_DIR` 默认是 `~/.config/siyin`。私钥留在所有者电脑上并安全备份。只将 `relay.local.json` 复制到 VPS 仓库的 `deploy/vps/relay.local.json`。配置和私钥都不提交到 Git。
+命令生成 Relay 的公开配置，以及 `<AGENVO_CONFIG_DIR>/owner/<origin-hash>.json` 中的所有者私钥；`AGENVO_CONFIG_DIR` 默认是 `~/.config/agenvo`。私钥留在所有者电脑上并安全备份。只将 `relay.local.json` 复制到 VPS 仓库的 `deploy/vps/relay.local.json`。配置和私钥都不提交到 Git。
 
 在 VPS 的仓库根目录运行：
 
@@ -23,7 +23,7 @@ mkdir -p deploy/vps/data
 sudo chown 1000:1000 deploy/vps/data deploy/vps/relay.local.json
 sudo chmod 700 deploy/vps/data
 sudo chmod 600 deploy/vps/relay.local.json
-export SIYIN_DOMAIN=relay.example.com
+export AGENVO_DOMAIN=relay.example.com
 docker compose -f deploy/vps/compose.yaml up -d --build
 curl --fail https://relay.example.com/health
 ```
@@ -34,7 +34,7 @@ curl --fail https://relay.example.com/health
 
 ## 不使用 Docker
 
-安装 Node.js 24.13+，在 `/opt/siyin` 构建仓库。创建独立的 `siyin` 系统用户，将 `/var/lib/siyin` 设为该用户所有、权限 0700，并准备该用户可读的 `/etc/siyin/relay.json`。生成配置时使用 `--data-dir /var/lib/siyin --host 127.0.0.1 --trusted-proxy`，只将这份配置传到服务器。按实际 Node 路径调整并安装 [siyin.service](../deploy/vps/siyin.service)，通过 systemd 启动。Caddy 或其他 HTTPS 代理转发到 `127.0.0.1:8080`，保留 Host 和 WebSocket 升级头。
+安装 Node.js 24.13+，在 `/opt/agenvo` 构建仓库。创建独立的 `agenvo` 系统用户，将 `/var/lib/agenvo` 设为该用户所有、权限 0700，并准备该用户可读的 `/etc/agenvo/relay.json`。生成配置时使用 `--data-dir /var/lib/agenvo --host 127.0.0.1 --trusted-proxy`，只将这份配置传到服务器。按实际 Node 路径调整并安装 [agenvo.service](../deploy/vps/agenvo.service)，通过 systemd 启动。Caddy 或其他 HTTPS 代理转发到 `127.0.0.1:8080`，保留 Host 和 WebSocket 升级头。
 
 配置也可增加 `tls` 对象，以绝对路径指定 `cert` 和 `key`，由 `relay serve` 直接提供 TLS。证书续期和轮换后重启由运维者负责。HTTP 只用于内部代理链路，公网地址和 Connector 连接必须使用 HTTPS/WSS。
 

@@ -2,7 +2,9 @@ import { DurableObject } from "cloudflare:workers";
 import { Relay, type RecordStore } from "./core.js";
 import { PROTOCOL, type Call } from "../protocol/index.js";
 
-/** Cloudflare owns socket hibernation, SQL transactions and scheduled cleanup. */
+/** Cloudflare owns socket hibernation, SQL transactions and scheduled cleanup.
+ * Keep the deployed class name: changing it would require a state migration.
+ */
 export class SiyinRelay extends DurableObject<Env> {
   private relay: Relay;
   constructor(ctx: DurableObjectState, env: Env) {

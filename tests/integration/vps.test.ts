@@ -20,7 +20,7 @@ test(
   "VPS persists OAuth/device state and routes MCP over authenticated WebSockets",
   { timeout: 30000 },
   async (t) => {
-    const dataDir = await mkdtemp(join(tmpdir(), "siyin-vps-"));
+    const dataDir = await mkdtemp(join(tmpdir(), "agenvo-vps-"));
     const keys = await generateKeyPair("ES256", { extractable: true });
     const privateKey = await exportJWK(keys.privateKey);
     const probe = createServer();
@@ -352,7 +352,7 @@ test(
 
 test("forwarded client addresses are trusted only with an explicit single-proxy configuration", async () => {
   for (const trustedProxy of [false, true]) {
-    const dataDir = await mkdtemp(join(tmpdir(), "siyin-proxy-"));
+    const dataDir = await mkdtemp(join(tmpdir(), "agenvo-proxy-"));
     const keys = await generateKeyPair("ES256", { extractable: true });
     const probe = createServer().listen(0, "127.0.0.1");
     await once(probe, "listening");

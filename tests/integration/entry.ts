@@ -16,7 +16,7 @@ export default {
     }
     const url = new URL(request.url);
     url.protocol = "https:";
-    url.host = "siyin.test";
+    url.host = "agenvo.test";
     url.port = "";
     return (
       request.headers.has("x-test-owner") ? authorizedWorker : worker

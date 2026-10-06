@@ -27,7 +27,7 @@ export async function pairingCommand(
     if (error.code === "ENOENT")
       throw new Fault(
         "pairing_key_missing",
-        "Run this command on the deployment machine with its SIYIN_CONFIG_DIR, or restore its owner key.",
+        "Run this command on the deployment machine with its AGENVO_CONFIG_DIR, or restore its owner key.",
       );
     throw error;
   });

@@ -12,11 +12,11 @@ test(
   "Independent Herdr survives stopping the adapter systemd service",
   { skip: process.platform !== "linux" },
   async (t) => {
-    const base = await mkdtemp("/tmp/siyin-sd-");
+    const base = await mkdtemp("/tmp/agenvo-sd-");
     const root = join(base, "herdr");
     await mkdir(root);
     const binary = (await exec("sh", ["-c", "command -v herdr"])).stdout.trim();
-    const unit = "siyin-test-" + randomUUID();
+    const unit = "agenvo-test-" + randomUUID();
     const output = join(base, "started.json");
     const adapter = new HerdrAdapter({
       kind: "herdr",

@@ -18,7 +18,7 @@ test("pairing signatures bind origin, method, path and body with a 60-second lif
   const pair = await generateKeyPair("ES256", { extractable: true });
   const other = await generateKeyPair("ES256", { extractable: true });
   const privateKey = await exportJWK(pair.privateKey);
-  const origin = "https://siyin.test";
+  const origin = "https://agenvo.test";
   const path = "/api/admin/pairings/approve";
   const body = JSON.stringify({ code: "test", digest: "test" });
   const env = {
@@ -112,15 +112,15 @@ test("pairing signatures bind origin, method, path and body with a 60-second lif
 });
 
 test("deployment retains pairing trust and stores the private key only in owner configuration", async (t) => {
-  const dir = await mkdtemp(join(tmpdir(), "siyin-pairing-key-"));
-  const previous = process.env.SIYIN_CONFIG_DIR;
-  process.env.SIYIN_CONFIG_DIR = dir;
+  const dir = await mkdtemp(join(tmpdir(), "agenvo-pairing-key-"));
+  const previous = process.env.AGENVO_CONFIG_DIR;
+  process.env.AGENVO_CONFIG_DIR = dir;
   t.after(async () => {
-    if (previous === undefined) delete process.env.SIYIN_CONFIG_DIR;
-    else process.env.SIYIN_CONFIG_DIR = previous;
+    if (previous === undefined) delete process.env.AGENVO_CONFIG_DIR;
+    else process.env.AGENVO_CONFIG_DIR = previous;
     await rm(dir, { recursive: true, force: true });
   });
-  const origin = "https://siyin.test";
+  const origin = "https://agenvo.test";
   const publicKey = await provisionOwnerKey(origin);
   assert.equal(JSON.parse(publicKey).d, undefined);
   assert.equal(await provisionOwnerKey(origin, publicKey), publicKey);
@@ -143,10 +143,10 @@ test("deployment retains pairing trust and stores the private key only in owner 
     code: "insecure_credentials",
   });
   for (const invalid of [
-    "http://siyin.test",
+    "http://agenvo.test",
     origin + "/",
     origin + "/x",
-    "https://user@siyin.test",
+    "https://user@agenvo.test",
   ])
     assert.throws(() => ownerOrigin(invalid), {
       code: "https_origin_required",

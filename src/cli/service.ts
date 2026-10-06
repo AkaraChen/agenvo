@@ -11,7 +11,7 @@ const xml = (value: string) =>
   value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 export function serviceName(dir: string) {
   return (
-    "io.siyin.connector." +
+    "io.agenvo.connector." +
     createHash("sha256").update(dir).digest("hex").slice(0, 12)
   );
 }
@@ -27,7 +27,7 @@ export function serviceDefinition(dir: string, platform = process.platform) {
     return {
       name,
       path: join(homedir(), "Library", "LaunchAgents", name + ".plist"),
-      content: `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>${name}</string><key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(cli)}</string><string>run</string></array><key>EnvironmentVariables</key><dict><key>SIYIN_CONFIG_DIR</key><string>${xml(dir)}</string></dict><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ThrottleInterval</key><integer>30</integer></dict></plist>`,
+      content: `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>Label</key><string>${name}</string><key>ProgramArguments</key><array><string>${xml(process.execPath)}</string><string>${xml(cli)}</string><string>run</string></array><key>EnvironmentVariables</key><dict><key>AGENVO_CONFIG_DIR</key><string>${xml(dir)}</string></dict><key>RunAtLoad</key><true/><key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ThrottleInterval</key><integer>30</integer></dict></plist>`,
     };
   if (platform === "linux") {
     const quote = (s: string) =>
@@ -37,7 +37,7 @@ export function serviceDefinition(dir: string, platform = process.platform) {
     return {
       name,
       path: join(homedir(), ".config", "systemd", "user", name + ".service"),
-      content: `[Unit]\nDescription=Siyin connector\nAfter=network-online.target\n[Service]\nType=simple\nExecStart=${quote(process.execPath)} ${quote(cli)} run\nEnvironment=${quote("SIYIN_CONFIG_DIR=" + dir)}\nRestart=on-failure\nRestartSec=30\nUMask=0077\nStandardOutput=null\nStandardError=journal\n[Install]\nWantedBy=default.target\n`,
+      content: `[Unit]\nDescription=Agenvo connector\nAfter=network-online.target\n[Service]\nType=simple\nExecStart=${quote(process.execPath)} ${quote(cli)} run\nEnvironment=${quote("AGENVO_CONFIG_DIR=" + dir)}\nRestart=on-failure\nRestartSec=30\nUMask=0077\nStandardOutput=null\nStandardError=journal\n[Install]\nWantedBy=default.target\n`,
     };
   }
   throw new Fault("unsupported_platform");
@@ -105,7 +105,7 @@ export async function service(dir: string, action: "install" | "uninstall") {
     credentialsRetained: true,
     note:
       process.platform === "linux"
-        ? "User service may stop at logout unless lingering is enabled; Siyin does not enable it."
+        ? "User service may stop at logout unless lingering is enabled; Agenvo does not enable it."
         : "User service starts in the login session.",
   };
 }
