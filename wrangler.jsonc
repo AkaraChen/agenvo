@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "siyin",
+  "main": "src/relay/worker.ts",
+  "compatibility_date": "2026-10-06",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": true,
+  "preview_urls": false,
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "RELAY",
+        "class_name": "SiyinRelay"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "SiyinRelay"
+      ]
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV"
+    }
+  ],
+  "vars": {
+    "ORIGIN": "https://configure.example",
+    "ACCESS_ISSUER": "",
+    "ACCESS_AUD": "",
+    "OWNER_EMAIL": "",
+    "OWNER_PUBLIC_KEY": ""
+  },
+  "observability": {
+    "enabled": false
+  }
+}

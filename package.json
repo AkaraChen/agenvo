@@ -1,0 +1,64 @@
+{
+  "name": "siyin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "types": "wrangler types --strict-vars false",
+    "check": "npm run types && tsc --noEmit",
+    "build": "node scripts/build.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "test:integration": "tsx --test tests/integration/*.test.ts",
+    "test:adapters": "tsx --test tests/adapters/*.test.ts",
+    "test:e2e": "tsx scripts/e2e.ts",
+    "format": "prettier --write src tests scripts",
+    "format:check": "prettier --check src tests scripts"
+  },
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.1",
+    "@modelcontextprotocol/sdk": "1.31.0",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "express": "5.2.1",
+    "jose": "6.2.12",
+    "wrangler": "4.147.0",
+    "ws": "8.22.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261006.1",
+    "@types/express": "5.0.6",
+    "@types/node": "^26.6.4",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "prettier": "^3.9.9",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  },
+  "bin": {
+    "siyin": "dist/cli.js"
+  },
+  "engines": {
+    "node": ">=24.13.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "docs",
+    "NOTICE"
+  ],
+  "overrides": {
+    "sharp": "0.35.5"
+  },
+  "description": "A self-hosted MCP relay for native coding runtimes",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "herdr",
+    "codex",
+    "relay",
+    "cloudflare"
+  ]
+}

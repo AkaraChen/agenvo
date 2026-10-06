@@ -1,0 +1,10 @@
+node_modules/
+.wrangler/
+dist/
+.dev.vars*
+*.local.json
+worker-configuration.d.ts
+coverage/
+*.tgz
+deploy/vps/data/
+deploy/vps/.env

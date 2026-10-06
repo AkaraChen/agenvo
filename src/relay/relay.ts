@@ -1,0 +1,137 @@
+import { DurableObject } from "cloudflare:workers";
+import { Relay, type RecordStore } from "./core.js";
+import { PROTOCOL, type Call } from "../protocol/index.js";
+
+/** Cloudflare owns socket hibernation, SQL transactions and scheduled cleanup. */
+export class SiyinRelay extends DurableObject<Env> {
+  private relay: Relay;
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    const sql = ctx.storage.sql;
+    sql.exec(
+      "CREATE TABLE IF NOT EXISTS records (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+    );
+    const store: RecordStore = {
+      get<T>(key: string) {
+        const row = sql
+          .exec<{ value: string }>("SELECT value FROM records WHERE key=?", key)
+          .toArray()[0];
+        return row ? (JSON.parse(row.value) as T) : undefined;
+      },
+      put(key, value) {
+        sql.exec(
+          "INSERT INTO records VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+          key,
+          JSON.stringify(value),
+        );
+      },
+      remove(key) {
+        sql.exec("DELETE FROM records WHERE key=?", key);
+      },
+      list<T>(prefix: string) {
+        return sql
+          .exec<{ value: string }>(
+            "SELECT value FROM records WHERE key LIKE ? ORDER BY key",
+            prefix + "%",
+          )
+          .toArray()
+          .map((row) => JSON.parse(row.value) as T);
+      },
+      transaction: (action) => ctx.storage.transactionSync(action),
+      expire(prefix, now) {
+        sql.exec(
+          "DELETE FROM records WHERE key LIKE ? AND json_extract(value, '$.expires')<=?",
+          prefix + "%",
+          now,
+        );
+      },
+    };
+    this.relay = new Relay({
+      origin: env.ORIGIN,
+      store,
+      sockets: (id) => ctx.getWebSockets(id),
+      accept: (ws, id) => ctx.acceptWebSocket(ws as WebSocket, [id]),
+      scheduleCleanup: () => ctx.storage.setAlarm(Date.now() + 600000),
+    });
+    ctx.setWebSocketAutoResponse(
+      new WebSocketRequestResponsePair("siyin:ping", "siyin:pong"),
+    );
+  }
+  async fetch(request: Request) {
+    const id = request.headers.get("siyin-device-id") ?? "";
+    const secret =
+      request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
+    if (!(await this.relay.authenticateDevice(id, secret)))
+      return Response.json({ error: "unauthorized" }, { status: 401 });
+    const path = new URL(request.url).pathname;
+    if (path === "/disconnect" && request.method === "POST")
+      return Response.json(this.relay.revoke("device", id));
+    if (path !== "/connect") return new Response(null, { status: 404 });
+    if (
+      request.headers.get("siyin-protocol") !== String(PROTOCOL) ||
+      request.headers.get("upgrade")?.toLowerCase() !== "websocket"
+    )
+      return Response.json(
+        { error: "protocol_version", protocol: PROTOCOL },
+        { status: 426 },
+      );
+    const pair = new WebSocketPair();
+    this.relay.connect(id, pair[1]);
+    return new Response(null, { status: 101, webSocket: pair[0] });
+  }
+  createPairing(input: unknown, address: string) {
+    return this.relay.createPairing(input, address);
+  }
+  approvePairing(code: string, fingerprint: string) {
+    return this.relay.approvePairing(code, fingerprint);
+  }
+  pollPairing(code: string, secret: string) {
+    return this.relay.pollPairing(code, secret);
+  }
+  cancelPairing(code: string, secret: string) {
+    return this.relay.cancelPairing(code, secret);
+  }
+  registerGrant(id: string, clientId: string) {
+    return this.relay.registerGrant(id, clientId);
+  }
+  checkGrant(id: string) {
+    return this.relay.checkGrant(id);
+  }
+  adminState() {
+    return this.relay.adminState();
+  }
+  adminStateJson() {
+    return this.relay.adminStateJson();
+  }
+  approveInstance(deviceId: string, instanceId: string, fingerprint: string) {
+    return this.relay.approveInstance(deviceId, instanceId, fingerprint);
+  }
+  revoke(
+    kind: "device" | "instance" | "grant",
+    id: string,
+    instanceId?: string,
+  ) {
+    return this.relay.revoke(kind, id, instanceId);
+  }
+  authenticateDevice(id: string, secret: string) {
+    return this.relay.authenticateDevice(id, secret);
+  }
+  instances(grant: string, options: Parameters<Relay["instances"]>[1]) {
+    return this.relay.instances(grant, options);
+  }
+  call(grant: string, input: Call) {
+    return this.relay.call(grant, input);
+  }
+  webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer) {
+    this.relay.webSocketMessage(ws, raw);
+  }
+  webSocketClose(ws: WebSocket, code: number, reason: string) {
+    this.relay.webSocketClose(ws, code, reason);
+  }
+  webSocketError(ws: WebSocket) {
+    this.relay.webSocketError(ws);
+  }
+  alarm() {
+    this.relay.alarm();
+  }
+}
