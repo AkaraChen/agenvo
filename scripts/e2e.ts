@@ -395,7 +395,7 @@ if (!process.env.SIYIN_E2E_DIR) {
       const threadId = (await codex("thread/start", { model })).thread.id;
       const history = await codex("thread/read", {
         threadId,
-        includeTurns: true,
+        includeTurns: false,
       });
       assert.equal(history.thread.id, threadId);
       await codex("thread/archive", { threadId });

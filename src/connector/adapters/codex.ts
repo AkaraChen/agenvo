@@ -514,9 +514,12 @@ export class CodexAdapter implements Adapter {
         name,
         readOnly: /(?:\/list|\/read)$/.test(name),
         description:
-          this.config.mode === "attach-unix"
+          (this.config.mode === "attach-unix"
             ? "Shared Codex 0.160.1 native method; existing thread settings are preserved."
-            : "Codex 0.160.1 native method; local policy applies.",
+            : "Codex 0.160.1 native method; local policy applies.") +
+          (["thread/read", "thread/turns/list"].includes(name)
+            ? " Codex 0.160.1 may reject turn-history reads with list_turns is not supported yet; use thread/read without includeTurns for metadata."
+            : ""),
         inputSchema:
           this.config.mode === "attach-unix" && sharedFields[name]
             ? {
