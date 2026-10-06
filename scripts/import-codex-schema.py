@@ -4,11 +4,11 @@ source = pathlib.Path(sys.argv[1])
 methods = {
  'model/list': ('ModelListParams', None),
  'thread/loaded/list': ('ThreadLoadedListParams', None),
- 'thread/start': ('ThreadStartParams', ['model','modelProvider','cwd','approvalPolicy','approvalsReviewer','sandbox','config','baseInstructions','developerInstructions','ephemeral','historyMode']),
+ 'thread/start': ('ThreadStartParams', ['model','modelProvider','cwd','approvalPolicy','approvalsReviewer','sandbox','config','baseInstructions','developerInstructions','ephemeral']),
  'thread/resume': ('ThreadResumeParams', ['threadId','model','modelProvider','cwd','approvalPolicy','approvalsReviewer','sandbox','config','baseInstructions','developerInstructions','excludeTurns','initialTurnsPage']),
  'thread/read': ('ThreadReadParams', None), 'thread/list': ('ThreadListParams', None), 'thread/archive': ('ThreadArchiveParams', None),
  'thread/turns/list': ('ThreadTurnsListParams', None), 'thread/items/list': ('ThreadItemsListParams', None),
- 'turn/start': ('TurnStartParams', ['threadId','input','cwd','approvalPolicy','approvalsReviewer','sandboxPolicy','model','effort','summary','outputSchema','collaborationMode']),
+ 'turn/start': ('TurnStartParams', ['threadId','input','cwd','approvalPolicy','approvalsReviewer','sandboxPolicy','model','effort','summary','outputSchema']),
  'turn/interrupt': ('TurnInterruptParams', None),
 }
 responses = {'item/commandExecution/requestApproval':'CommandExecutionRequestApprovalResponse','item/fileChange/requestApproval':'FileChangeRequestApprovalResponse','item/permissions/requestApproval':'PermissionsRequestApprovalResponse','item/tool/requestUserInput':'ToolRequestUserInputResponse','item/tool/call':'DynamicToolCallResponse'}

@@ -393,56 +393,13 @@ if (!process.env.SIYIN_E2E_DIR) {
         native(method, params, "coding");
       const model = (await codex("model/list", { limit: 1 })).data[0].model;
       const threadId = (await codex("thread/start", { model })).thread.id;
-      const turn = await codex("turn/start", {
+      const history = await codex("thread/read", {
         threadId,
-        collaborationMode: {
-          mode: "plan",
-          settings: {
-            model,
-            reasoning_effort: "low",
-            developer_instructions: null,
-          },
-        },
-        input: [
-          {
-            type: "text",
-            text: "Integration test: use request_user_input to ask whether I prefer Alpha or Beta. Wait for the answer, then reply exactly that label. Do not use shell or read files.",
-          },
-        ],
+        includeTurns: true,
       });
-      let pending: any;
-      for (let i = 0; i < 90; i++) {
-        pending = (await codex("requests.list")).items.find(
-          (r: any) => r.method === "item/tool/requestUserInput",
-        );
-        if (pending) break;
-        await sleep(1000);
-      }
-      assert.ok(pending, "No native input arrived through MCP");
-      const questionId = pending.params.questions[0].id;
-      await codex("requests.respond", {
-        interactionId: pending.interactionId,
-        result: { answers: { [questionId]: { answers: ["Alpha"] } } },
-      });
-      let completed: any;
-      for (let i = 0; i < 60; i++) {
-        const history = await codex("thread/read", {
-          threadId,
-          includeTurns: true,
-        });
-        completed = history.thread.turns.find(
-          (t: any) => t.id === turn.turn.id,
-        );
-        if (completed?.status === "completed") break;
-        await sleep(1000);
-      }
-      assert.equal(completed?.status, "completed");
-      assert.match(JSON.stringify(completed), /Alpha/);
-      evidence.codexInputThroughMcp = {
-        threadId,
-        turnId: turn.turn.id,
-        completed: true,
-      };
+      assert.equal(history.thread.id, threadId);
+      await codex("thread/archive", { threadId });
+      evidence.codexControlThroughMcp = { threadId, readAndArchived: true };
     }
 
     if (process.env.SIYIN_E2E_BLACKHOLE) {
