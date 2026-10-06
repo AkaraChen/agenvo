@@ -25,6 +25,7 @@ export async function signedOwner(
         audience: env.ORIGIN,
         requiredClaims: ["exp", "iat"],
         maxTokenAge: 60,
+        clockTolerance: 5,
       },
     );
     if (

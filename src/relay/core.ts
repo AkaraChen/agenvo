@@ -282,15 +282,21 @@ export class Relay {
     this.host.store.transaction(() => {
       if (kind === "grant") {
         const g = this.get<Grant>("grant:" + id);
-        if (g) {
-          g.revoked = true;
-          this.put("grant:" + id, g);
-        }
+        if (!g) throw new Fault("not_found", "Grant not found");
+        g.revoked = true;
+        this.put("grant:" + id, g);
       } else {
         const d = this.device(id);
-        if (!d) return;
+        if (!d) throw new Fault("not_found", "Device not found");
         if (kind === "device") d.revoked = true;
-        else delete d.approved[instanceId!];
+        else {
+          if (
+            !instanceId ||
+            !d.instances.some((i) => i.instanceId === instanceId)
+          )
+            throw new Fault("not_found", "Instance not found");
+          delete d.approved[instanceId];
+        }
         this.put("device:" + id, d);
       }
     });

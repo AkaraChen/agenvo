@@ -33,3 +33,35 @@ test("SQLite permits one owner and rolls back a failed nested operation", async 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("unapproved OAuth registrations expire instead of permanently exhausting capacity", async (t) => {
+  const { VpsOAuth } = await import("../src/server/oauth.js");
+  const { Relay } = await import("../src/relay/core.js");
+  const dir = await mkdtemp(join(tmpdir(), "siyin-clients-"));
+  const store = new SqliteStore(join(dir, "state.sqlite"));
+  t.after(async () => {
+    store.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+  const relay = new Relay({
+    origin: "https://relay.test",
+    store,
+    sockets: () => [],
+    accept: () => {},
+    scheduleCleanup: async () => {},
+  });
+  const oauth = new VpsOAuth(store, relay, "https://relay.test");
+  const metadata = {
+    redirect_uris: ["https://client.test/callback"],
+    token_endpoint_auth_method: "none" as const,
+  };
+  const client = await oauth.clientsStore.registerClient(metadata);
+  assert.equal(
+    oauth.clientsStore.getClient(client.client_id)?.client_id,
+    client.client_id,
+  );
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() + 3600001 });
+  assert.equal(oauth.clientsStore.getClient(client.client_id), undefined);
+  await oauth.clientsStore.registerClient(metadata);
+  assert.equal(store.list("oauth:client:").length, 1);
+});

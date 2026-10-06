@@ -64,6 +64,19 @@ test("pairing signatures bind origin, method, path and body with a 60-second lif
   ])
     await assert.rejects(signedOwner(req, env), { code: "permission_denied" });
   const now = Math.floor(Date.now() / 1000);
+  const slightlyAhead = await new SignJWT({
+    method: "POST",
+    path,
+    body: await digest(body),
+  })
+    .setProtectedHeader({ alg: "ES256", typ: "siyin-pairing+jwt" })
+    .setIssuer("siyin-owner")
+    .setSubject("pairing")
+    .setAudience(origin)
+    .setIssuedAt(now + 3)
+    .setExpirationTime(now + 63)
+    .sign(pair.privateKey);
+  await signedOwner(request(slightlyAhead), env);
   for (const [iat, exp] of [
     [now - 120, now - 60],
     [now, now + 3600],

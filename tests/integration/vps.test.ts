@@ -84,6 +84,31 @@ test(
     };
     assert.equal((await request("/health")).status, 200);
     assert.equal((await request("/api/admin/state")).status, 403);
+    for (const [value, expected] of [
+      [{ kind: "grant", id: "missing" }, 404],
+      [{ kind: "device", id: "missing" }, 404],
+      [{ kind: "instance", id: "missing" }, 400],
+      [{ kind: "instance", id: "missing", instanceId: "missing" }, 404],
+    ] as const) {
+      const body = JSON.stringify(value),
+        path = "/api/admin/revoke";
+      const token = await signOwnerRequest(
+        privateKey,
+        origin,
+        "POST",
+        path,
+        body,
+      );
+      const r = await request(path, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + token,
+          "Content-Type": "application/json",
+        },
+        body,
+      });
+      assert.equal(r.status, expected, await r.text());
+    }
     const metadata = (await (
       await request("/.well-known/oauth-authorization-server")
     ).json()) as any;
@@ -297,3 +322,44 @@ test(
     );
   },
 );
+
+test("forwarded client addresses are trusted only with an explicit single-proxy configuration", async () => {
+  for (const trustedProxy of [false, true]) {
+    const dataDir = await mkdtemp(join(tmpdir(), "siyin-proxy-"));
+    const keys = await generateKeyPair("ES256", { extractable: true });
+    const probe = createServer().listen(0, "127.0.0.1");
+    await once(probe, "listening");
+    const port = (probe.address() as { port: number }).port;
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+    const runtime = await startServer({
+      origin: "https://127.0.0.1:" + port,
+      ownerPublicKey: JSON.stringify(await exportJWK(keys.publicKey)),
+      dataDir,
+      host: "127.0.0.1",
+      port,
+      trustedProxy,
+    });
+    try {
+      const pair = (address: string) =>
+        fetch("http://127.0.0.1:" + port + "/pairings", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Forwarded-For": address,
+          },
+          body: JSON.stringify({
+            digest: "a".repeat(64),
+            label: "Test",
+            instances: [],
+          }),
+        });
+      for (let i = 0; i < 10; i++)
+        assert.equal((await pair("192.0.2.1")).status, 201);
+      assert.equal((await pair("192.0.2.1")).status, 429);
+      assert.equal((await pair("192.0.2.2")).status, trustedProxy ? 201 : 429);
+    } finally {
+      await runtime.close();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  }
+});

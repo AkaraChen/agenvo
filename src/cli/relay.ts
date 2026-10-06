@@ -22,6 +22,7 @@ export async function relayCommand(action: string, options: Options) {
       dataDir: resolve(String(options["data-dir"])),
       host: String(options.host ?? "127.0.0.1"),
       port: Number(options.port ?? 8080),
+      trustedProxy: Boolean(options["trusted-proxy"]),
     });
     const path = resolve(String(options.output));
     await mkdir(dirname(path), { recursive: true });

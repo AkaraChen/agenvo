@@ -79,6 +79,31 @@ test(
       assert.equal(r.status, 200, await r.clone().text());
       return r.json() as Promise<any>;
     };
+    for (const [value, status] of [
+      [{ kind: "grant", id: "missing" }, 404],
+      [{ kind: "device", id: "missing" }, 404],
+      [{ kind: "instance", id: "missing" }, 400],
+      [{ kind: "instance", id: "missing", instanceId: "missing" }, 404],
+    ] as const) {
+      const body = JSON.stringify(value),
+        path = "/api/admin/revoke";
+      const token = await signOwnerRequest(
+        ownerPrivate,
+        "https://siyin.test",
+        "POST",
+        path,
+        body,
+      );
+      const response = await mf.dispatchFetch("https://siyin.test" + path, {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token },
+        body,
+      });
+      assert.equal(response.status, status, await response.text());
+    }
+    const cliConsent = await mf.dispatchFetch("https://siyin.test/authorize");
+    assert.equal(cliConsent.status, 200);
+    assert.match(await cliConsent.text(), /siyin client inspect/);
     const registration = await mf.dispatchFetch(
       "https://siyin.test/oauth/register",
       {

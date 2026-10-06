@@ -19,12 +19,17 @@ import {
 import { redirectUriMatches } from "@modelcontextprotocol/sdk/server/auth/handlers/authorize.js";
 import { type AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { type Relay, type RecordStore } from "../relay/core.js";
+import { authorizationInstructions } from "../admin/page.js";
 import { Fault } from "../protocol/index.js";
 
 const scope = "runtime:approved";
 const hash = (value: string) =>
   createHash("sha256").update(value).digest("hex");
 const secret = () => randomBytes(32).toString("base64url");
+type RegisteredClient = {
+  client: OAuthClientInformationFull;
+  expires?: number;
+};
 type Code = {
   clientId: string;
   redirectUri: string;
@@ -47,14 +52,20 @@ export class VpsOAuth implements OAuthServerProvider {
     readonly origin: string,
   ) {}
   readonly clientsStore = {
-    getClient: (id: string) =>
-      this.store.get<OAuthClientInformationFull>("oauth:client:" + id),
+    getClient: (id: string) => {
+      const record = this.store.get<RegisteredClient>("oauth:client:" + id);
+      return record &&
+        (record.expires === undefined || record.expires > Date.now())
+        ? record.client
+        : undefined;
+    },
     registerClient: async (
       client: Omit<
         OAuthClientInformationFull,
         "client_id" | "client_id_issued_at"
       >,
     ): Promise<OAuthClientInformationFull> => {
+      this.cleanup();
       if (this.store.list("oauth:client:").length >= 256)
         throw new InvalidClientMetadataError(
           "Client capacity reached; contact the owner",
@@ -81,7 +92,10 @@ export class VpsOAuth implements OAuthServerProvider {
         client_id: randomUUID(),
         client_id_issued_at: Math.floor(Date.now() / 1000),
       };
-      this.store.put("oauth:client:" + registered.client_id, registered);
+      this.store.put("oauth:client:" + registered.client_id, {
+        client: registered,
+        expires: Date.now() + 3600000,
+      } satisfies RegisteredClient);
       return registered;
     },
   };
@@ -105,10 +119,8 @@ export class VpsOAuth implements OAuthServerProvider {
     // CLI request, the registered client, the exact redirect and the PKCE challenge.
     response
       .status(200)
-      .type("text/plain")
-      .send(
-        "Siyin / 嗣音\n\nOwner approval is required. Copy this authorization URL and run:\n需要所有者批准。复制此授权页面地址并运行：\n\nsiyin client inspect AUTHORIZATION_URL --origin RELAY_ORIGIN\n\nAuthorization includes all approved instances and future approvals. Herdr can execute commands as the local user.\n授权包括全部已批准实例和未来批准的实例，Herdr 可用本机身份执行命令。\nThen approve the exact client and redirect shown by the CLI.\n核对 CLI 显示的客户端和回调地址后批准。\n",
-      );
+      .type("html")
+      .send(await authorizationInstructions().text());
   }
   inspect(authorizationUrl: string) {
     const url = new URL(authorizationUrl);
@@ -210,6 +222,11 @@ export class VpsOAuth implements OAuthServerProvider {
     return this.store.transaction(() => {
       this.store.remove("oauth:code:" + hash(value));
       this.relay.registerGrant(code.grantId, client.client_id);
+      // Only owner-approved clients get a durable registration. Anonymous DCR
+      // requests must not permanently exhaust the registration capacity.
+      this.store.put("oauth:client:" + client.client_id, {
+        client,
+      } satisfies RegisteredClient);
       return this.tokens(client.client_id, code.grantId);
     });
   }
@@ -297,7 +314,16 @@ export class VpsOAuth implements OAuthServerProvider {
     }
   }
   cleanup() {
-    for (const kind of ["code", "access", "refresh"])
+    for (const { client } of this.store.list<RegisteredClient>(
+      "oauth:client:",
+    )) {
+      if (
+        client.client_secret_expires_at &&
+        client.client_secret_expires_at <= Date.now() / 1000
+      )
+        this.store.remove("oauth:client:" + client.client_id);
+    }
+    for (const kind of ["client", "code", "access", "refresh"])
       this.store.expire("oauth:" + kind + ":", Date.now());
   }
 }

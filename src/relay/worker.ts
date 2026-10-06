@@ -8,9 +8,16 @@ import {
 } from "@cloudflare/workers-oauth-provider";
 import { z } from "zod";
 import { owner, sameOrigin } from "./owner-auth.js";
+import { admin } from "./admin.js";
 import { signedOwner } from "./admin-auth.js";
 import { mcp } from "./mcp.js";
-import { html, escapeHtml as e, form, scopeWarning } from "../admin/page.js";
+import {
+  html,
+  escapeHtml as e,
+  form,
+  scopeWarning,
+  authorizationInstructions,
+} from "../admin/page.js";
 import {
   readBody,
   Fault,
@@ -132,81 +139,8 @@ function createProvider(origin: string, verifyOwner: typeof owner) {
             { headers },
           );
         }
-        if (
-          path === "/api/admin/pairings" ||
-          path === "/api/admin/pairings/approve"
-        ) {
-          await signedOwner(request, env);
-          const headers = { "Cache-Control": "no-store" };
-          if (path === "/api/admin/pairings" && request.method === "GET") {
-            const state = JSON.parse(await relay.adminStateJson());
-            return Response.json(
-              {
-                pairings: state.pairings.filter(
-                  (p: { deviceId?: string; expires: number }) =>
-                    !p.deviceId && p.expires > Date.now(),
-                ),
-              },
-              { headers },
-            );
-          }
-          if (path.endsWith("/approve") && request.method === "POST") {
-            const p = z
-              .strictObject({
-                code: z.string().uuid(),
-                digest: z.string().regex(/^[a-f0-9]{64}$/),
-              })
-              .parse(JSON.parse(await readBody(request)));
-            return Response.json(await relay.approvePairing(p.code, p.digest), {
-              headers,
-            });
-          }
-          return new Response(null, { status: 405 });
-        }
-        if (
-          [
-            "/api/admin/state",
-            "/api/admin/instances/approve",
-            "/api/admin/revoke",
-          ].includes(path)
-        ) {
-          await signedOwner(request, env);
-          const headers = { "Cache-Control": "no-store" };
-          if (path === "/api/admin/state" && request.method === "GET")
-            return new Response(await relay.adminStateJson(), {
-              headers: { ...headers, "Content-Type": "application/json" },
-            });
-          if (request.method !== "POST")
-            return new Response(null, { status: 405 });
-          const input = JSON.parse(await readBody(request));
-          if (path === "/api/admin/instances/approve") {
-            const p = z
-              .strictObject({
-                deviceId: z.string(),
-                instanceId: z.string(),
-                fingerprint: z.string(),
-              })
-              .parse(input);
-            return Response.json(
-              await relay.approveInstance(
-                p.deviceId,
-                p.instanceId,
-                p.fingerprint,
-              ),
-              { headers },
-            );
-          }
-          const p = z
-            .strictObject({
-              kind: z.enum(["device", "instance", "grant"]),
-              id: z.string(),
-              instanceId: z.string().optional(),
-            })
-            .parse(input);
-          return Response.json(await relay.revoke(p.kind, p.id, p.instanceId), {
-            headers,
-          });
-        }
+        const managed = await admin(request, relay, env);
+        if (managed) return managed;
         if (path === "/health" && request.method === "GET")
           return Response.json({
             service: "siyin",
@@ -259,6 +193,14 @@ function createProvider(origin: string, verifyOwner: typeof owner) {
           !path.startsWith("/admin/")
         )
           return new Response(null, { status: 404 });
+        if (
+          path === "/authorize" &&
+          request.method === "GET" &&
+          verifyOwner === owner &&
+          env.OWNER_PUBLIC_KEY &&
+          !(env.ACCESS_ISSUER && env.ACCESS_AUD && env.OWNER_EMAIL)
+        )
+          return authorizationInstructions();
         await verifyOwner(request, env);
         const oauth = (env as Env & { OAUTH_PROVIDER: OAuthHelpers })
           .OAUTH_PROVIDER;
@@ -405,9 +347,11 @@ export function createWorker(verifyOwner: typeof owner = owner) {
               ? 403
               : error.code === "rate_limited"
                 ? 429
-                : error.code === "owner_not_configured"
-                  ? 503
-                  : 400
+                : error.code === "not_found"
+                  ? 404
+                  : error.code === "owner_not_configured"
+                    ? 503
+                    : 400
             : 503;
         return Response.json(asOutcome(error), { status });
       }

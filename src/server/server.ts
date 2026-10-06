@@ -8,6 +8,7 @@ import { z } from "zod";
 import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { Relay, type RelaySocket } from "../relay/core.js";
 import { mcp } from "../relay/mcp.js";
+import { admin } from "../relay/admin.js";
 import { signedOwner } from "../relay/admin-auth.js";
 import {
   LIMITS,
@@ -36,9 +37,10 @@ export const serverConfig = z.strictObject({
   dataDir: z.string().startsWith("/"),
   host: z.string().default("127.0.0.1"),
   port: z.number().int().min(0).max(65535).default(8080),
+  trustedProxy: z.boolean().default(false),
   tls: z.strictObject({ cert: z.string(), key: z.string() }).optional(),
 });
-export type ServerConfig = z.infer<typeof serverConfig>;
+export type ServerConfig = z.input<typeof serverConfig>;
 class Socket implements RelaySocket {
   private attachment!: ReturnType<RelaySocket["deserializeAttachment"]>;
   constructor(readonly ws: WebSocket) {}
@@ -112,6 +114,7 @@ export async function startServer(input: ServerConfig) {
   cleanup.unref();
   const app = express();
   app.disable("x-powered-by");
+  if (config.trustedProxy) app.set("trust proxy", 1);
   app.use((req, res, next) => {
     if (req.headers.host !== new URL(config.origin).host) {
       res.status(421).end();
@@ -146,7 +149,12 @@ export async function startServer(input: ServerConfig) {
     const json = () => JSON.parse(body.toString("utf8"));
     let response: Response;
     try {
-      if (path === "/health" && req.method === "GET")
+      const managed = await admin(request, relay, {
+        ORIGIN: config.origin,
+        OWNER_PUBLIC_KEY: config.ownerPublicKey,
+      });
+      if (managed) response = managed;
+      else if (path === "/health" && req.method === "GET")
         response = Response.json({
           service: "siyin",
           version: VERSION,
@@ -176,7 +184,7 @@ export async function startServer(input: ServerConfig) {
         response = Response.json(
           await relay.createPairing(
             json(),
-            req.socket.remoteAddress ?? "unknown",
+            req.ip ?? req.socket.remoteAddress ?? "unknown",
           ),
           { status: 201 },
         );
@@ -208,43 +216,9 @@ export async function startServer(input: ServerConfig) {
           { ORIGIN: config.origin, OWNER_PUBLIC_KEY: config.ownerPublicKey },
           path.startsWith("/api/admin/authorization/") ? "oauth" : "pairing",
         );
-        if (path === "/api/admin/pairings" && req.method === "GET")
-          response = Response.json({
-            pairings: relay.adminState().pairings.filter((p) => !p.deviceId),
-          });
-        else if (path === "/api/admin/state" && req.method === "GET")
-          response = Response.json(relay.adminState());
-        else if (req.method !== "POST")
+        if (req.method !== "POST")
           response = new Response(null, { status: 405 });
-        else if (path === "/api/admin/pairings/approve") {
-          const p = z
-            .strictObject({
-              code: z.string().uuid(),
-              digest: z.string().regex(/^[a-f0-9]{64}$/),
-            })
-            .parse(json());
-          response = Response.json(relay.approvePairing(p.code, p.digest));
-        } else if (path === "/api/admin/instances/approve") {
-          const p = z
-            .strictObject({
-              deviceId: z.string(),
-              instanceId: z.string(),
-              fingerprint: z.string(),
-            })
-            .parse(json());
-          response = Response.json(
-            relay.approveInstance(p.deviceId, p.instanceId, p.fingerprint),
-          );
-        } else if (path === "/api/admin/revoke") {
-          const p = z
-            .strictObject({
-              kind: z.enum(["device", "instance", "grant"]),
-              id: z.string(),
-              instanceId: z.string().optional(),
-            })
-            .parse(json());
-          response = Response.json(relay.revoke(p.kind, p.id, p.instanceId));
-        } else if (
+        else if (
           [
             "/api/admin/authorization/inspect",
             "/api/admin/authorization/approve",
@@ -279,9 +253,11 @@ export async function startServer(input: ServerConfig) {
         error instanceof Fault
           ? error.code === "permission_denied"
             ? 403
-            : error.code === "rate_limited"
-              ? 429
-              : 400
+            : error.code === "not_found"
+              ? 404
+              : error.code === "rate_limited"
+                ? 429
+                : 400
           : error instanceof z.ZodError || error instanceof SyntaxError
             ? 400
             : 503;
