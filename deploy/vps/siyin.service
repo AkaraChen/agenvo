@@ -1,0 +1,22 @@
+[Unit]
+Description=Siyin runtime relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=siyin
+Group=siyin
+WorkingDirectory=/opt/siyin
+ExecStart=/usr/bin/node /opt/siyin/dist/cli.js relay serve --config /etc/siyin/relay.json
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/siyin
+
+[Install]
+WantedBy=multi-user.target

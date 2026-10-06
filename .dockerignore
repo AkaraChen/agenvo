@@ -1,0 +1,7 @@
+.git
+node_modules
+dist
+.wrangler
+*.local.json
+**/*.local.json
+deploy/vps/data
