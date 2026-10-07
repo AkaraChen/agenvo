@@ -10,6 +10,8 @@ Complete [relay deployment](deployment-cloudflare.md) and [Connector pairing](us
 
 The ChatGPT account or workspace must permit custom MCP servers. UI labels vary by account and product version; the following labels were observed during this attempt and do not establish support for every subscription.
 
+The current [official connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt) starts with Plugins → Add custom MCP server and does not list enabling Developer mode as a prerequisite. Search snippets may retain older Developer mode instructions; open the current page before relying on them. The [custom MCP guide](https://developers.openai.com/api/docs/guides/custom-mcp-server) explicitly says workspace permissions and security restrictions, including Lockdown, still apply.
+
 ## Observed browser steps
 
 1. Sign in to ChatGPT and open **Plugins** in the sidebar.
@@ -33,6 +35,10 @@ Advanced OAuth settings were left unchanged. Do not choose No authentication. Ag
 For `Custom apps aren't allowed in this context`, check the current account/workspace and open **Settings → Plugins**. If the page says **Couldn't load plugin settings**, use its **Try again** control once.
 
 During this attempt, settings loaded after retry, but creation was still rejected. The account menu showed personal Pro, and the existing Siyin connection remained connected. The visible settings offered no switch to remove the restriction. This evidence does not distinguish an account policy from a platform fault or establish that a different subscription is needed. Creation must become available on the ChatGPT side before continuing. Approving the relay again, disabling OAuth, or deleting the old connection does not resolve this stage.
+
+A subsequent check of **Settings → Security and login** showed Lockdown mode off and no Developer mode switch. Searching settings for `developer` returned No results found. Enforce CSP for custom apps was also off; its description concerns custom-app network restrictions, not creation permission. Enabling it is not an MCP setup prerequisite. No security settings were changed.
+
+For an enterprise workspace, also review Workspace apps and Permissions & roles using the [official plugin controls guide](https://learn.chatgpt.com/docs/enterprise/apps-and-connectors). Do not assume these enterprise administration controls exist for a personal account. The observed Lockdown setting is ruled out, but the backend reason for rejecting creation remains unknown.
 
 ## Authorization after creation is permitted
 

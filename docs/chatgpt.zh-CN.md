@@ -10,6 +10,8 @@
 
 ChatGPT 账户或工作区必须允许添加自定义 MCP。界面会随账户和产品版本变化；以下按钮名称来自本次实测界面，不能据此承诺所有套餐均支持。
 
+当前[官方接入文档](https://developers.openai.com/plugins/deploy/connect-chatgpt)直接从 Plugins → Add custom MCP server 开始，没有列出开启 Developer mode 的前置步骤。搜索摘要可能仍保留旧版 Developer mode 说明，排查时应打开正文核对。[自定义 MCP 文档](https://developers.openai.com/api/docs/guides/custom-mcp-server)明确说明工作区权限和包括 Lockdown 在内的安全限制仍适用。
+
 ## 已验证的网页操作
 
 1. 登录 ChatGPT，在左侧打开 **Plugins**。
@@ -33,6 +35,10 @@ ChatGPT 账户或工作区必须允许添加自定义 MCP。界面会随账户�
 如果出现上述 `Custom apps aren't allowed in this context`，先确认当前账户/工作区，再打开 **Settings → Plugins** 检查配置是否正常加载。若出现 **Couldn't load plugin settings**，可使用页面的 **Try again** 重试一次。
 
 本次设置重试后正常加载，但再次创建仍被拒绝。账户菜单显示个人 Pro；现有嗣音连接显示已连接。可见设置没有提供解除该限制的开关。这些事实不能确定是账户策略还是平台故障，也不能证明需要更换套餐。此时尚未到达 Agenvo 授权页面，应由 ChatGPT 侧恢复自定义 MCP 创建能力后继续；重复批准 Relay、关闭 OAuth 或删除旧连接都不能作为修复。
+
+进一步检查 **Settings → Security and login**：本次 Lockdown mode 为关闭，页面没有 Developer mode 开关，设置搜索 `developer` 返回 No results found。App security 中的 Enforce CSP for custom apps 也为关闭；其说明是限制自定义应用的网络访问，不是创建权限开关，不应将开启它当作添加 MCP 的前提。本次没有更改安全设置。
+
+企业工作区还需按[官方插件权限说明](https://learn.chatgpt.com/docs/enterprise/apps-and-connectors)核对 Workspace apps 与 Permissions & roles；不要把企业管理入口默认套用到个人账户。当前证据排除了可见的 Lockdown 开关，但未确定后台拒绝创建的具体原因。
 
 ## 创建获准后的授权步骤
 
