@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SqliteStore } from "../src/server/store.js";
+import { SqliteStore } from "../apps/server/src/store.js";
 
 test("SQLite permits one owner and rolls back a failed nested operation", async () => {
   const dir = await mkdtemp(join(tmpdir(), "agenvo-store-"));
@@ -35,8 +35,8 @@ test("SQLite permits one owner and rolls back a failed nested operation", async 
 });
 
 test("unapproved OAuth registrations expire instead of permanently exhausting capacity", async (t) => {
-  const { VpsOAuth } = await import("../src/server/oauth.js");
-  const { Relay } = await import("../src/relay/core.js");
+  const { VpsOAuth } = await import("../apps/server/src/oauth.js");
+  const { Relay } = await import("@agenvo/relay/core");
   const dir = await mkdtemp(join(tmpdir(), "agenvo-clients-"));
   const store = new SqliteStore(join(dir, "state.sqlite"));
   t.after(async () => {

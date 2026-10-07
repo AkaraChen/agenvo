@@ -4,7 +4,7 @@ import { execFile, spawn } from "node:child_process";
 import { mkdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { type HerdrConfig } from "../../src/connector/config.ts";
+import { type HerdrConfig } from "../support/config.js";
 const exec = promisify(execFile);
 export function herdrFixture(
   config: Pick<HerdrConfig, "binary" | "configRoot" | "cwd">,

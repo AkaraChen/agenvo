@@ -36,4 +36,4 @@ for method,(name,fields) in methods.items():
    for v in node:refs(v)
  refs(d);d['definitions']={k:v for k,v in d.get('definitions',{}).items() if k in needed}
  out[method]=d
-pathlib.Path('src/connector/adapters/schema/codex.json').write_text(json.dumps({'version':'0.160.1','methods':out,'responses':{k:read(v) for k,v in responses.items()}},indent=2)+'\n')
+pathlib.Path('apps/codex-app-server/src/schema/codex.json').write_text(json.dumps({'version':'0.160.1','methods':out,'responses':{k:read(v) for k,v in responses.items()}},indent=2)+'\n')

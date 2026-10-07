@@ -5,8 +5,8 @@ import { once } from "node:events";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
-import { CodexAdapter } from "../../src/connector/adapters/codex.js";
-import { instanceConfigSchema } from "../../src/connector/config.js";
+import { CodexAdapter } from "../../apps/codex-app-server/src/codex.js";
+import { instanceConfigSchema } from "../support/config.js";
 
 // Exercise real app-server turn control with a local model endpoint held open.
 // No account, external model, tool execution or everyday thread is involved.

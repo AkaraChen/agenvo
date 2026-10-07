@@ -2,14 +2,14 @@
 
 [简体中文](usage.zh-CN.md) · [README](../README.md)
 
-Commands below assume a deployed `https://relay.example.com`. The owner and devices can be different machines. `AGENVO_CONFIG_DIR` selects an installation; it defaults to `~/.config/agenvo`. Do not share this directory between simultaneous Connector processes.
+Commands below assume a deployed `https://relay.example.com`. The owner and devices can be different machines. `AGENVO_CONFIG_DIR` selects an installation; it defaults to `~/.config/agenvo/herdr` for Herdr and `~/.config/agenvo/codex-app-server` for Codex. Do not share this directory between simultaneous Connector processes.
 
 ## Configure a runtime
 
 Start Herdr independently using Herdr's own application/service, then share its entire configuration environment:
 
 ```sh
-agenvo instance add herdr --id work --config-root "$HOME/.config/herdr" --cwd "$HOME/code"
+agenvo-herdr instance add --id work --config-root "$HOME/.config/herdr" --cwd "$HOME/code"
 ```
 
 The path must point to the native directory named `herdr`. The Connector discovers its running sessions; stopping it leaves Herdr running.
@@ -17,9 +17,9 @@ The path must point to the native directory named `herdr`. The Connector discove
 For an isolated, Connector-managed Codex app-server:
 
 ```sh
-mkdir -p "$HOME/.config/agenvo/codex/coding"
-CODEX_HOME="$HOME/.config/agenvo/codex/coding" codex login
-agenvo instance add codex --id coding --home "$HOME/.config/agenvo/codex/coding" --cwd "$HOME/code"
+mkdir -p "$HOME/.config/agenvo/codex-app-server/codex/coding"
+CODEX_HOME="$HOME/.config/agenvo/codex-app-server/codex/coding" codex login
+agenvo-codex-app-server instance add --id coding --home "$HOME/.config/agenvo/codex-app-server/codex/coding" --cwd "$HOME/code"
 ```
 
 Codex work always uses `danger-full-access` and `approvalPolicy: never`, including thread creation, resume and new input through attach mode. Execution permission requests are answered automatically. User questions and dynamic tool calls remain explicit interactions.
@@ -28,11 +28,13 @@ Experimental `--mode attach-unix --socket /absolute/control.sock` requires an in
 
 ## Pair and run
 
+The examples use Herdr. For Codex, use `agenvo-codex-app-server` and pair it separately. Both can run on the same computer, with separate configuration, credentials, and services. Do not copy pairing credentials between them. The wire field `deviceId` identifies a Connector, not a physical computer.
+
 ```sh
-agenvo connect https://relay.example.com --name laptop
+agenvo-herdr connect https://relay.example.com --name laptop
 ```
 
-The command opens the management page and waits. Sign in with the administrator key, compare the device fingerprint and instances with the terminal, and approve. After pairing, run `agenvo run` in the foreground or `agenvo service install` for a background service.
+The command opens the management page and waits. Sign in with the administrator key, compare the device fingerprint and instances with the terminal, and approve. After pairing, run `agenvo-herdr run` in the foreground or `agenvo-herdr service install` for a background service.
 
 On a headless device, use `--no-browser` and open the printed approval URL on another computer. The device does not need the administrator key. With `--no-wait`, run connect again after approval. Linux user services require linger to survive logout.
 
@@ -47,10 +49,10 @@ Add `https://relay.example.com/mcp` in a client supporting dynamic OAuth registr
 Inject `AGENVO_ADMIN_SECRET` securely into an explicit administration command's environment. Do not put it in Connector configuration, service definitions or command-line arguments. Available commands include:
 
 ```sh
-agenvo pairing list --origin https://relay.example.com
-agenvo pairing approve CODE --fingerprint SHA256 --origin https://relay.example.com
-agenvo admin state --origin https://relay.example.com
-agenvo admin approve-instance --device-id DEVICE --instance-id INSTANCE --fingerprint SHA256 --origin https://relay.example.com
+agenvo-herdr pairing list --origin https://relay.example.com
+agenvo-herdr pairing approve CODE --fingerprint SHA256 --origin https://relay.example.com
+agenvo-herdr admin state --origin https://relay.example.com
+agenvo-herdr admin approve-instance --device-id DEVICE --instance-id INSTANCE --fingerprint SHA256 --origin https://relay.example.com
 ```
 
 `connect --approve` is only for trusted administrator terminals with an explicitly supplied administrator key. Approve remote devices from the administrator terminal without sending that key to the device.
@@ -60,16 +62,16 @@ For task operations, see [Managing Agent threads](management.md).
 ## Revoke and diagnose
 
 ```sh
-agenvo admin revoke grant --id GRANT_ID --origin https://relay.example.com
-agenvo admin revoke instance --id DEVICE_ID --instance-id INSTANCE_ID --origin https://relay.example.com
-agenvo admin revoke device --id DEVICE_ID --origin https://relay.example.com
-agenvo status --json
-agenvo doctor
-agenvo disconnect
+agenvo-herdr admin revoke grant --id GRANT_ID --origin https://relay.example.com
+agenvo-herdr admin revoke instance --id DEVICE_ID --instance-id INSTANCE_ID --origin https://relay.example.com
+agenvo-herdr admin revoke device --id DEVICE_ID --origin https://relay.example.com
+agenvo-herdr status --json
+agenvo-herdr doctor
+agenvo-herdr disconnect
 ```
 
 Revocation blocks new access and delivery of pending results. It does not undo or stop local work already dispatched. `disconnect` clears local credentials and attempts cloud revocation; check its `cloudRevoked` and `serviceUninstalled` fields. If cloud revocation failed, revoke the device with the owner CLI when connectivity returns.
 
-A crashed Connector may leave `run.lock`. Verify that its process is gone before `agenvo doctor --recover-lock`. Never delete a live process's lock. When a call reports `unknown`, inspect the native runtime before retrying a write. Connector restarts invalidate pending input handles; rediscover native state rather than replaying an old answer.
+A crashed Connector may leave `run.lock`. Verify that its process is gone before `agenvo-herdr doctor --recover-lock`. Never delete a live process's lock. When a call reports `unknown`, inspect the native runtime before retrying a write. Connector restarts invalidate pending input handles; rediscover native state rather than replaying an old answer.
 
 Codex 0.160.1 may reject `thread/turns/list` or `thread/read` with `includeTurns: true` with `list_turns is not supported yet`. Use `thread/read` without `includeTurns` for metadata.

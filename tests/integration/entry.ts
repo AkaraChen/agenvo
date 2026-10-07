@@ -1,9 +1,9 @@
 // This fixture is built only by the local Workers integration suite.
 import worker, {
   SiyinRelay as ProductionRelay,
-} from "../../src/relay/worker.js";
-import { sendWebhook } from "../../src/relay/webhook.js";
-import { mcp } from "../../src/relay/mcp.js";
+} from "../../apps/cloudflare/src/worker.js";
+import { sendWebhook } from "@agenvo/relay/webhook";
+import { mcp } from "@agenvo/relay/mcp";
 export class SiyinRelay extends ProductionRelay {
   async eventDiagnostics() {
     return {

@@ -5,9 +5,9 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { resolve } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
-import { CodexAdapter } from "../src/connector/adapters/codex.js";
-import { describe } from "../src/connector/adapters/adapter.js";
-import { instanceConfigSchema } from "../src/connector/config.js";
+import { CodexAdapter } from "../apps/codex-app-server/src/codex.js";
+import { describe } from "@agenvo/connector/adapters/adapter";
+import { instanceConfigSchema } from "./support/config.js";
 
 // A second native client owns resolution; the adapter only owns its connection.
 test("attach applies full access, tracks peer resolution and reconnects without replay", async (t) => {
@@ -255,10 +255,9 @@ test("CLI writes attach configuration only in the selected installation", async 
   const args = [
     "--import",
     "tsx",
-    "src/cli/main.ts",
+    "apps/codex-app-server/src/cli.ts",
     "instance",
     "add",
-    "codex",
     "--id",
     "desktop",
     "--mode",

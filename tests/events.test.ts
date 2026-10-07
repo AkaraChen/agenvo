@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Webhook } from "standardwebhooks";
-import { Events } from "../src/relay/events.js";
-import { SqliteStore } from "../src/server/store.js";
-import { sendWebhook } from "../src/relay/webhook.js";
-import { mcp } from "../src/relay/mcp.js";
-import { Relay } from "../src/relay/core.js";
-import { digest } from "../src/protocol/index.js";
-import type { RuntimeEvent } from "../src/protocol/events.js";
+import { Events } from "@agenvo/relay/events";
+import { SqliteStore } from "../apps/server/src/store.js";
+import { sendWebhook } from "@agenvo/relay/webhook";
+import { mcp } from "@agenvo/relay/mcp";
+import { Relay } from "@agenvo/relay/core";
+import { digest } from "@agenvo/protocol";
+import type { RuntimeEvent } from "@agenvo/protocol/events";
 
 const secret = "whsec_" + Buffer.alloc(32, 7).toString("base64");
 const args = { deviceId: "device", instanceId: "runtime" };

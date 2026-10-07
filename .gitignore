@@ -8,3 +8,6 @@ coverage/
 *.tgz
 deploy/vps/data/
 deploy/vps/.env
+
+apps/*/LICENSE
+apps/*/NOTICE

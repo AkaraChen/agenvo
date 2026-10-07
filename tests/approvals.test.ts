@@ -2,8 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { CodexAdapter } from "../src/connector/adapters/codex.ts";
-import { instanceConfigSchema } from "../src/connector/config.ts";
+import { CodexAdapter } from "../apps/codex-app-server/src/codex.js";
+import { instanceConfigSchema } from "./support/config.js";
 
 test("native transport automatically approves permissions and retains user questions", async (t) => {
   const root = await realpath(await mkdtemp("/tmp/agenvo-approval-"));

@@ -1,0 +1,44 @@
+{
+  "name": "@agenvo/server",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Xuanwo/agenvo.git",
+    "directory": "apps/server"
+  },
+  "engines": {
+    "node": ">=24.13.0"
+  },
+  "devDependencies": {
+    "@agenvo/protocol": "0.1.0",
+    "@agenvo/relay": "0.1.0"
+  },
+  "description": "Self-hosted Agenvo relay for Node.js",
+  "bin": {
+    "agenvo-server": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build.mjs server",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "ws": "8.22.0",
+    "express": "5.2.1",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/server": "2.3.1",
+    "standardwebhooks": "1.1.1",
+    "zod": "4.6.5"
+  }
+}

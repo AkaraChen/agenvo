@@ -10,11 +10,11 @@ import { once } from "node:events";
 import WebSocket from "ws";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { startServer } from "../../src/server/server.js";
-import { CodexAdapter } from "../../src/connector/adapters/codex.js";
-import { instanceConfigSchema } from "../../src/connector/config.js";
-import { describe, accepted } from "../../src/connector/adapters/adapter.js";
-import { digest, asOutcome, type Instance } from "../../src/protocol/index.js";
+import { startServer } from "../../apps/server/src/server.js";
+import { CodexAdapter } from "../../apps/codex-app-server/src/codex.js";
+import { instanceConfigSchema } from "../support/config.js";
+import { describe, accepted } from "@agenvo/connector/adapters/adapter";
+import { digest, asOutcome, type Instance } from "@agenvo/protocol";
 
 // Exercise the production HTTP routes behind the same Host-preserving boundary
 // used by the documented reverse proxy. No fixture authorization endpoints.

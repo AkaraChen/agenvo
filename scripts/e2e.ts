@@ -1,3 +1,4 @@
+import { isolatedEnvironment } from "../tests/support/environment.js";
 // Local-only TLS fixture: production CLI/connector, real Worker/DO/OAuth/MCP and Herdr.
 import assert from "node:assert/strict";
 import net from "node:net";
@@ -46,7 +47,9 @@ if (!process.env.AGENVO_E2E_DIR) {
       {
         stdio: "inherit",
         env: {
-          ...process.env,
+          ...isolatedEnvironment(dir),
+          AGENVO_E2E_BLACKHOLE: process.env.AGENVO_E2E_BLACKHOLE,
+          AGENVO_EVIDENCE_DIR: process.env.AGENVO_EVIDENCE_DIR,
           AGENVO_E2E_DIR: dir,
           NODE_EXTRA_CA_CERTS: join(dir, "cert.pem"),
         },
@@ -104,7 +107,7 @@ if (!process.env.AGENVO_E2E_DIR) {
     node: process.version,
   };
   const cli = (...args: string[]) =>
-    exec(process.execPath, ["dist/cli.js", ...args], {
+    exec(process.execPath, ["apps/herdr/dist/cli.js", ...args], {
       env: { ...process.env, AGENVO_CONFIG_DIR: cfg },
       timeout: 30000,
     });
@@ -157,7 +160,6 @@ if (!process.env.AGENVO_E2E_DIR) {
     await cli(
       "instance",
       "add",
-      "herdr",
       "--id",
       "work",
       "--config-root",
@@ -165,18 +167,6 @@ if (!process.env.AGENVO_E2E_DIR) {
       "--cwd",
       await realpath(dir),
     );
-    if (process.env.AGENVO_E2E_CODEX_HOME)
-      await cli(
-        "instance",
-        "add",
-        "codex",
-        "--id",
-        "coding",
-        "--cwd",
-        await realpath(dir),
-        "--home",
-        await realpath(process.env.AGENVO_E2E_CODEX_HOME),
-      );
     const connecting = cli(
       "connect",
       relay,
@@ -221,10 +211,14 @@ if (!process.env.AGENVO_E2E_DIR) {
     await fixture("approvePairing", pair.code, pair.digest);
     await resumed;
     evidence.pairingResumed = true;
-    const connector = spawn(process.execPath, ["dist/cli.js", "run"], {
-      env: { ...process.env, AGENVO_CONFIG_DIR: cfg },
-      stdio: "ignore",
-    });
+    const connector = spawn(
+      process.execPath,
+      ["apps/herdr/dist/cli.js", "run"],
+      {
+        env: { ...process.env, AGENVO_CONFIG_DIR: cfg },
+        stdio: "ignore",
+      },
+    );
     children.push(connector);
     for (let i = 0; i < 100; i++) {
       let s: any;
@@ -403,19 +397,6 @@ if (!process.env.AGENVO_E2E_DIR) {
     }
     assert.ok(inputObserved);
     evidence.nativeInputRoundTrip = true;
-    if (process.env.AGENVO_E2E_CODEX_HOME) {
-      const codex = (method: string, params: Record<string, unknown> = {}) =>
-        native(method, params, "coding");
-      const model = (await codex("model/list", { limit: 1 })).data[0].model;
-      const threadId = (await codex("thread/start", { model })).thread.id;
-      const history = await codex("thread/read", {
-        threadId,
-        includeTurns: false,
-      });
-      assert.equal(history.thread.id, threadId);
-      await codex("thread/archive", { threadId });
-      evidence.codexControlThroughMcp = { threadId, readAndArchived: true };
-    }
 
     if (process.env.AGENVO_E2E_BLACKHOLE) {
       const counter = join(await realpath(dir), "counter.txt");
@@ -469,10 +450,14 @@ if (!process.env.AGENVO_E2E_DIR) {
     }
     connector.kill("SIGTERM");
     await once(connector, "exit");
-    const replacement = spawn(process.execPath, ["dist/cli.js", "run"], {
-      env: { ...process.env, AGENVO_CONFIG_DIR: cfg },
-      stdio: "ignore",
-    });
+    const replacement = spawn(
+      process.execPath,
+      ["apps/herdr/dist/cli.js", "run"],
+      {
+        env: { ...process.env, AGENVO_CONFIG_DIR: cfg },
+        stdio: "ignore",
+      },
+    );
     children.push(replacement);
     for (let i = 0; i < 100; i++) {
       const state = JSON.parse((await cli("status", "--json")).stdout);
@@ -529,11 +514,7 @@ if (!process.env.AGENVO_E2E_DIR) {
       join(
         evidenceDir,
         "implementation-e2e-" +
-          (process.env.AGENVO_E2E_BLACKHOLE
-            ? "blackhole"
-            : process.env.AGENVO_E2E_CODEX_HOME
-              ? "codex"
-              : process.platform) +
+          (process.env.AGENVO_E2E_BLACKHOLE ? "blackhole" : process.platform) +
           ".json",
       ),
       JSON.stringify(evidence, null, 2) + "\n",

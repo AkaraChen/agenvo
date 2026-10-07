@@ -31,6 +31,26 @@ test(
     await native.start();
     lab.cleanup(() => native.stop());
     const device = await lab.connect([config]);
+    // Two separately installed backends on one host have independent connection identities.
+    const codexDevice = await lab.connect([
+      {
+        kind: "codex",
+        id: "herdr",
+        label: "Codex on the same host",
+        binary: resolve("tests/fixtures/codex-backend.mjs"),
+        mode: "managed-stdio",
+        cwd: lab.root,
+        home: lab.root,
+      },
+    ]);
+    assert.notEqual(device, codexDevice);
+    const codexServices = await lab.call(
+      codexDevice,
+      "herdr",
+      "management.services.list",
+    );
+    assert.ok(codexServices.items.length);
+
     const subscription = lab.subscription(device, "herdr", {
       serviceId: "test",
       nativeTypes: ["pane.agent_status_changed"],
@@ -90,6 +110,13 @@ test(
         events.some((e) => e.data.nativeType === "agenvo.resync_required"),
     );
     const current = await call("management.services.list");
+    assert.ok(
+      (await lab.call(codexDevice, "herdr", "management.services.list")).items
+        .length,
+    );
+    await lab.admin("/api/admin/revoke", { kind: "device", id: codexDevice });
+    assert.ok((await call("management.services.list")).items.length);
+
     assert.notEqual(
       current.items.find((s: any) => s.native.session === "test").native
         .backendGeneration,

@@ -9,7 +9,7 @@
 先按 README 构建 CLI。在所有者电脑上运行：
 
 ```sh
-agenvo relay init --origin https://relay.example.com \
+agenvo-server init --origin https://relay.example.com \
   --data-dir /data --host 0.0.0.0 --port 8080 --trusted-proxy \
   --output deploy/vps/relay.local.json
 ```
@@ -35,7 +35,7 @@ curl --fail https://relay.example.com/health
 
 安装 Node.js 24.13+，在 `/opt/agenvo` 构建仓库。创建独立的 `agenvo` 系统用户，将 `/var/lib/agenvo` 设为该用户所有、权限 0700，并准备该用户可读的 `/etc/agenvo/relay.json`。生成配置时使用 `--data-dir /var/lib/agenvo --host 127.0.0.1 --trusted-proxy`，只将这份配置传到服务器。在 `/etc/agenvo/admin.env` 设置 `AGENVO_ADMIN_SECRET=<生成的密钥>`，文件由 root 所有、权限为 0600。按实际 Node 路径调整并安装 [agenvo.service](../deploy/vps/agenvo.service)，通过 systemd 启动。Caddy 或其他 HTTPS 代理转发到 `127.0.0.1:8080`，保留 Host 和 WebSocket 升级头。
 
-配置也可增加 `tls` 对象，以绝对路径指定 `cert` 和 `key`，由 `relay serve` 直接提供 TLS。证书续期和轮换后重启由运维者负责。HTTP 只用于内部代理链路，公网地址和 Connector 连接必须使用 HTTPS/WSS。
+配置也可增加 `tls` 对象，以绝对路径指定 `cert` 和 `key`，由 `agenvo-server serve` 直接提供 TLS。证书续期和轮换后重启由运维者负责。HTTP 只用于内部代理链路，公网地址和 Connector 连接必须使用 HTTPS/WSS。
 
 ## 升级、备份与恢复
 

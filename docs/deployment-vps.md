@@ -9,7 +9,7 @@ Use one Linux VPS with a public DNS name, ports 80/443 open, Docker Engine and C
 Build the CLI as described in the README. On the owner machine:
 
 ```sh
-agenvo relay init --origin https://relay.example.com \
+agenvo-server init --origin https://relay.example.com \
   --data-dir /data --host 0.0.0.0 --port 8080 --trusted-proxy \
   --output deploy/vps/relay.local.json
 ```
@@ -35,7 +35,7 @@ Continue with [device pairing and MCP authorization](usage.md). Open `/admin` an
 
 Install Node.js 24.13+ and build the checkout in `/opt/agenvo`. Create a dedicated `agenvo` OS user, a `/var/lib/agenvo` directory owned by it with mode 0700, and a readable `/etc/agenvo/relay.json`. Generate the configuration with `--data-dir /var/lib/agenvo --host 127.0.0.1 --trusted-proxy`; copy only this configuration to the server. Put `AGENVO_ADMIN_SECRET=<your generated key>` in `/etc/agenvo/admin.env`, owned by root with mode 0600. Adapt and install [agenvo.service](../deploy/vps/agenvo.service), then start it with systemd. The Node binary path must match your installation. Configure Caddy or another HTTPS proxy to forward to `127.0.0.1:8080` and preserve Host and WebSocket upgrade headers.
 
-`relay serve` also accepts a configuration `tls` object with absolute `cert` and `key` file paths for direct TLS. Certificate renewal and restarting after rotation are the operator's responsibility. HTTP is an internal proxy transport only; public URLs and Connector connections must use HTTPS/WSS.
+`agenvo-server serve` also accepts a configuration `tls` object with absolute `cert` and `key` file paths for direct TLS. Certificate renewal and restarting after rotation are the operator's responsibility. HTTP is an internal proxy transport only; public URLs and Connector connections must use HTTPS/WSS.
 
 ## Upgrade, back up and recover
 

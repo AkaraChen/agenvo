@@ -1,5 +1,5 @@
 import { writeFile } from "node:fs/promises";
-import { HerdrAdapter } from "../../src/connector/adapters/herdr.ts";
+import { HerdrAdapter } from "../../apps/herdr/src/herdr.js";
 const [root, binary, resultPath] = process.argv.slice(2);
 const adapter = new HerdrAdapter({
   kind: "herdr",

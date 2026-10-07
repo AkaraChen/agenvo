@@ -1,19 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  bytes,
-  page,
-  LIMITS,
-  canonical,
-  readBody,
-} from "../src/protocol/index.ts";
+import { bytes, page, LIMITS, canonical, readBody } from "@agenvo/protocol";
 import {
   executionParams,
   automaticApproval,
   validateAnswers,
-} from "../src/connector/adapters/codex-execution.ts";
-import { instanceConfigSchema } from "../src/connector/config.ts";
-import { bounded } from "../src/connector/adapters/adapter.ts";
+} from "../apps/codex-app-server/src/codex-execution.js";
+import { instanceConfigSchema } from "./support/config.js";
+import { bounded } from "@agenvo/connector/adapters/adapter";
 const config = instanceConfigSchema.parse({
   id: "coding",
   label: "Coding",

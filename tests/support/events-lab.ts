@@ -16,14 +16,10 @@ import { promisify } from "node:util";
 import { once } from "node:events";
 import { randomBytes, createHash } from "node:crypto";
 import { Webhook } from "standardwebhooks";
-import { sendWebhook } from "../../src/relay/webhook.js";
-import { startServer } from "../../src/server/server.js";
-import {
-  descriptor,
-  atomicJson,
-  type InstanceConfig,
-} from "../../src/connector/config.js";
-import { digest } from "../../src/protocol/index.js";
+import { sendWebhook } from "@agenvo/relay/webhook";
+import { startServer } from "../../apps/server/src/server.js";
+import { descriptor, atomicJson, type InstanceConfig } from "./config.js";
+import { digest } from "@agenvo/protocol";
 import { isolatedEnvironment, until } from "./environment.js";
 
 export async function eventsLab(t: TestContext) {
@@ -269,8 +265,7 @@ export async function eventsLab(t: TestContext) {
           : { home: await realpath(c.home) }),
       })),
     );
-    const dir = join(root, "connector");
-    await mkdir(dir);
+    const dir = await mkdtemp(join(root, "connector-"));
     const deviceSecret = randomBytes(32).toString("hex");
     const descriptors = await Promise.all(
       instances.map((c) => descriptor(c, true, "test")),
@@ -308,9 +303,18 @@ export async function eventsLab(t: TestContext) {
     await mkdir(join(root, "config"), { recursive: true });
     const child = spawn(
       process.execPath,
-      ["--import", "tsx", resolve("tests/fixtures/connector.ts"), dir],
+      [
+        resolve(
+          `apps/${instances[0].kind === "herdr" ? "herdr" : "codex-app-server"}/dist/cli.js`,
+        ),
+        "run",
+      ],
       {
-        env: { ...isolatedEnvironment(root), NODE_EXTRA_CA_CERTS: ca },
+        env: {
+          ...isolatedEnvironment(root),
+          AGENVO_CONFIG_DIR: dir,
+          NODE_EXTRA_CA_CERTS: ca,
+        },
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
@@ -358,6 +362,9 @@ export async function eventsLab(t: TestContext) {
       cleanups.push(action);
     },
     root,
+    origin,
+    ownerSecret,
+    ca,
     secret,
     received,
     requests,

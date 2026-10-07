@@ -1,0 +1,23 @@
+{
+  "name": "@agenvo/cloudflare",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Xuanwo/agenvo.git",
+    "directory": "apps/cloudflare"
+  },
+  "engines": {
+    "node": ">=24.13.0"
+  },
+  "devDependencies": {
+    "@agenvo/protocol": "0.1.0",
+    "@agenvo/relay": "0.1.0"
+  },
+  "private": true,
+  "dependencies": {
+    "@cloudflare/workers-oauth-provider": "1.2.1",
+    "zod": "4.6.5"
+  }
+}

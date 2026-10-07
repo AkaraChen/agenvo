@@ -1,14 +1,11 @@
+import { configDir } from "@agenvo/connector/config";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import {
-  configDir,
-  descriptor,
-  instanceConfigSchema,
-} from "../src/connector/config.js";
+import { descriptor, instanceConfigSchema } from "./support/config.js";
 
-test("Agenvo configuration is explicit, with the legacy environment as a fallback", (t) => {
+test("Connector defaults isolate backends and explicit directories override defaults", (t) => {
   const previous = {
     AGENVO_CONFIG_DIR: process.env.AGENVO_CONFIG_DIR,
     SIYIN_CONFIG_DIR: process.env.SIYIN_CONFIG_DIR,
@@ -21,11 +18,18 @@ test("Agenvo configuration is explicit, with the legacy environment as a fallbac
   });
   delete process.env.AGENVO_CONFIG_DIR;
   delete process.env.SIYIN_CONFIG_DIR;
-  assert.equal(configDir(), join(homedir(), ".config", "agenvo"));
+  assert.equal(
+    configDir("herdr"),
+    join(homedir(), ".config", "agenvo", "herdr"),
+  );
   process.env.SIYIN_CONFIG_DIR = "legacy-installation";
-  assert.equal(configDir(), resolve("legacy-installation"));
+  assert.equal(
+    configDir("herdr"),
+    join(homedir(), ".config", "agenvo", "herdr"),
+  );
+  assert.notEqual(configDir("herdr"), configDir("codex-app-server"));
   process.env.AGENVO_CONFIG_DIR = "selected-installation";
-  assert.equal(configDir(), resolve("selected-installation"));
+  assert.equal(configDir("herdr"), resolve("selected-installation"));
 });
 
 test("legacy execution ceilings are discarded and full access is explicit in the approved scope", async () => {

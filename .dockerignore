@@ -5,3 +5,7 @@ dist
 *.local.json
 **/*.local.json
 deploy/vps/data
+
+**/node_modules
+**/dist
+**/.wrangler

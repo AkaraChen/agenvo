@@ -10,6 +10,7 @@ npm run check
 npm run build
 npm test
 npm run test:integration
+npm run test:packages
 npm run format:check
 npm audit
 ```
@@ -37,12 +38,14 @@ npm run test:adapters
 
 源码职责：
 
-- `src/protocol`：协议 schema、限制与执行结果。
-- `src/relay`：可移植路由核心、MCP 与 Cloudflare 宿主。
-- `src/server`：单进程 VPS 宿主、SQLite 与 OAuth。
-- `src/connector`：设备生命周期与原生运行时适配器。
-- `src/cli`：运行时配置、可选管理员命令和 Connector 服务集成。
+- `packages/protocol`：通信 schema、限制与执行结果。
+- `packages/relay`：共享 Relay、MCP、事件投递与管理网页。
+- `packages/connector`：共享连接、配置存储、观察与 CLI 机制。
+- `apps/herdr`、`apps/codex-app-server`：独立 Connector，拥有各自的配置 schema 与适配器。
+- `apps/server`、`apps/cloudflare`：VPS 与 Cloudflare 宿主。
 
 新增部署宿主应复用路由核心，保留授权、epoch 和执行结果不确定的语义。新增适配器需要可发现的 schema 和明确的能力与交互语义，不添加可能重复写入的自动重试。
 
 交付前检查私有路径与凭据，运行相关测试并说明验证缺口。每个 commit 表达一项连贯行为。生成的 schema 或依赖升级需说明来源和必要性。
+
+三个公开包统一版本，内部 workspace 包保持 private 并在构建时打包。`npm run test:packages` 在临时目录安装真实 npm tarball，验证入口与后端隔离。测试不会发布 npm 包。

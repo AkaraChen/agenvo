@@ -1,0 +1,24 @@
+{
+  "name": "@agenvo/relay",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/core.ts",
+    "./admin/auth": "./src/admin/auth.ts",
+    "./admin/language": "./src/admin/language.ts",
+    "./admin/management": "./src/admin/management.ts",
+    "./admin/page": "./src/admin/page.ts",
+    "./admin": "./src/admin.ts",
+    "./core": "./src/core.ts",
+    "./events": "./src/events.ts",
+    "./mcp": "./src/mcp.ts",
+    "./webhook": "./src/webhook.ts"
+  },
+  "dependencies": {
+    "@agenvo/protocol": "0.1.0",
+    "zod": "4.6.5",
+    "@modelcontextprotocol/server": "2.3.1",
+    "standardwebhooks": "1.1.1"
+  }
+}

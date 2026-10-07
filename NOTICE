@@ -2,7 +2,7 @@ Agenvo
 Copyright 2026 Agenvo contributors
 
 The selected Codex protocol schemas in
-src/connector/adapters/schema/codex.json are derived from JSON schemas generated
+apps/codex-app-server/src/schema/codex.json are derived from JSON schemas generated
 by OpenAI Codex CLI 0.160.1, licensed under Apache-2.0.
 OpenAI Codex
 Copyright 2025 OpenAI

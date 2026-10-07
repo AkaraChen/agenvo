@@ -14,8 +14,8 @@ flowchart LR
       R --- CF["Cloudflare Worker + Durable Object + KV"]
       R --- VPS["VPS · Node.js + SQLite + HTTPS 代理"]
     end
-    A["Connector · 个人电脑"] -->|"主动连接 WSS"| R
-    B["Connector · 服务器"] -->|"主动连接 WSS"| R
+    A["agenvo-herdr · 个人电脑"] -->|"主动连接 WSS"| R
+    B["agenvo-codex-app-server · 服务器"] -->|"主动连接 WSS"| R
     A --> H["独立运行的 Herdr 服务"]
     B --> X["Codex app-server"]
 ```
@@ -33,10 +33,12 @@ git clone https://github.com/Xuanwo/agenvo.git
 cd agenvo
 npm ci
 npm run build
-node dist/cli.js --help
+node apps/herdr/dist/cli.js --help
+node apps/codex-app-server/dist/cli.js --help
+node apps/server/dist/cli.js --help
 ```
 
-下文中的 `agenvo` 可以替换成 `node /absolute/path/to/agenvo/dist/cli.js`，也可以用 `npm link` 安装本地 CLI。
+三个发行包分别是 `@agenvo/herdr`、`@agenvo/codex-app-server` 和 `@agenvo/server`，命令分别为 `agenvo-herdr`、`agenvo-codex-app-server` 和 `agenvo-server`。源码构建后可使用上面的 Node 入口，或在对应 `apps/` 目录运行 `npm link`。Cloudflare 从仓库通过 Wrangler 部署。
 
 1. 按 [Cloudflare 部署](docs/deployment-cloudflare.zh-CN.md)或[单 VPS 部署](docs/deployment-vps.zh-CN.md)建立 Relay。
 2. 在每台电脑上[配置并配对 Connector](docs/usage.zh-CN.md)。

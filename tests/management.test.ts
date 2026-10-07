@@ -2,16 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { CodexManagement } from "../src/connector/adapters/codex-management.js";
-import { Fault } from "../src/protocol/index.js";
-import { CodexAdapter } from "../src/connector/adapters/codex.js";
-import { HerdrAdapter } from "../src/connector/adapters/herdr.js";
-import { HerdrManagement } from "../src/connector/adapters/herdr-management.js";
-import { instanceConfigSchema } from "../src/connector/config.js";
-import { describe, accepted } from "../src/connector/adapters/adapter.js";
-import { References } from "../src/connector/adapters/management.js";
-import { Observations } from "../src/connector/adapters/observations.js";
-import { fullAccessArgs } from "../src/connector/adapters/herdr-execution.js";
+import { CodexManagement } from "../apps/codex-app-server/src/codex-management.js";
+import { Fault } from "@agenvo/protocol";
+import { CodexAdapter } from "../apps/codex-app-server/src/codex.js";
+import { HerdrAdapter } from "../apps/herdr/src/herdr.js";
+import { HerdrManagement } from "../apps/herdr/src/herdr-management.js";
+import { instanceConfigSchema } from "./support/config.js";
+import { describe, accepted } from "@agenvo/connector/adapters/adapter";
+import { References } from "@agenvo/connector/adapters/management";
+import { Observations } from "@agenvo/connector/adapters/observations";
+import { fullAccessArgs } from "../apps/herdr/src/herdr-execution.js";
 
 test("opaque references reject another instance, forgery, wrong object kind and restart", () => {
   const first = new References(),

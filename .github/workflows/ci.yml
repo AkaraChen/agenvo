@@ -22,6 +22,7 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run test:integration
+      - run: npm run test:packages
       - run: npm audit --audit-level=high
   native:
     strategy:
@@ -38,6 +39,7 @@ jobs:
       - run: node scripts/install-test-runtimes.mjs "$RUNNER_TEMP/agenvo-runtimes"
       - run: echo "$RUNNER_TEMP/agenvo-runtimes/bin" >> "$GITHUB_PATH"
       - run: echo "$RUNNER_TEMP/agenvo-runtimes/node_modules/.bin" >> "$GITHUB_PATH"
+      - run: npm run build
       - run: npm run test:system
       - run: npm run test:adapters
   container:

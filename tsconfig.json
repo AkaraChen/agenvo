@@ -15,7 +15,8 @@
     "esModuleInterop": true
   },
   "include": [
-    "src/**/*.ts",
+    "packages/**/*.ts",
+    "apps/**/*.ts",
     "tests/**/*.ts",
     "worker-configuration.d.ts"
   ]

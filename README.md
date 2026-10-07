@@ -14,8 +14,8 @@ flowchart LR
       R --- CF["Cloudflare Worker + Durable Object + KV"]
       R --- VPS["VPS · Node.js + SQLite + HTTPS proxy"]
     end
-    A["Connector · laptop"] -->|"Outbound WSS"| R
-    B["Connector · server"] -->|"Outbound WSS"| R
+    A["agenvo-herdr · laptop"] -->|"Outbound WSS"| R
+    B["agenvo-codex-app-server · server"] -->|"Outbound WSS"| R
     A --> H["Independent Herdr server"]
     B --> X["Codex app-server"]
 ```
@@ -33,10 +33,12 @@ git clone https://github.com/Xuanwo/agenvo.git
 cd agenvo
 npm ci
 npm run build
-node dist/cli.js --help
+node apps/herdr/dist/cli.js --help
+node apps/codex-app-server/dist/cli.js --help
+node apps/server/dist/cli.js --help
 ```
 
-Use `node /absolute/path/to/agenvo/dist/cli.js` in place of `agenvo` in the guides, or run `npm link` to install the local CLI.
+The three release packages are `@agenvo/herdr`, `@agenvo/codex-app-server`, and `@agenvo/server`, exposing `agenvo-herdr`, `agenvo-codex-app-server`, and `agenvo-server`. Use the Node entry points above after building, or run `npm link` in the corresponding `apps/` directory. Deploy Cloudflare from the repository with Wrangler.
 
 1. Deploy a relay using [Cloudflare](docs/deployment-cloudflare.md) or a [single VPS](docs/deployment-vps.md).
 2. [Configure and pair a Connector](docs/usage.md) on each computer.

@@ -1,5 +1,5 @@
 {
-  "name": "agenvo",
+  "name": "agenvo-workspace",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,21 +11,11 @@
     "test:integration": "tsx --test tests/integration/*.test.ts",
     "test:adapters": "node scripts/test-system.mjs --adapters",
     "test:e2e": "tsx scripts/e2e.ts",
-    "format": "prettier --write src tests scripts",
-    "format:check": "prettier --check src tests scripts",
+    "format": "prettier --write packages apps tests scripts",
+    "format:check": "prettier --check packages apps tests scripts",
     "test:system": "node scripts/test-system.mjs",
-    "test:ci": "npm run check && npm run build && npm run format:check && npm test && npm run test:integration && npm run test:system"
-  },
-  "dependencies": {
-    "@cloudflare/workers-oauth-provider": "1.2.1",
-    "@modelcontextprotocol/sdk": "1.32.1",
-    "@modelcontextprotocol/server": "2.3.1",
-    "ajv": "8.20.0",
-    "ajv-formats": "3.0.1",
-    "express": "5.2.1",
-    "standardwebhooks": "1.1.1",
-    "ws": "8.22.0",
-    "zod": "4.6.5"
+    "test:ci": "npm run check && npm run build && npm run format:check && npm test && npm run test:integration && npm run test:system && npm run test:adapters && npm run test:packages",
+    "test:packages": "tsx --test tests/packaging/*.test.ts"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261006.1",
@@ -36,27 +26,20 @@
     "prettier": "^3.9.9",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
-    "wrangler": "4.147.0"
-  },
-  "bin": {
-    "agenvo": "dist/cli.js"
+    "wrangler": "4.147.0",
+    "@cloudflare/workers-oauth-provider": "1.2.1",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/server": "2.3.1",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "express": "5.2.1",
+    "standardwebhooks": "1.1.1",
+    "ws": "8.22.0",
+    "zod": "4.6.5"
   },
   "engines": {
     "node": ">=24.13.0"
   },
-  "files": [
-    "dist",
-    "README.md",
-    "README.zh-CN.md",
-    "LICENSE",
-    "docs",
-    "NOTICE",
-    "CONTRIBUTING.md",
-    "CONTRIBUTING.zh-CN.md",
-    "SECURITY.md",
-    "SECURITY.zh-CN.md",
-    "deploy"
-  ],
   "overrides": {
     "sharp": "0.35.5"
   },
@@ -72,5 +55,9 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Xuanwo/agenvo.git"
-  }
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
 }

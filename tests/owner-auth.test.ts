@@ -7,9 +7,9 @@ import {
   OwnerAuth,
   localReturn,
   validateAdminSecret,
-} from "../src/admin/auth.js";
-import { language } from "../src/admin/language.js";
-import { SqliteStore } from "../src/server/store.js";
+} from "@agenvo/relay/admin/auth";
+import { language } from "@agenvo/relay/admin/language";
+import { SqliteStore } from "../apps/server/src/store.js";
 
 const origin = "https://relay.example.com";
 const secret = "test-secret-" + "a".repeat(64);

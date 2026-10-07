@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { HerdrAdapter } from "../../src/connector/adapters/herdr.ts";
+import { HerdrAdapter } from "../../apps/herdr/src/herdr.js";
 import { herdrFixture } from "../fixtures/herdr-runtime.ts";
 const execute = promisify(execFile);
 const exec = (file: string, args: string[]) =>

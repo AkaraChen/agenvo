@@ -10,6 +10,7 @@ npm run check
 npm run build
 npm test
 npm run test:integration
+npm run test:packages
 npm run format:check
 npm audit
 ```
@@ -37,12 +38,14 @@ When updating Codex schemas, run `scripts/import-codex-schema.py` against the su
 
 Source responsibilities:
 
-- `src/protocol`: transport schemas, limits and execution outcomes.
-- `src/relay`: portable routing core, MCP and Cloudflare host.
-- `src/server`: single-process VPS host, SQLite and OAuth.
-- `src/connector`: device lifecycle and native runtime adapters.
-- `src/cli`: runtime configuration, optional administrator commands and Connector service integration.
+- `packages/protocol`: wire schemas, limits and execution outcomes.
+- `packages/relay`: shared Relay, MCP, event delivery and administration UI.
+- `packages/connector`: shared connection, configuration storage, observation and CLI mechanisms.
+- `apps/herdr`, `apps/codex-app-server`: independently installed Connectors owning their configuration schemas and adapters.
+- `apps/server`, `apps/cloudflare`: VPS and Cloudflare hosts.
 
 New deployment hosts must reuse the routing core and preserve authorization, epoch and uncertain-execution semantics. Native adapter additions require discoverable schemas and explicit capability and interaction semantics. Do not add retry mechanisms that can duplicate writes.
 
 Before sending a change, review the diff for private paths and credentials, run relevant tests, and state validation gaps. Use commits that each express one coherent behavior. Do not include generated schema or dependency updates without explaining their source and necessity.
+
+The three public packages share a version; internal workspace packages remain private and are bundled at build time. `npm run test:packages` installs real npm tarballs into temporary directories and verifies their entry points and backend isolation. Tests never publish packages.

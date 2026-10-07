@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import WebSocket from "ws";
 import { Webhook } from "standardwebhooks";
-import { digest } from "../../src/protocol/index.js";
+import { digest } from "@agenvo/protocol";
 import { until, isolatedEnvironment } from "../support/environment.js";
 
 test(

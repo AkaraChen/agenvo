@@ -5,9 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { HerdrAdapter } from "../../src/connector/adapters/herdr.ts";
-import { CodexAdapter } from "../../src/connector/adapters/codex.ts";
-import { instanceConfigSchema } from "../../src/connector/config.ts";
+import { HerdrAdapter } from "../../apps/herdr/src/herdr.js";
+import { CodexAdapter } from "../../apps/codex-app-server/src/codex.js";
+import { instanceConfigSchema } from "../support/config.js";
 import { herdrFixture } from "../fixtures/herdr-runtime.ts";
 const exec = promisify(execFile);
 async function executable(name: string) {

@@ -48,4 +48,4 @@ codex --version
 codex app-server generate-json-schema --experimental --out /tmp/agenvo-codex-schema
 ```
 
-仓库中的[Codex schema](../../src/connector/adapters/schema/codex.json)保留导入定义；[执行配置](../../src/connector/adapters/codex-execution.ts)负责 full-access 设置和自动权限响应。
+仓库中的[Codex schema](../../apps/codex-app-server/src/schema/codex.json)保留导入定义；[执行配置](../../apps/codex-app-server/src/codex-execution.ts)负责 full-access 设置和自动权限响应。
