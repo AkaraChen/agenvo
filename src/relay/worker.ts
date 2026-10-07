@@ -11,7 +11,7 @@ import { sameOrigin, loginRedirect } from "../admin/auth.js";
 import { managementPage } from "../admin/management.js";
 import { admin } from "./admin.js";
 import { mcp } from "./mcp.js";
-import { html, escapeHtml as e, form, scopeWarning } from "../admin/page.js";
+import { consentPage } from "../admin/page.js";
 import {
   readBody,
   Fault,
@@ -159,11 +159,11 @@ function createProvider(origin: string) {
             const auth = await oauth.parseAuthRequest(request);
             const details = await oauth.describeConsent(auth);
             const consent = await oauth.beginConsent(auth);
-            return html(
-              "Authorize client / 授权客户端",
-              `<p>Client / 客户端：<strong>${e(details.clientName)}</strong></p><p>Callback / 回调：${e(details.redirectHost)}</p>${scopeWarning}<p>Access tokens last 15 minutes; grants last up to 30 days and can be revoked. / 访问令牌 15 分钟，授权最长 30 天，可随时撤销。</p>${form("/authorize", { handle: consent.handle, decision: "approve" }, "Allow / 允许访问")}${form("/authorize", { handle: consent.handle, decision: "deny" }, "Deny / 拒绝")}`,
+            return consentPage(
+              request,
+              details,
+              consent.handle,
               consent.headers,
-              new URL(details.redirectUri).origin,
             );
           }
           if (request.method !== "POST")

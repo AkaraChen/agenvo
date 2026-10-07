@@ -1,7 +1,8 @@
+import { language, messages } from "./language.js";
 import { timingSafeEqual } from "node:crypto";
 import { type RecordStore } from "../relay/core.js";
 import { digest, Fault } from "../protocol/index.js";
-import { html, escapeHtml as e, form } from "./page.js";
+import { html, escapeHtml as e } from "./page.js";
 
 export type OwnerConfig = { ORIGIN: string; ADMIN_SECRET: string };
 const cookieName = "__Host-agenvo-owner";
@@ -96,12 +97,15 @@ export class OwnerAuth {
   async fetch(request: Request, address: string) {
     validateAdminSecret(this.config.ADMIN_SECRET);
     this.cleanup();
+    const locale = language(request);
+    const text = messages(locale);
     const url = new URL(request.url);
     let next = localReturn(url.searchParams.get("next"), this.config.ORIGIN);
     const page = (error = "") =>
       html(
-        "Sign in to Agenvo / 登录 Agenvo",
-        `<article><p>Manage this Agenvo instance. / 管理此 Agenvo 实例。</p><p>${e(this.config.ORIGIN)}</p>${error ? `<p role="alert">${e(error)}</p>` : ""}<form method="post" action="/login"><label for="secret">Administrator key / 管理员登录密钥</label><p><input id="secret" name="secret" type="password" autocomplete="current-password" required maxlength="256" style="width:100%;box-sizing:border-box;padding:12px"></p><input type="hidden" name="next" value="${e(next)}"><button>Sign in / 登录</button></form></article><p>Use the key configured by the operator of this instance. / 使用此实例部署时配置的管理员密钥。</p>`,
+        locale,
+        text.signInTitle,
+        `<article><p>${text.manageInstance}</p><p>${e(this.config.ORIGIN)}</p>${error ? `<p role="alert">${e(error)}</p>` : ""}<form method="post" action="/login"><label for="secret">${text.adminKey}</label><p><input id="secret" name="secret" type="password" autocomplete="current-password" required maxlength="256" style="width:100%;box-sizing:border-box;padding:12px"></p><input type="hidden" name="next" value="${e(next)}"><button>${text.signIn}</button></form></article><p>${text.keyHelp}</p>`,
       );
     if (url.pathname === "/login" && request.method === "GET") {
       if (await this.authenticated(request))
@@ -143,7 +147,7 @@ export class OwnerAuth {
       secret.length > 256 ||
       !(await matchesSecret(secret, this.config.ADMIN_SECRET))
     ) {
-      const response = page("Invalid administrator key. / 管理员密钥不正确。");
+      const response = page(text.invalidKey);
       return new Response(response.body, {
         status: 401,
         headers: response.headers,
@@ -173,4 +177,3 @@ export class OwnerAuth {
     });
   }
 }
-export const logoutForm = () => form("/logout", {}, "Sign out / 退出登录");

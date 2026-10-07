@@ -143,6 +143,38 @@ test(
       code_challenge_method: "S256",
       resource: "https://agenvo.test/mcp",
     }).toString();
+    for (const [locale, titles, excluded] of [
+      [
+        "zh-CN",
+        ["登录 Agenvo", "Agenvo 管理", "授权客户端"],
+        ["Sign in to Agenvo", "Agenvo administration", "Authorize client"],
+      ],
+      [
+        "en",
+        ["Sign in to Agenvo", "Agenvo administration", "Authorize client"],
+        ["登录 Agenvo", "Agenvo 管理", "授权客户端"],
+      ],
+    ] as const) {
+      const paths = [
+        "/login",
+        "/admin",
+        authorization.pathname + authorization.search,
+      ];
+      for (const [index, path] of paths.entries()) {
+        const headers = {
+          "Accept-Language": locale,
+          ...(path === "/login" ? {} : { Cookie: ownerCookie }),
+        };
+        const page = await fetch(base + path, { headers });
+        assert.equal(page.status, 200);
+        assert.equal(page.headers.get("Content-Language"), locale);
+        assert.match(page.headers.get("Vary")!, /Accept-Language/i);
+        const body = await page.text();
+        assert.ok(body.includes(`<html lang="${locale}">`));
+        assert.ok(body.includes(titles[index]));
+        assert.ok(!body.includes(excluded[index]));
+      }
+    }
     const consent = await fetch(authorization, {
       headers: { Cookie: ownerCookie },
     });

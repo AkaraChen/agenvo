@@ -8,6 +8,7 @@ import {
   localReturn,
   validateAdminSecret,
 } from "../src/admin/auth.js";
+import { language } from "../src/admin/language.js";
 import { SqliteStore } from "../src/server/store.js";
 
 const origin = "https://relay.example.com";
@@ -173,4 +174,47 @@ test("login attempts are bounded and return targets never leave this deployment"
   assert.throws(() => validateAdminSecret("short"), {
     code: "owner_not_configured",
   });
+});
+
+test("browser language preferences choose one supported language with English fallback", () => {
+  for (const [preference, expected] of [
+    ["", "en"],
+    ["zh-CN,zh;q=0.9,en;q=0.8", "zh-CN"],
+    ["en-US,en;q=0.9,zh;q=0.8", "en"],
+    ["zh;q=0.2,en;q=0.9", "en"],
+    ["fr-FR,zh-TW;q=0.7,en;q=0.5", "zh-CN"],
+    ["ZH-Hant-HK", "zh-CN"],
+    ["fr,de;q=0.5", "en"],
+    ["zh;q=0,en;q=0.5", "en"],
+    ["zh;q=invalid,en", "en"],
+    ["en;q=0.8,zh;q=0.8", "en"],
+    ["zh;q=0.8,en;q=0.8", "zh-CN"],
+    ["*", "en"],
+  ]) {
+    assert.equal(
+      language(
+        request("/login", { headers: { "Accept-Language": preference } }),
+      ),
+      expected,
+      preference,
+    );
+  }
+});
+
+test("invalid login renders only the browser's selected language", async (t) => {
+  const { auth } = await fixture(t);
+  for (const [locale, expected, absent] of [
+    ["zh-CN", "管理员密钥不正确。", "Invalid administrator key."],
+    ["en", "Invalid administrator key.", "管理员密钥不正确。"],
+  ]) {
+    const response = await auth.fetch(
+      login("wrong", "/admin", { "Accept-Language": locale }),
+      "ip",
+    );
+    assert.equal(response.status, 401);
+    assert.equal(response.headers.get("Content-Language"), locale);
+    const body = await response.text();
+    assert.ok(body.includes(expected));
+    assert.ok(!body.includes(absent));
+  }
 });

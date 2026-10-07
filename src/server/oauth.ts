@@ -19,7 +19,7 @@ import {
 import { redirectUriMatches } from "@modelcontextprotocol/sdk/server/auth/handlers/authorize.js";
 import { type AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { type Relay, type RecordStore } from "../relay/core.js";
-import { html, form, escapeHtml as e, scopeWarning } from "../admin/page.js";
+import { consentPage } from "../admin/page.js";
 import { ownerSessionToken } from "../admin/auth.js";
 import { Fault } from "../protocol/index.js";
 
@@ -129,12 +129,7 @@ export class VpsOAuth implements OAuthServerProvider {
         session: hash(ownerSessionToken(request)),
         expires: Date.now() + 600000,
       });
-      return html(
-        "Authorize client / 授权客户端",
-        `<article><p>Client / 客户端：<strong>${e(details.clientName)}</strong></p><p>Callback / 回调：${e(details.redirectHost)}</p>${scopeWarning}${form("/authorize", { handle, decision: "approve" }, "Allow / 允许访问")}${form("/authorize", { handle, decision: "deny" }, "Deny / 拒绝")}</article>`,
-        new Headers(),
-        new URL(details.redirectUri).origin,
-      );
+      return consentPage(request, details, handle);
     }
     if (request.method !== "POST") return new Response(null, { status: 405 });
     const data = await request.formData();

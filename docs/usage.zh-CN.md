@@ -4,6 +4,8 @@
 
 以下命令假设 Relay 已部署到 `https://relay.example.com`。所有者与设备可以是不同电脑。`AGENVO_CONFIG_DIR` 选择本次安装的配置目录，默认 `~/.config/agenvo`，不要让多个 Connector 进程同时共享它。
 
+网页根据浏览器的语言偏好（`Accept-Language`）自动选择语言：中文偏好显示简体中文，英文偏好显示英文，未匹配时默认英文。每页只显示一种语言。
+
 ## 配置运行时
 
 先通过 Herdr 自身应用或服务独立启动 Herdr，再共享整个配置环境：

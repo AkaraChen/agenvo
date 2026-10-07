@@ -4,6 +4,8 @@
 
 Commands below assume a deployed `https://relay.example.com`. The owner and devices can be different machines. `AGENVO_CONFIG_DIR` selects an installation; it defaults to `~/.config/agenvo`. Do not share this directory between simultaneous Connector processes.
 
+Web pages follow the browser’s language preferences (`Accept-Language`): Chinese preferences use Simplified Chinese, English preferences use English, and unmatched preferences fall back to English. Each page displays one language.
+
 ## Configure a runtime
 
 Start Herdr independently using Herdr's own application/service, then share its entire configuration environment:
