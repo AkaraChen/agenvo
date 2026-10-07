@@ -4,10 +4,7 @@
 
 Attach to an existing Codex app-server or manage an isolated process.
 
-```sh
-npm install -g @agenvo/codex-app-server
-agenvo-codex-app-server --help
-```
+For AI agents: use the [source installation guide](https://github.com/Xuanwo/agenvo/blob/main/docs/installation.md). Agenvo has no public releases yet.
 
 Requires Node.js 24.13+. Installing a Connector does not install Herdr or Codex.
 

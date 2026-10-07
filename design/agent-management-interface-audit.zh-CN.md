@@ -1,6 +1,6 @@
 # 原生接口依据
 
-接口基线为 Herdr 0.9.3 与 Codex CLI 0.160.1。本文记录适配器映射所依赖的原生语义；实际方法与能力以 `instance_describe` 为准，调用流程见[管理指南](../management.zh-CN.md)。
+接口基线为 Herdr 0.9.3 与 Codex CLI 0.160.1。本文记录适配器映射所依赖的原生语义；实际方法与能力以 `instance_describe` 为准，调用流程见[管理指南](../docs/management.zh-CN.md)。
 
 ## Herdr 0.9.3
 
@@ -44,7 +44,7 @@ Herdr 的 [Agent 恢复逻辑](https://github.com/herdrdev/herdr/blob/7b116c05bf
 
 ## 更新基线
 
-更新适配器前，用目标版本重新生成 schema，并通过[适配器测试](../../CONTRIBUTING.zh-CN.md)验证映射；出现字段不等于具有去重、重放或稳定性保证。
+更新适配器前，用目标版本重新生成 schema，并通过[适配器测试](../CONTRIBUTING.zh-CN.md)验证映射；出现字段不等于具有去重、重放或稳定性保证。
 
 ```sh
 herdr --version
@@ -52,4 +52,4 @@ codex --version
 codex app-server generate-json-schema --experimental --out /tmp/agenvo-codex-schema
 ```
 
-仓库中的[Codex schema](../../apps/codex-app-server/src/schema/codex.json)保留导入定义；[执行配置](../../apps/codex-app-server/src/codex-execution.ts)负责 full-access 设置和自动权限响应。
+仓库中的[Codex schema](../apps/codex-app-server/src/schema/codex.json)保留导入定义；[执行配置](../apps/codex-app-server/src/codex-execution.ts)负责 full-access 设置和自动权限响应。

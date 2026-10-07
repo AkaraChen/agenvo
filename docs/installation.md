@@ -1,0 +1,34 @@
+# Install Agenvo
+
+[简体中文](installation.zh-CN.md) · [README](../README.md)
+
+Use this guide when your task is to set up Agenvo. It links the build, relay deployment, device pairing, and client authorization steps. Read the [access boundaries](../SECURITY.md) before choosing which services to share.
+
+## Build the commands
+
+Agenvo has no public releases yet; use the repository source. Requirements:
+
+- Node.js 24.13+ and npm.
+- macOS or Linux for connectors; Linux for a VPS relay.
+- Herdr 0.9.3 or Codex CLI 0.160.1 on the computers that will run agents, with the agents' provider credentials configured separately. These are the versions covered by the native tests.
+
+```sh
+git clone https://github.com/Xuanwo/agenvo.git
+cd agenvo
+npm ci
+npm run build
+npm link --workspace @agenvo/herdr --workspace @agenvo/codex-app-server --workspace @agenvo/server
+```
+
+This makes `agenvo-herdr`, `agenvo-codex-app-server`, and `agenvo-server` available. Linking commands does not start a relay or connector. Keep the checkout because the commands link to its built files. If a checkout already exists, build it there.
+
+## Deploy and connect
+
+1. **Deploy one relay:** follow either [Cloudflare](deployment-cloudflare.md) or [single VPS](deployment-vps.md). The guide covers the public HTTPS address, administrator key, and persistent state.
+2. **Pair each connector:** follow [device setup](usage.md). Herdr and Codex have separate commands, configuration directories, and credentials. Both may run on the same computer.
+3. **Authorize the MCP client:** use [MCP authorization](usage.md#authorize-mcp-clients), or the [ChatGPT connection guide](chatgpt.md). The endpoint is `https://YOUR_RELAY/mcp`. Clients need OAuth and Streamable HTTP support; ChatGPT must allow custom MCP servers.
+4. **Check the connection:** call `instances_list`, inspect the selected instance with `instance_describe`, then call `management.services.list` through `runtime_call`. Check both connector availability and native service reachability before reporting that the environment is ready.
+
+Herdr runs independently; the connector attaches to it. The Codex connector starts a separate app-server by default. Experimental attach mode needs an existing compatible control endpoint and does not automatically expose the Codex desktop App's conversations.
+
+For subsequent task management, use the live method descriptions and the [management guide](management.md). For connection failures, use [diagnostics](usage.md#revoke-and-diagnose).

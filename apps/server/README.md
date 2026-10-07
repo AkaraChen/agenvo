@@ -4,10 +4,7 @@
 
 Run the Agenvo Relay on a VPS.
 
-```sh
-npm install -g @agenvo/server
-agenvo-server --help
-```
+For AI agents: use the [source installation guide](https://github.com/Xuanwo/agenvo/blob/main/docs/installation.md). Agenvo has no public releases yet.
 
 Requires Node.js 24.13+. Agent runtimes run on separately paired Connectors.
 

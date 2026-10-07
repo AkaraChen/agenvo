@@ -21,7 +21,7 @@ flowchart TB
 
 `packages/relay/src/core.ts` 维护设备配对、实例指纹批准、授权、连接 epoch、并发限制、请求关联和结果交付。核心不依赖 Cloudflare 或 Node API。`packages/relay/src/admin.ts` 共用管理端点的校验、撤销与错误语义；未知撤销目标返回 404，不报告成功。存储事务必须同步执行，不在事务内等待网络。
 
-Cloudflare 的 `apps/cloudflare/src/relay.ts` 实现 Durable Object 宿主与 RPC 边界，保留原有 SQLite records 表；`worker.ts` 提供 HTTP 与 OAuth，管理页和登录逻辑位于共享的 `packages/relay/src/admin`。VPS 的 `apps/server` 实现 Node HTTP/WebSocket、SQLite 和 MCP SDK OAuth Provider。两种 OAuth 实现使用平台各自支持的存储与协议库，共用 Relay 授权检查和 MCP 接口。
+Cloudflare 的 `apps/cloudflare/src/relay.ts` 实现 Durable Object 宿主与 RPC 边界，使用 SQLite records 表；`worker.ts` 提供 HTTP 与 OAuth，管理页和登录逻辑位于共享的 `packages/relay/src/admin`。VPS 的 `apps/server` 实现 Node HTTP/WebSocket、SQLite 和 MCP SDK OAuth Provider。两种 OAuth 实现使用平台各自支持的存储与协议库，共用 Relay 授权检查和 MCP 接口。
 
 VPS 只有一个进程持有数据库排他锁。状态目录属于运行用户且权限 0700，数据库为 0600。公网 HTTPS 可以由代理或 Node TLS 提供；内部 HTTP 不构成公网明文支持。两种部署间没有自动迁移，切换需要新的设备配对和客户端授权。
 
@@ -59,20 +59,20 @@ MCP 工具暴露 `instances_list`、`instance_describe`、`runtime_call`，由�
 
 Herdr 适配器连接独立的原生服务，不提供 session.start/stop。原生 workspace、agent、pane 的操作属于用户已批准的运行时能力。Codex 托管模式使用独立 HOME；attach-unix 实验模式连接已有控制端点，不启停桌面 App。两种模式的创建、恢复和输入均应用 full access，关闭沙箱与执行审批；原生权限请求自动回答。用户问题和动态工具调用仍需回答内容。
 
-## 兼容边界
+## 发布与兼容边界
 
-协议版本为 1。现有请求头、心跳消息、`siyin.describe`、序列化错误名、`SiyinRelay` Durable Object 类和 `siyin.sqlite` 文件名是兼容标识；修改它们需要协议或存储迁移。旧配置目录只通过显式设置选择，CLI 不自动扫描或搬移。升级操作见[迁移指南](../migration.zh-CN.md)。
+兼容性只针对已正式对外发布的 Agenvo 版本。首次正式发布前，内部协议、配置和存储格式可以直接调整，调用方、测试和文档同步更新；不为内部开发版本或个人部署维护旧名称、兼容解析或迁移路径。具体维护规则见 [AGENTS.md](../AGENTS.md)。
 
-测试入口和环境条件见[贡献指南](../../CONTRIBUTING.zh-CN.md)。
+测试入口和环境条件见[贡献指南](../CONTRIBUTING.zh-CN.md)。
 
 事件通过 MCP Events 的 `runtime.changed` 订阅推送，使用现有设备 WebSocket 和 Relay 持久存储。详见[原生事件驱动的观察](events.zh-CN.md)。
 
 ## 包与发行边界
 
-仓库使用 npm workspaces。公开发行三个程序：`@agenvo/herdr`、`@agenvo/codex-app-server`、`@agenvo/server`。`@agenvo/protocol`、`@agenvo/connector`、`@agenvo/relay` 是私有 workspace 包，构建时进入对应发行产物，不要求使用者安装私有包。Cloudflare 是部署入口，不发布 npm 包。各包统一版本，线协议版本独立维护。
+仓库使用 npm workspaces。计划公开发行三个程序：`@agenvo/herdr`、`@agenvo/codex-app-server`、`@agenvo/server`。`@agenvo/protocol`、`@agenvo/connector`、`@agenvo/relay` 是私有 workspace 包，构建时进入对应发行产物，不要求使用者安装私有包。Cloudflare 是部署入口，不发布 npm 包。各包统一版本，线协议版本独立维护。
 
 共享 Connector 不导入后端实现。每个后端拥有配置 schema、配置生成、能力版本、诊断、原生连接及生命周期行为，通过静态 Backend 接口接入共同 CLI 和连接循环。不存在动态插件注册或加载。
 
-每个 Connector 独立配对。Herdr 与 Codex 默认目录分别是 `~/.config/agenvo/herdr` 与 `~/.config/agenvo/codex-app-server`，各有凭据、锁和系统服务。线协议保留 deviceId，它表示 Connector 身份；同一物理电脑可以有多个身份。显式指定旧目录可保留同后端身份；混合后端旧配置必须拆分并为第二个 Connector 重新配对，不能复制身份。
+每个 Connector 独立配对。Herdr 与 Codex 默认目录分别是 `~/.config/agenvo/herdr` 与 `~/.config/agenvo/codex-app-server`，各有凭据、锁和系统服务。线协议中的 deviceId 表示 Connector 身份；同一物理电脑可以有多个身份。连接器之间不能复制配对凭据。
 
 包的源码通过显式 exports 导入。共享包不依赖应用，应用之间不互相导入。构建检查防止跨应用打包；发行测试从 npm tarball 在仓库外安装，验证没有对私有包或源码路径的运行依赖。

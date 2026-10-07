@@ -2,57 +2,20 @@
 
 [简体中文](README.zh-CN.md)
 
-Agenvo gives MCP clients a common interface to services that manage coding agents on your own computers. A small, always-reachable relay forwards requests to outbound device connections. Tasks run on the device, in native Herdr or Codex environments.
+Let your AI assistant coordinate coding agents on your own computers.
 
-**Status:** early release, tested with Herdr 0.9.3 and Codex CLI 0.160.1.
+Ask ChatGPT on your phone to check on Codex running on your server, or have an agent in Herdr on your laptop fix a failing test. Agenvo connects your assistant to **Herdr** and **Codex app-server** through MCP. You describe the goal; your assistant decides how to move the work forward.
 
-```mermaid
-flowchart LR
-    C["MCP client"] -->|"HTTPS · OAuth"| R["Agenvo Relay"]
-    O["Administrator browser"] -->|"Key login · session cookie"| R
-    subgraph Deployment["Choose one deployment"]
-      R --- CF["Cloudflare Worker + Durable Object + KV"]
-      R --- VPS["VPS · Node.js + SQLite + HTTPS proxy"]
-    end
-    A["agenvo-herdr · laptop"] -->|"Outbound WSS"| R
-    B["agenvo-codex-app-server · server"] -->|"Outbound WSS"| R
-    A --> H["Independent Herdr server"]
-    B --> X["Codex app-server"]
-```
+You host the relay yourself on Cloudflare or a single VPS.
 
-Three MCP tools let clients discover instances, create and manage Threads, send input, observe output, and interrupt, resume or archive where supported. Shared services include threads created by other clients.
+![An assistant connects through an Agenvo relay to Herdr and Codex on your computers. Devices connect out; tasks execute locally.](docs/images/architecture.png)
 
-Each deployment has one owner. Authorized clients can access all approved instances, including later approvals. Codex uses full access without execution approval prompts. Herdr runs independently; the Connector attaches to it. Read the [security boundaries](SECURITY.md) before sharing a service.
+## If you are an AI agent
 
-## Start from source
-
-Install Node.js **24.13 or newer**, npm, and the runtime you intend to share. macOS and Linux are supported for the Connector; Linux is the intended VPS host.
-
-```sh
-git clone https://github.com/Xuanwo/agenvo.git
-cd agenvo
-npm ci
-npm run build
-node apps/herdr/dist/cli.js --help
-node apps/codex-app-server/dist/cli.js --help
-node apps/server/dist/cli.js --help
-```
-
-The three release packages are `@agenvo/herdr`, `@agenvo/codex-app-server`, and `@agenvo/server`, exposing `agenvo-herdr`, `agenvo-codex-app-server`, and `agenvo-server`. Use the Node entry points above after building, or run `npm link` in the corresponding `apps/` directory. Deploy Cloudflare from the repository with Wrangler.
-
-1. Deploy a relay using [Cloudflare](docs/deployment-cloudflare.md) or a [single VPS](docs/deployment-vps.md).
-2. [Configure and pair a Connector](docs/usage.md) on each computer.
-3. Add `https://YOUR_RELAY/mcp` to an MCP client, then approve its OAuth request.
-
-Cloudflare uses a Worker with hibernating device connections; it needs no always-on container. A VPS runs a persistent Node.js process with SQLite. Tasks execute on the devices.
-
-## Documentation
-
-- [Connect devices](docs/usage.md) · [Connect ChatGPT](docs/chatgpt.md)
-- [Manage Agent threads](docs/management.md)
-- [Cloudflare deployment](docs/deployment-cloudflare.md) · [VPS deployment](docs/deployment-vps.md)
-- [Security](SECURITY.md) · [Upgrade older installations](docs/migration.md)
-- [Contributing and tests](CONTRIBUTING.md) · [Architecture (Chinese)](docs/design/architecture.zh-CN.md) · [Management design (Chinese)](docs/design/agent-management.zh-CN.md)
+- Set up Agenvo for the user and connect their computers and assistant: [Installation](docs/installation.md).
+- Troubleshoot connection or authorization failures: [Diagnostics](docs/usage.md#revoke-and-diagnose).
+- Manage agent work through an existing MCP connection: [Agent management](docs/management.md).
+- Understand or change Agenvo's architecture: [Architecture design (Chinese)](design/architecture.zh-CN.md).
 
 ## License
 

@@ -1,0 +1,34 @@
+# 安装 Agenvo
+
+[English](installation.md) · [README](../README.zh-CN.md)
+
+当你的任务是安装 Agenvo 时，从这里开始。本文连接源码构建、中继部署、设备配对和客户端授权几个步骤。选择要共享的服务前，先阅读[访问边界](../SECURITY.zh-CN.md)。
+
+## 构建命令
+
+Agenvo 尚未正式对外发布，当前使用仓库源码安装。需要准备：
+
+- Node.js 24.13+ 和 npm。
+- 连接器使用 macOS 或 Linux；VPS 中继使用 Linux。
+- 在运行 Agent 的电脑上安装 Herdr 0.9.3 或 Codex CLI 0.160.1，并单独配置 Agent 所需的模型服务凭据。这些是原生测试覆盖的版本。
+
+```sh
+git clone https://github.com/Xuanwo/agenvo.git
+cd agenvo
+npm ci
+npm run build
+npm link --workspace @agenvo/herdr --workspace @agenvo/codex-app-server --workspace @agenvo/server
+```
+
+完成后可以使用 `agenvo-herdr`、`agenvo-codex-app-server` 和 `agenvo-server`。安装命令链接不会启动中继或连接器。命令指向仓库中的构建文件，因此需要保留该 checkout；已有 checkout 时，直接在那里构建。
+
+## 部署与连接
+
+1. **部署一个中继：**选择 [Cloudflare](deployment-cloudflare.zh-CN.md) 或[单 VPS](deployment-vps.zh-CN.md) 指南，配置公网 HTTPS 地址、管理员密钥和持久状态。
+2. **分别配对连接器：**按照[设备接入指南](usage.zh-CN.md)操作。Herdr 和 Codex 使用独立的命令、配置目录和凭据，可以同时运行在一台电脑上。
+3. **授权 MCP 客户端：**按照 [MCP 授权说明](usage.zh-CN.md#授权-mcp-客户端)或 [ChatGPT 连接指南](chatgpt.zh-CN.md)操作。端点为 `https://YOUR_RELAY/mcp`。客户端需要支持 OAuth 和 Streamable HTTP；ChatGPT 需要允许自定义 MCP 服务。
+4. **检查连接：**调用 `instances_list`，用 `instance_describe` 查询选定实例，再通过 `runtime_call` 调用 `management.services.list`。确认连接器可用，并检查原生服务的可达性，再报告环境已就绪。
+
+Herdr 独立运行，连接器只连接它。Codex 连接器默认启动独立的 app-server；实验性的 attach 模式要求已有兼容控制端点，不会自动共享 Codex 桌面 App 的会话。
+
+后续任务管理参考实时方法描述和[管理指南](management.zh-CN.md)。连接失败时参考[诊断说明](usage.zh-CN.md#撤销与诊断)。

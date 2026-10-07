@@ -1,6 +1,6 @@
 # Agent 管理服务的统一接口
 
-面向调用者的流程见[管理 Agent 会话](../management.zh-CN.md)，适配器的原生版本约束见[接口依据](agent-management-interface-audit.zh-CN.md)。
+面向调用者的流程见[管理 Agent 会话](../docs/management.zh-CN.md)，适配器的原生版本约束见[接口依据](agent-management-interface-audit.zh-CN.md)。
 
 ## 目标与对象
 
@@ -90,4 +90,4 @@ Codex observe 返回该 Thread 的待回应请求摘要和 interactionRef；完�
 
 共同方法注册、输入校验和引用由 `management.ts` 维护；有界观察记录由 `observations.ts` 维护。`HerdrManagement` 与 `CodexManagement` 负责原生映射、观察及控制，统一方法和原生方法复用适配器传输与执行配置。Relay 只路由调用，不保存另一套任务状态。
 
-回归测试需要保护引用归属、游标缺口、自动订阅的副作用、中断竞争和原生错误传播。测试入口与隔离要求见[贡献指南](../../CONTRIBUTING.zh-CN.md)。
+回归测试需要保护引用归属、游标缺口、自动订阅的副作用、中断竞争和原生错误传播。测试入口与隔离要求见[贡献指南](../CONTRIBUTING.zh-CN.md)。

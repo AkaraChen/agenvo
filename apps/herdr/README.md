@@ -4,10 +4,7 @@
 
 Connect independently running Herdr services.
 
-```sh
-npm install -g @agenvo/herdr
-agenvo-herdr --help
-```
+For AI agents: use the [source installation guide](https://github.com/Xuanwo/agenvo/blob/main/docs/installation.md). Agenvo has no public releases yet.
 
 Requires Node.js 24.13+. Installing a Connector does not install Herdr or Codex.
 
