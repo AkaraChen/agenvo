@@ -50,3 +50,7 @@ Restart the Relay after administrator key rotation. Browser sessions become inva
 `--trusted-proxy` trusts exactly one reverse proxy hop and uses its forwarded client address for rate limiting. Enable it only when the Relay is reachable exclusively through that proxy, which must overwrite untrusted forwarded headers. Caddy's default proxy configuration provides this boundary. Direct TLS deployments should leave it disabled; supplied forwarded headers are then ignored. Public pairing is limited to ten attempts per client address per ten minutes. Without trusted proxy configuration, clients behind one proxy share that limit.
 
 VPS OAuth redirect URIs must use HTTPS or loopback HTTP; custom application schemes are unsupported. Unapproved registrations expire after one hour; restart the client's registration flow if it waited longer. Registration is limited to 256 entries and the SDK's per-client-address rate limit.
+
+## Logs
+
+The Relay and Connectors emit structured JSON Lines on stderr. CLI command results stay on stdout. See [Reading logs](logging.md) for fields, levels and correlation.

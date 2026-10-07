@@ -1,3 +1,4 @@
+import { logger } from "@agenvo/logging";
 import { Events, type WebhookTransport } from "./events.js";
 import { runtimeEvent } from "@agenvo/protocol/events";
 import { z } from "zod";
@@ -15,6 +16,8 @@ import {
   type Call,
   type Outcome,
 } from "@agenvo/protocol";
+
+const log = logger.child({ component: "relay.connection" });
 
 type Device = {
   id: string;
@@ -355,6 +358,10 @@ export class Relay {
     }
     socket.serializeAttachment({ deviceId: id, epoch, ready: false });
     this.host.accept(socket, id);
+    log.info(
+      { event: "connector.connected", deviceId: id, epoch },
+      "Connector connected",
+    );
   }
   instances(
     grantId: string,
@@ -579,11 +586,22 @@ export class Relay {
         p.finish(failure("execution_unknown", "unknown"));
   }
   webSocketClose(ws: RelaySocket, code: number, reason: string) {
+    const { deviceId, epoch } = ws.deserializeAttachment();
+    log[code === 1000 || code === 1001 ? "info" : "warn"](
+      { event: "connector.disconnected", deviceId, epoch, closeCode: code },
+      "Connector disconnected with code %d",
+      code,
+    );
     this.failConnection(ws);
     if (ws.readyState !== 3)
       ws.close([1005, 1006, 1015].includes(code) ? 1000 : code, reason);
   }
   webSocketError(ws: RelaySocket) {
+    const { deviceId, epoch } = ws.deserializeAttachment();
+    log.error(
+      { event: "connector.connection.failed", deviceId, epoch },
+      "Connector connection failed",
+    );
     this.failConnection(ws);
     ws.close(1011, "connection_error");
   }

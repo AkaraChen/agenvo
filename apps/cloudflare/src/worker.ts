@@ -1,3 +1,4 @@
+import { logger } from "@agenvo/logging";
 import {
   OAuthProvider,
   OAuthError,
@@ -21,6 +22,8 @@ import {
   PROTOCOL,
 } from "@agenvo/protocol";
 export { SiyinRelay } from "./relay.js";
+
+const log = logger.child({ component: "worker" });
 
 type Identity = { userId: string; grantId: string };
 function createProvider(origin: string) {
@@ -240,6 +243,16 @@ export function createWorker() {
                     ? 503
                     : 400
             : 503;
+        if (status >= 500)
+          log.error(
+            {
+              event: "http.request.failed",
+              method: request.method,
+              status,
+              err: error,
+            },
+            "Worker request failed",
+          );
         return Response.json(asOutcome(error), { status });
       }
     },

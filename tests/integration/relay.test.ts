@@ -563,6 +563,39 @@ test(
     const nativeOutcome = await nativeFailure;
     assert.equal(nativeOutcome.error.native.code, "agent_not_idle");
     assert.equal(nativeOutcome.requestId, nativeRequest.requestId);
+    assert.equal((await fetch(base + "/fixture-log-error")).status, 204);
+    const logs: Array<{ method: string; args: any[] }> = await (
+      await fetch(base + "/fixture-logs")
+    ).json();
+    const failureLog = logs.find(
+      (entry) => entry.args[0]?.requestId === nativeRequest.requestId,
+    );
+    assert.ok(failureLog, JSON.stringify(logs));
+    assert.equal(failureLog.method, "warn");
+    assert.equal(failureLog.args.length, 1);
+    assert.equal(failureLog.args[0].level, "warn");
+    assert.equal(
+      failureLog.args[0].message,
+      "MCP tool runtime_call failed: native_error",
+    );
+    assert.equal(failureLog.args[0].event, "mcp.tool.completed");
+    assert.equal(failureLog.args[0].deviceId, deviceId);
+    assert.ok(
+      logs.some(
+        (entry) =>
+          entry.method === "info" &&
+          entry.args[0]?.message === "MCP tool instance_describe completed",
+      ),
+    );
+    assert.ok(!JSON.stringify(logs).includes("Herdr rejected the request"));
+    const errorLog = logs.find(
+      (entry) => entry.args[0]?.event === "fixture.error",
+    );
+    assert.equal(errorLog?.method, "error");
+    assert.equal(errorLog?.args.length, 1);
+    assert.equal(errorLog?.args[0].err.type, "Error");
+    assert.ok(errorLog?.args[0].err.stack);
+    assert.ok(!JSON.stringify(logs).includes("fixture-sensitive-error"));
     const bigPacket = nextCall();
     const big = fixture("call", "grant1", input);
     const bp = await bigPacket;

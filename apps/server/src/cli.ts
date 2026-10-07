@@ -1,3 +1,4 @@
+import { logger } from "@agenvo/logging";
 import { parseArgs } from "node:util";
 import { asOutcome, VERSION } from "@agenvo/protocol";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
@@ -5,6 +6,8 @@ import { dirname, resolve } from "node:path";
 
 import { Fault } from "@agenvo/protocol";
 import { serverConfig, startServer } from "./server.js";
+
+const log = logger.child({ component: "server" });
 
 type Options = Record<string, string | boolean>;
 export async function relayCommand(action: string, options: Options) {
@@ -36,11 +39,13 @@ export async function relayCommand(action: string, options: Options) {
       JSON.parse(await readFile(String(options.config), "utf8")),
     );
     const runtime = await startServer(config);
-    console.log(
-      JSON.stringify({
+    log.info(
+      {
+        event: "server.started",
         listening: runtime.server.address(),
         origin: config.origin,
-      }),
+      },
+      "Relay server started",
     );
     await new Promise<void>((resolve, reject) => {
       const stop = () => {

@@ -21,6 +21,7 @@ async function sources(dir: string): Promise<string[]> {
 test("workspace boundaries keep shared libraries independent of applications", async () => {
   const units = [
     "packages/protocol",
+    "packages/logging",
     "packages/connector",
     "packages/relay",
     "apps/herdr",
@@ -30,12 +31,13 @@ test("workspace boundaries keep shared libraries independent of applications", a
   ];
   const allowed: Record<string, string[]> = {
     protocol: [],
-    connector: ["protocol"],
-    relay: ["protocol"],
+    logging: [],
+    connector: ["protocol", "logging"],
+    relay: ["protocol", "logging"],
     herdr: ["protocol", "connector"],
     "codex-app-server": ["protocol", "connector"],
-    server: ["protocol", "relay"],
-    cloudflare: ["protocol", "relay"],
+    server: ["protocol", "relay", "logging"],
+    cloudflare: ["protocol", "relay", "logging"],
   };
   for (const unit of units) {
     const manifest = JSON.parse(await readFile(`${unit}/package.json`, "utf8"));

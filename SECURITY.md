@@ -14,7 +14,7 @@ Agenvo grants remote access to local coding runtimes. Deploy it only for an owne
 - Revocation prevents subsequent access and pending-result delivery; already-started native work continues. Cancel it through the native runtime if needed.
 - No automatic write replay after timeout or disconnect. Inspect native state when the outcome is uncertain.
 
-Avoid logging OAuth redirects, bearer tokens, native output or approval contents. The default Cloudflare manifest disables observability logging. Keep reverse-proxy access logs disabled or redact sensitive URLs. Production secrets must never appear in issues or test fixtures.
+Avoid logging OAuth redirects, bearer tokens, native output or approval contents. Application logs omit request bodies, native results and arbitrary error messages; error diagnostics retain the error type and stack frames. The default Cloudflare manifest enables observability and removes URL query strings from platform logs and traces. Keep reverse-proxy access logs disabled or redact sensitive URLs. Production secrets must never appear in issues or test fixtures.
 
 ## Reporting a vulnerability
 

@@ -35,6 +35,7 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "ws": "8.22.0"
+    "ws": "8.22.0",
+    "pino": "10.4.0"
   }
 }

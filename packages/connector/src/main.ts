@@ -1,3 +1,4 @@
+import { logger } from "@agenvo/logging";
 import type { Backend } from "./backend.js";
 import WebSocket from "ws";
 import { z } from "zod";
@@ -28,6 +29,8 @@ import {
   type Instance,
 } from "@agenvo/protocol";
 
+const log = logger.child({ component: "connector" });
+
 export async function run<T extends InstanceConfig>(
   dir: string,
   backend: Backend<T>,
@@ -45,6 +48,7 @@ export async function run<T extends InstanceConfig>(
   }
   const target = config.relay!;
   const deviceId = config.deviceId!;
+  const connectionLog = log.child({ deviceId, backend: backend.name });
   const adapters = new Map<string, Adapter>();
   const instances = new Map<string, Instance>();
   for (const c of config.instances) {
@@ -187,6 +191,14 @@ export async function run<T extends InstanceConfig>(
     current.on("unexpected-response", (_request, response) => {
       terminal = [401, 403, 426].includes(response.statusCode ?? 0);
       status.lastError = "handshake_" + response.statusCode;
+      connectionLog.warn(
+        {
+          event: "connector.handshake.rejected",
+          status: response.statusCode,
+          terminal,
+        },
+        "Relay rejected the connection handshake",
+      );
       response.resume();
       current.terminate();
     });
@@ -212,6 +224,11 @@ export async function run<T extends InstanceConfig>(
         const wasOnline = status.state === "online";
         status.state = "online";
         save();
+        if (!wasOnline)
+          connectionLog.info(
+            { event: "connector.ready", instanceCount: instances.size },
+            "Connector ready",
+          );
         if (!wasOnline)
           for (const [id, instance] of instances)
             send(current, {
@@ -267,6 +284,15 @@ export async function run<T extends InstanceConfig>(
         outcome = asOutcome(
           error instanceof z.ZodError ? new Fault("invalid_params") : error,
         );
+        if (outcome.error?.code === "internal_error")
+          connectionLog.error(
+            {
+              event: "runtime.call.failed",
+              requestId: p.requestId,
+              err: error,
+            },
+            "Runtime call failed",
+          );
       } finally {
         inFlight.delete(p.requestId);
         publishAvailability();
@@ -284,7 +310,11 @@ export async function run<T extends InstanceConfig>(
         }
       }
     });
-    current.on("error", () => {
+    current.on("error", (err) => {
+      connectionLog.warn(
+        { event: "connector.connection.failed", err },
+        "Relay connection failed",
+      );
       status.lastError = status.lastError || "connection_error";
       save();
     });
@@ -292,6 +322,16 @@ export async function run<T extends InstanceConfig>(
       clearInterval(heartbeat);
       terminal ||= [4001, 4002, 4006].includes(code);
       status.state = terminal ? "needs_attention" : "offline";
+      connectionLog[stopped ? "info" : "warn"](
+        {
+          event: "connector.disconnected",
+          closeCode: code,
+          reconnecting: !stopped && !terminal,
+          state: status.state,
+        },
+        "Relay connection closed with code %d",
+        code,
+      );
       save();
       if (!stopped && !terminal)
         reconnect = setTimeout(

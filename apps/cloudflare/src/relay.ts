@@ -1,8 +1,11 @@
+import { logger } from "@agenvo/logging";
 import { sendWebhook } from "@agenvo/relay/webhook";
 import { OwnerAuth } from "@agenvo/relay/admin/auth";
 import { DurableObject } from "cloudflare:workers";
 import { Relay, type RecordStore } from "@agenvo/relay/core";
 import { PROTOCOL, type Call } from "@agenvo/protocol";
+
+const log = logger.child({ component: "worker.relay" });
 
 /** Cloudflare owns socket hibernation, SQL transactions and scheduled cleanup.
  * Keep the deployed class name: changing it would require a state migration.
@@ -173,7 +176,12 @@ export class SiyinRelay extends DurableObject<Env> {
     this.relay.webSocketError(ws);
   }
   async alarm() {
-    await this.relay.alarm();
-    this.owner.cleanup();
+    try {
+      await this.relay.alarm();
+      this.owner.cleanup();
+    } catch (err) {
+      log.error({ event: "event.alarm.failed", err }, "Relay alarm failed");
+      throw err;
+    }
   }
 }

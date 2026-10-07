@@ -33,3 +33,7 @@ Run `npx wrangler deploy --config wrangler.local.json` with the same manifest an
 The DO stores pairing, browser sessions and relay authorization; KV holds OAuth provider state. Back up the manifest and protect secrets. Automatic CF/VPS state migration is not supported. Deleting storage requires fresh pairing and consent.
 
 Verify `/health`, sign in, pair a device, and call `instances_list` from your MCP client to check that it can reach the device.
+
+## Logs
+
+See [Reading logs](logging.md) to separate application events from Cloudflare invocation logs and correlate failed calls. When updating an existing local manifest, copy `observability.redact_query_string: true` from the repository manifest before deploying.

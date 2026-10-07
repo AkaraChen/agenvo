@@ -1,3 +1,4 @@
+import { logger } from "@agenvo/logging";
 import { sendWebhook } from "@agenvo/relay/webhook";
 import type { WebhookTransport } from "@agenvo/relay/events";
 import express from "express";
@@ -21,6 +22,8 @@ import { managementPage } from "@agenvo/relay/admin/management";
 import { LIMITS, PROTOCOL, VERSION, Fault, asOutcome } from "@agenvo/protocol";
 import { SqliteStore } from "./store.js";
 import { VpsOAuth } from "./oauth.js";
+
+const log = logger.child({ component: "server" });
 
 export const serverConfig = z.strictObject({
   origin: z
@@ -117,7 +120,14 @@ export async function startServer(
       eventTimer = setTimeout(
         () => {
           eventDue = Infinity;
-          void relay.alarm().catch(() => console.error("event_alarm_failed"));
+          void relay
+            .alarm()
+            .catch((err) =>
+              log.error(
+                { event: "event.alarm.failed", err },
+                "Relay alarm failed",
+              ),
+            );
         },
         Math.max(0, at - Date.now()),
       );
@@ -130,7 +140,11 @@ export async function startServer(
   });
   const oauth = new VpsOAuth(store, relay, config.origin);
   const cleanup = setInterval(() => {
-    void relay.alarm().catch(() => console.error("event_alarm_failed"));
+    void relay
+      .alarm()
+      .catch((err) =>
+        log.error({ event: "event.alarm.failed", err }, "Relay alarm failed"),
+      );
     oauth.cleanup();
     owner.cleanup();
   }, 60000);
@@ -276,6 +290,16 @@ export async function startServer(
           : error instanceof z.ZodError || error instanceof SyntaxError
             ? 400
             : 503;
+      if (status >= 500)
+        log.error(
+          {
+            event: "http.request.failed",
+            method: req.method,
+            status,
+            err: error,
+          },
+          "Server request failed",
+        );
       response = Response.json(
         error instanceof Fault
           ? asOutcome(error)
@@ -290,13 +314,22 @@ export async function startServer(
   app.use(
     (
       error: unknown,
-      _req: express.Request,
+      req: express.Request,
       res: express.Response,
       _next: express.NextFunction,
     ) => {
-      res
-        .status((error as { status?: number }).status === 413 ? 413 : 500)
-        .json({ error: "request_failed" });
+      const status = (error as { status?: number }).status === 413 ? 413 : 500;
+      if (status >= 500)
+        log.error(
+          {
+            event: "http.request.failed",
+            method: req.method,
+            status,
+            err: error,
+          },
+          "Server request failed",
+        );
+      res.status(status).json({ error: "request_failed" });
     },
   );
   const server = tls ? httpsServer(tls, app) : httpServer(app);
@@ -346,10 +379,17 @@ export async function startServer(
               peer,
               binary ? new ArrayBuffer(0) : data.toString(),
             )
-            .catch(() => peer.close(1011, "event_processing_failed"));
+            .catch((err) => {
+              log.error(
+                { event: "connector.message.failed", deviceId: id, err },
+                "Connector message processing failed",
+              );
+              peer.close(1011, "event_processing_failed");
+            });
         });
         ws.on("close", (code, reason) => {
-          relay.webSocketClose(peer, code, reason.toString());
+          // Shutdown already settled and logged these connections before terminate().
+          if (!closing) relay.webSocketClose(peer, code, reason.toString());
           connections.get(id)?.delete(peer);
         });
         ws.on("error", () => relay.webSocketError(peer));
@@ -382,7 +422,7 @@ export async function startServer(
       clearTimeout(eventTimer);
       for (const set of connections.values())
         for (const peer of set) {
-          relay.webSocketError(peer);
+          relay.webSocketClose(peer, 1001, "shutdown");
           peer.ws.terminate();
         }
       await new Promise<void>((resolve) => server.close(() => resolve()));

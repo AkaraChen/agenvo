@@ -1,3 +1,4 @@
+import { logger } from "@agenvo/logging";
 import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import { ProtocolError } from "@modelcontextprotocol/server";
 import { subscribeInput, unsubscribeInput } from "@agenvo/protocol/events";
@@ -11,6 +12,8 @@ import {
   type Outcome,
   type Call,
 } from "@agenvo/protocol";
+
+const log = logger.child({ component: "relay.mcp" });
 
 export interface McpRelay {
   instances(
@@ -28,25 +31,34 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
   const wrap = async (
     tool: string,
     action: () => Outcome | Promise<Outcome>,
+    target?: Pick<Call, "deviceId" | "instanceId" | "method">,
   ) => {
     const started = Date.now();
     let outcome: Outcome;
+    let error: unknown;
     try {
       outcome = await action();
     } catch (e) {
       outcome = asOutcome(e);
+      if (outcome.error?.code === "internal_error") error = e;
     }
     outcome.requestId ??= crypto.randomUUID();
-    console.info(
-      JSON.stringify({
-        event: "mcp.tool.completed",
-        tool,
-        requestId: outcome.requestId,
-        execution: outcome.execution,
-        errorCode: outcome.error?.code,
-        durationMs: Date.now() - started,
-      }),
-    );
+    const fields = {
+      event: "mcp.tool.completed",
+      tool,
+      ...target,
+      requestId: outcome.requestId,
+      execution: outcome.execution,
+      errorCode: outcome.error?.code,
+      durationMs: Date.now() - started,
+      ...(error === undefined ? {} : { err: error }),
+    };
+    if (outcome.error) {
+      const level = outcome.error.code === "internal_error" ? "error" : "warn";
+      log[level](fields, "MCP tool %s failed: %s", tool, outcome.error.code);
+    } else {
+      log.info(fields, "MCP tool %s completed", tool);
+    }
     return {
       content: [{ type: "text" as const, text: JSON.stringify(outcome) }],
       isError: Boolean(outcome.error),
@@ -84,13 +96,16 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
           }),
         },
         ({ deviceId, instanceId, ...params }) =>
-          wrap("instance_describe", () =>
-            relay.call(grantId, {
-              deviceId,
-              instanceId,
-              method: "siyin.describe",
-              params,
-            }),
+          wrap(
+            "instance_describe",
+            () =>
+              relay.call(grantId, {
+                deviceId,
+                instanceId,
+                method: "siyin.describe",
+                params,
+              }),
+            { deviceId, instanceId, method: "siyin.describe" },
           ),
       );
       server.registerTool(
@@ -100,7 +115,12 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
             "Call an advertised management.* or native method on one approved instance. accepted means backend confirmation, not task completion. starting has a native query key. After unknown or transport failure, inspect native state; never blindly repeat a write. Use instance_describe to discover capabilities. Prefer management.services.list, then management.threads.*. Subscribe to runtime.changed for native changes, then read management.threads.observe with threadRef for current state, output and pending interactions. Poll when events are unavailable; inspect gaps. Permission approvals are automatic; user questions remain explicit interactions.",
           inputSchema: callSchema,
         },
-        (input) => wrap("runtime_call", () => relay.call(grantId, input)),
+        (input) =>
+          wrap("runtime_call", () => relay.call(grantId, input), {
+            deviceId: input.deviceId,
+            instanceId: input.instanceId,
+            method: input.method,
+          }),
       );
       const capabilities = { tools: {}, events: {} };
       server.server.registerCapabilities(capabilities);

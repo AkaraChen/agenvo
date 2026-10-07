@@ -8,6 +8,11 @@ test(
   "agent authorizes, pairs, subscribes, starts work, observes interruption, reconnects and unsubscribes",
   { timeout: 45000 },
   async (t) => {
+    const logs: Array<Record<string, unknown>> = [];
+    t.mock.method(process.stderr, "write", (line: string) => {
+      logs.push(JSON.parse(line));
+      return true;
+    });
     const lab = await eventsLab(t);
     const device = await lab.connect([
       {
@@ -69,6 +74,12 @@ test(
       false,
     );
     await lab.restart();
+    const disconnects = logs.filter(
+      (entry) => entry.event === "connector.disconnected",
+    );
+    assert.equal(disconnects.length, 1);
+    assert.equal(disconnects[0].level, "info");
+    assert.equal(disconnects[0].closeCode, 1001);
     await until(
       () => lab.received,
       (events) =>

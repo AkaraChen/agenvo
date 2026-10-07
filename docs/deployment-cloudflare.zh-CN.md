@@ -33,3 +33,7 @@ curl --fail https://relay.example.com/health
 DO 保存配对、网页会话和路由授权；KV 保存 OAuth Provider 状态。备份部署配置并保护 secret。首版不提供 CF/VPS 之间的状态迁移工具。删除存储需要重新配对和授权。
 
 检查 `/health`、登录并配对设备，再从 MCP 客户端调用 `instances_list`，确认客户端能访问设备。
+
+## 日志
+
+参见[读取日志](logging.zh-CN.md)，区分应用事件与 Cloudflare 调用日志，并关联失败的调用。更新已有本地配置时，部署前从仓库配置同步 `observability.redact_query_string: true`。

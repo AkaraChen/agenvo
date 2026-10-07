@@ -13,7 +13,8 @@
   },
   "devDependencies": {
     "@agenvo/protocol": "0.1.0",
-    "@agenvo/relay": "0.1.0"
+    "@agenvo/relay": "0.1.0",
+    "@agenvo/logging": "0.1.0"
   },
   "private": true,
   "dependencies": {

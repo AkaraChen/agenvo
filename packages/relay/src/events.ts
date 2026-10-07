@@ -1,3 +1,4 @@
+import { logger } from "@agenvo/logging";
 import { Webhook } from "standardwebhooks";
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
@@ -10,6 +11,8 @@ import {
   type RuntimeEvent,
 } from "@agenvo/protocol/events";
 import type { RecordStore } from "./core.js";
+
+const log = logger.child({ component: "relay.events" });
 
 export type WebhookTransport = (
   url: string,
@@ -306,20 +309,27 @@ export class Events {
           this.remove(s.id);
           return;
         }
+        d.attempts++;
         if (
           (result.status >= 200 && result.status < 300) ||
           (result.status >= 400 &&
             result.status < 500 &&
             ![408, 429].includes(result.status)) ||
-          ++d.attempts >= 5
+          d.attempts >= 5
         ) {
           this.host.store.remove(d.key);
           if (result.status < 200 || result.status >= 300)
-            console.warn("event_delivery_stopped", {
-              subscriptionId: s.id,
-              eventId: d.event.eventId,
-              status: result.status,
-            });
+            log.warn(
+              {
+                event: "event.delivery.stopped",
+                subscriptionId: s.id,
+                eventId: d.event.eventId,
+                status: result.status,
+                attempts: d.attempts,
+              },
+              "Event delivery stopped with HTTP status %d",
+              result.status,
+            );
         } else {
           d.due = Date.now() + 1000 * 2 ** d.attempts;
           this.host.store.put(d.key, d);

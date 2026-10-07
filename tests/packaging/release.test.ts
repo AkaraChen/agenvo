@@ -237,7 +237,10 @@ test(
       if (proc.exitCode !== null) throw new Error(log);
       const line = log
         .split("\n")
-        .find((line) => line.startsWith('{"listening"'));
+        .find(
+          (line) =>
+            line.startsWith("{") && JSON.parse(line).event === "server.started",
+        );
       return line ? JSON.parse(line).listening.port : undefined;
     }, Boolean);
     const health = await new Promise<string>((resolve, reject) => {

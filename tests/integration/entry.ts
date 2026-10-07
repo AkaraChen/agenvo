@@ -1,4 +1,6 @@
 // This fixture is built only by the local Workers integration suite.
+import { logs } from "../support/worker-logs.js";
+import { logger } from "@agenvo/logging";
 import worker, {
   SiyinRelay as ProductionRelay,
 } from "../../apps/cloudflare/src/worker.js";
@@ -30,6 +32,15 @@ export class SiyinRelay extends ProductionRelay {
 }
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    if (new URL(request.url).pathname === "/fixture-logs")
+      return Response.json(logs);
+    if (new URL(request.url).pathname === "/fixture-log-error") {
+      logger.error(
+        { event: "fixture.error", err: new Error("fixture-sensitive-error") },
+        "Fixture failure",
+      );
+      return new Response(null, { status: 204 });
+    }
     if (new URL(request.url).pathname === "/fixture-mcp")
       return mcp(request, env.RELAY.getByName("owner"), "fixture-grant");
     if (new URL(request.url).pathname === "/fixture") {

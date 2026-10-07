@@ -37,6 +37,7 @@
   "dependencies": {
     "ws": "8.22.0",
     "ajv": "8.20.0",
-    "ajv-formats": "3.0.1"
+    "ajv-formats": "3.0.1",
+    "pino": "10.4.0"
   }
 }

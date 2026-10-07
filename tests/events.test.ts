@@ -224,8 +224,9 @@ test("webhooks use the supplied URL and return redirects without following them"
 
 test("MCP 2 discovery and events use the authenticated production handler", async (t) => {
   const logs: string[] = [];
-  t.mock.method(console, "info", (line: string) => {
+  t.mock.method(process.stderr, "write", (line: string) => {
     logs.push(line);
+    return true;
   });
   const store = new SqliteStore(":memory:");
   t.after(() => store.close());
@@ -327,11 +328,19 @@ test("MCP 2 discovery and events use the authenticated production handler", asyn
     .find((entry) => entry.requestId === outcome.requestId);
   assert.equal(log.errorCode, "device_offline");
   assert.deepEqual(Object.keys(log).sort(), [
+    "component",
+    "deviceId",
     "durationMs",
     "errorCode",
     "event",
     "execution",
+    "instanceId",
+    "level",
+    "message",
+    "method",
     "requestId",
+    "service",
+    "time",
     "tool",
   ]);
   const invalid = await call("tools/call", {

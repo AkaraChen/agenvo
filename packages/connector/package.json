@@ -21,6 +21,7 @@
   "dependencies": {
     "@agenvo/protocol": "0.1.0",
     "zod": "4.6.5",
-    "ws": "8.22.0"
+    "ws": "8.22.0",
+    "@agenvo/logging": "0.1.0"
   }
 }

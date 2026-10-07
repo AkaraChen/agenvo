@@ -50,3 +50,7 @@ curl --fail https://relay.example.com/health
 `--trusted-proxy` 只信任一层反向代理，并按其转发的客户端地址限流。只有 Relay 完全位于该代理之后、外界不能绕过代理直连时才启用；代理必须覆盖不可信的转发头。Caddy 的默认代理配置提供此边界。直接 TLS 部署应保持关闭，此时忽略传入的转发头。公开配对每个客户端地址每十分钟最多十次。未配置可信代理时，代理后所有客户端共用该限制。
 
 VPS OAuth 回调只支持 HTTPS 或回环 HTTP，不支持应用自定义 scheme。未经批准的注册一小时后过期，等待过久需要客户端重新注册。注册容量为 256，并受 SDK 的每客户端地址限流约束。
+
+## 日志
+
+Relay 和 Connector 向 stderr 输出结构化 JSON Lines，CLI 命令结果保留在 stdout。字段、级别与关联方法参见[读取日志](logging.zh-CN.md)。
