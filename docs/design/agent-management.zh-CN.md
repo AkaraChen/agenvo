@@ -1,6 +1,6 @@
 # Agent 管理服务的统一接口
 
-状态：Thread 管理接口已实现，尚未部署。Herdr 0.9.3 和 Codex CLI 0.160.1 的原生接口基线见[核对记录](agent-management-interface-audit.zh-CN.md)，面向调用者的完整流程见[中文使用说明](../management.zh-CN.md)。
+状态：Thread 管理接口已实现，并在个人 Cloudflare 部署及两台 Herdr Connector 上启用；外部客户端切换仍待验收。Herdr 0.9.3 和 Codex CLI 0.160.1 的原生接口基线见[核对记录](agent-management-interface-audit.zh-CN.md)，面向调用者的完整流程见[中文使用说明](../management.zh-CN.md)。
 
 ## 目标与对象
 
@@ -102,4 +102,6 @@ Codex observe 返回该 Thread 的待回应请求摘要和 interactionRef；完�
 
 暂不承诺原生忙碌输入的所有分支、所有多客户端交互类型、Herdr 两次采样间的完整事件或跨 Connector 重启的事件恢复。Linux systemd 测试在 macOS 跳过；本地协议和模型 fixture 不证明外部真实模型、组织策略或所有 Agent CLI 的完整行为。
 
-2026-10-07 本地验收：25 项单元测试、3 项 Worker/VPS 集成测试、4 项真实适配器测试通过，共 32 项；1 项 Linux systemd 测试因 macOS 环境跳过。类型检查、构建、格式检查、差异空白检查及文档本地链接检查通过。未提交、推送或部署本次工作。
+2026-10-07 Thread 重构验收：25 项单元测试、3 项 Worker/VPS 集成测试、4 项真实适配器测试通过，共 32 项；1 项 Linux systemd 测试因 macOS 环境跳过。类型检查、构建、格式检查、差异空白检查及文档本地链接检查通过。
+
+同日生产部署验证了 Cloudflare 公网 OAuth/MCP、CLI 配对和授权、token 刷新、Mac 与 Linux Connector 常驻连接，以及 Mac 活跃 Herdr Thread 的状态和终端观察。Linux 设备没有活跃 Agent，因此只验证了实例在线、服务发现和空 Thread 列表，未声称验证其活跃任务观察。第二次部署保留原 KV 和 OAuth 授权。Codex 生产接入未启用；原生日常服务未重启。部署验收客户端不代表外部助手已切换，旧入口须保留到外部客户端验收完成。
