@@ -16,3 +16,5 @@
 替换旧入口时，如果界面没有 URL 编辑功能，先以临时名称创建新 App 并完成上述验证，再删除旧 App，将新 App 改名为 Agenvo。
 
 参考：[官方连接说明](https://developers.openai.com/plugins/deploy/connect-chatgpt) · [官方 OAuth 流程](https://developers.openai.com/plugins/build/auth)。
+
+要在变化时主动唤醒消费者，参见[事件订阅](events.zh-CN.md)。收到通知后读取当前状态和输出；无需持续轮询。

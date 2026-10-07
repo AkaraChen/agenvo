@@ -1,3 +1,5 @@
+import { Events, type WebhookTransport } from "./events.js";
+import { runtimeEvent } from "../protocol/events.js";
 import { z } from "zod";
 import {
   bytes,
@@ -68,15 +70,39 @@ export interface RelayHost {
   store: RecordStore;
   sockets(deviceId: string): RelaySocket[];
   accept(socket: RelaySocket, deviceId: string): void;
-  scheduleCleanup(): Promise<void>;
+  scheduleCleanup(at?: number): Promise<void>;
+  sendWebhook?: WebhookTransport;
 }
 export class Relay {
+  private events: Events;
   private pending = new Map<string, Pending>();
   constructor(private host: RelayHost) {
+    this.events = new Events({
+      store: host.store,
+      allowed: (grant, args, fingerprint) =>
+        this.allowed(grant, args?.deviceId, args?.instanceId, fingerprint),
+      fingerprint: (args) =>
+        this.device(args.deviceId)!.approved[args.instanceId],
+      send:
+        host.sendWebhook ??
+        (async () => {
+          throw new Error("webhook_transport_unavailable");
+        }),
+      schedule: (at) => host.scheduleCleanup(at),
+    });
     const schema = this.get<number>("schema");
     if (schema !== undefined && schema !== 1)
       throw new Error("unsupported_schema");
     if (schema === undefined) this.put("schema", 1);
+  }
+  eventsList(grant: string) {
+    return this.events.list(grant);
+  }
+  eventsSubscribe(grant: string, input: unknown) {
+    return this.events.subscribe(grant, input);
+  }
+  eventsUnsubscribe(grant: string, input: unknown) {
+    return this.events.unsubscribe(grant, input);
   }
   private get<T>(key: string) {
     return this.host.store.get<T>(key);
@@ -301,6 +327,7 @@ export class Relay {
         this.put("device:" + id, d);
       }
     });
+    this.events.cleanup();
     for (const p of this.pending.values())
       if (!this.allowed(p.grantId, p.deviceId, p.instanceId, p.fingerprint))
         p.finish(failure("permission_denied", "unknown"));
@@ -413,7 +440,7 @@ export class Relay {
       }
     });
   }
-  webSocketMessage(ws: RelaySocket, raw: string | ArrayBuffer) {
+  async webSocketMessage(ws: RelaySocket, raw: string | ArrayBuffer) {
     const a = ws.deserializeAttachment() as Attachment;
     const d = this.device(a.deviceId);
     if (!d || d.revoked || a.epoch !== d.epoch) {
@@ -469,6 +496,21 @@ export class Relay {
           )
         )
           pending.finish(failure("permission_denied", "unknown"));
+      return;
+    }
+    if (p.type === "runtime_event") {
+      const event = runtimeEvent.safeParse(p.event);
+      const instance = d.instances.find((i) => i.instanceId === p.instanceId);
+      if (
+        !a.ready ||
+        bytes(raw) > LIMITS.frame ||
+        !event.success ||
+        !instance ||
+        instance.fingerprint !== p.fingerprint ||
+        d.approved[instance.instanceId] !== instance.fingerprint
+      )
+        return;
+      await this.events.receive(d.id, instance.instanceId, event.data);
       return;
     }
     if (p.type === "result" || p.type === "error") {
@@ -550,7 +592,11 @@ export class Relay {
       if (p.expires <= Date.now()) this.remove("pair:" + p.code);
     this.host.store.expire("rate:", Date.now());
   }
-  alarm() {
+  async settled() {
+    await this.events.settled();
+  }
+  async alarm() {
     this.cleanup();
+    await this.events.drain();
   }
 }

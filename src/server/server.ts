@@ -1,3 +1,5 @@
+import { sendWebhook } from "../relay/webhook.js";
+import type { WebhookTransport } from "../relay/events.js";
 import express from "express";
 import { createServer as httpServer } from "node:http";
 import { createServer as httpsServer } from "node:https";
@@ -63,6 +65,7 @@ class Socket implements RelaySocket {
 export async function startServer(
   input: ServerConfig,
   adminSecret = process.env.AGENVO_ADMIN_SECRET ?? "",
+  webhook: WebhookTransport = sendWebhook,
 ) {
   const config = serverConfig.parse(input);
   validateAdminSecret(adminSecret);
@@ -100,6 +103,9 @@ export async function startServer(
     : undefined;
   const store = new SqliteStore(dbPath);
   const connections = new Map<string, Set<Socket>>();
+  let closing = false;
+  let eventTimer: NodeJS.Timeout | undefined;
+  let eventDue = Infinity;
   const relay = new Relay({
     origin: config.origin,
     store,
@@ -109,7 +115,20 @@ export async function startServer(
       set.add(ws as Socket);
       connections.set(id, set);
     },
-    scheduleCleanup: async () => {},
+    sendWebhook: webhook,
+    scheduleCleanup: async (at = Date.now() + 600000) => {
+      if (closing || at >= eventDue) return;
+      clearTimeout(eventTimer);
+      eventDue = at;
+      eventTimer = setTimeout(
+        () => {
+          eventDue = Infinity;
+          void relay.alarm().catch(() => console.error("event_alarm_failed"));
+        },
+        Math.max(0, at - Date.now()),
+      );
+      eventTimer.unref();
+    },
   });
   const owner = new OwnerAuth(store, {
     ORIGIN: config.origin,
@@ -117,11 +136,12 @@ export async function startServer(
   });
   const oauth = new VpsOAuth(store, relay, config.origin);
   const cleanup = setInterval(() => {
-    relay.alarm();
+    void relay.alarm().catch(() => console.error("event_alarm_failed"));
     oauth.cleanup();
     owner.cleanup();
   }, 60000);
   cleanup.unref();
+  await relay.alarm();
   const app = express();
   app.disable("x-powered-by");
   if (config.trustedProxy) app.set("trust proxy", 1);
@@ -327,10 +347,12 @@ export async function startServer(
             peer.send("siyin:pong");
             return;
           }
-          relay.webSocketMessage(
-            peer,
-            binary ? new ArrayBuffer(0) : data.toString(),
-          );
+          void relay
+            .webSocketMessage(
+              peer,
+              binary ? new ArrayBuffer(0) : data.toString(),
+            )
+            .catch(() => peer.close(1011, "event_processing_failed"));
         });
         ws.on("close", (code, reason) => {
           relay.webSocketClose(peer, code, reason.toString());
@@ -348,8 +370,11 @@ export async function startServer(
       server.off("error", reject);
       resolve();
     });
-  }).catch((error) => {
+  }).catch(async (error) => {
+    closing = true;
     clearInterval(cleanup);
+    clearTimeout(eventTimer);
+    await relay.settled();
     wsServer.close();
     store.close();
     throw error;
@@ -358,7 +383,9 @@ export async function startServer(
     server,
     relay,
     async close() {
+      closing = true;
       clearInterval(cleanup);
+      clearTimeout(eventTimer);
       for (const set of connections.values())
         for (const peer of set) {
           relay.webSocketError(peer);
@@ -366,6 +393,7 @@ export async function startServer(
         }
       await new Promise<void>((resolve) => server.close(() => resolve()));
       wsServer.close();
+      await relay.settled();
       store.close();
     },
   };

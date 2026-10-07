@@ -154,7 +154,7 @@ export function page<T>(
   };
 }
 export async function readBody(
-  request: Request,
+  request: Pick<Request, "body">,
   max = LIMITS.frame,
 ): Promise<string> {
   const reader = request.body?.getReader();

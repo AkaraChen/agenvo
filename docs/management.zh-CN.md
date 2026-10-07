@@ -87,3 +87,5 @@ Codex 创建、恢复和提交输入始终使用 `danger-full-access`、`approva
 Codex `threads.resume` 加载并订阅，不发送输入；`archive`、`unarchive` 改变可见性，不表示取消或销毁。attach 模式断开时不停止独立 app-server，managed-stdio 管理显式配置的子进程。Herdr 自己管理服务生命周期。
 
 调用结果为 `unknown` 时，先检查原生状态，再判断是否重新发送。原生 turn ID、请求 ID 和游标都不是幂等键。断线后不自动重放写操作。业务成功需要检查输出和交付物。
+
+要在变化时主动唤醒消费者，参见[事件订阅](events.zh-CN.md)。收到通知后读取当前状态和输出；无需持续轮询。

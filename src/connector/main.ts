@@ -136,6 +136,25 @@ export async function run(dir: string): Promise<() => Promise<void>> {
   };
   for (const adapter of adapters.values())
     adapter.onAvailabilityChange = publishAvailability;
+  const stopEvents: Array<() => void> = [];
+  for (const [id, adapter] of adapters) {
+    const stop = adapter.watchEvents?.((event) => {
+      if (socket?.readyState !== WebSocket.OPEN || status.state !== "online")
+        return;
+      try {
+        send(socket, {
+          v: PROTOCOL,
+          type: "runtime_event",
+          instanceId: id,
+          fingerprint: instances.get(id)!.fingerprint,
+          event,
+        });
+      } catch {
+        socket.close(1011, "event_capacity");
+      }
+    });
+    if (stop) stopEvents.push(stop);
+  }
   const connect = () => {
     if (stopped || terminal) return;
     const url = new URL("/connect", target);
@@ -198,8 +217,24 @@ export async function run(dir: string): Promise<() => Promise<void>> {
         return;
       }
       if (p.type === "welcome") {
+        const wasOnline = status.state === "online";
         status.state = "online";
         save();
+        if (!wasOnline)
+          for (const [id, instance] of instances)
+            send(current, {
+              v: PROTOCOL,
+              type: "runtime_event",
+              instanceId: id,
+              fingerprint: instance.fingerprint,
+              event: {
+                eventId: crypto.randomUUID(),
+                timestamp: new Date().toISOString(),
+                serviceId: "*",
+                nativeType: "agenvo.resync_required",
+                native: { reason: "connector_connected" },
+              },
+            });
         return;
       }
       if (p.type !== "call") return;
@@ -293,6 +328,7 @@ export async function run(dir: string): Promise<() => Promise<void>> {
     watcher.close();
     clearTimeout(reconnect);
     clearInterval(heartbeat);
+    for (const stop of stopEvents) stop();
     socket?.close(1000, "shutdown");
     for (const a of adapters.values()) await a.close();
     status.state = "stopped";

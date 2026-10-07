@@ -38,6 +38,7 @@ export class CodexManagement extends AgentManagement {
         accepted({
           items: [
             {
+              serviceId: "default",
               serviceRef: this.serviceRef(),
               native: { instanceId: config.id },
               availability: "reachable",
@@ -300,6 +301,11 @@ export class CodexManagement extends AgentManagement {
         this.config.mode === "attach-unix"
           ? "disconnect_only"
           : "managed_child_process",
+      events: {
+        source: "native_notifications",
+        name: "runtime.changed",
+        replay: false,
+      },
       observations: {
         source: "received_native_events",
         replay: "connector_memory_only",
@@ -328,6 +334,8 @@ export class CodexManagement extends AgentManagement {
             : "working"
           : "unknown";
     return {
+      serviceId: "default",
+      threadId: t.id,
       threadRef: this.refs.issue("thread", { threadId: t.id }),
       serviceRef: this.serviceRef(),
       native: t,

@@ -36,6 +36,7 @@ export class HerdrManagement extends AgentManagement {
         mapped(await native("session.list", p), (r) => ({
           ...r,
           items: r.items.map((s: any) => ({
+            serviceId: s.session,
             native: s,
             availability: s.endpointPresent ? "unprobed" : "unavailable",
             ...(s.backendGeneration
@@ -187,7 +188,7 @@ export class HerdrManagement extends AgentManagement {
         lines: z.number().int().min(1).max(500).default(80),
       }),
       true,
-      "Refresh this live thread and its terminal snapshot on every poll. Intermediate terminal transitions may be missed; no background subscription or durable history is available.",
+      "Refresh this live thread and its terminal snapshot on every poll. Subscribe to runtime.changed for native transitions; terminal reads remain bounded snapshots without durable history.",
       async (p) => {
         const target = this.refs.read<Thread>(p.threadRef, "thread");
         const scope = canonical(target);
@@ -233,10 +234,14 @@ export class HerdrManagement extends AgentManagement {
       history: "bounded_terminal_snapshot",
       permissions: "agent_owned_existing_agents_retain_their_settings",
       lifecycle: "independent_service",
+      events: {
+        source: "native_subscription",
+        name: "runtime.changed",
+        replay: false,
+      },
       observations: {
         source: "polling_native_state_and_terminal",
         replay: "connector_memory_only",
-        backgroundSubscription: false,
         intermediateTransitions: "may_be_missed",
       },
     };
@@ -310,6 +315,8 @@ export class HerdrManagement extends AgentManagement {
           ? a.agent_status
           : "unknown";
     return {
+      serviceId: service.session,
+      threadId: a.pane_id,
       serviceRef: this.refs.issue("service", ref),
       threadRef: this.refs.issue("thread", {
         ...ref,

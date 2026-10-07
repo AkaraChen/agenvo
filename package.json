@@ -9,17 +9,21 @@
     "build": "node scripts/build.mjs",
     "test": "tsx --test tests/*.test.ts",
     "test:integration": "tsx --test tests/integration/*.test.ts",
-    "test:adapters": "tsx --test tests/adapters/*.test.ts",
+    "test:adapters": "node scripts/test-system.mjs --adapters",
     "test:e2e": "tsx scripts/e2e.ts",
     "format": "prettier --write src tests scripts",
-    "format:check": "prettier --check src tests scripts"
+    "format:check": "prettier --check src tests scripts",
+    "test:system": "node scripts/test-system.mjs",
+    "test:ci": "npm run check && npm run build && npm run format:check && npm test && npm run test:integration && npm run test:system"
   },
   "dependencies": {
     "@cloudflare/workers-oauth-provider": "1.2.1",
-    "@modelcontextprotocol/sdk": "1.31.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@modelcontextprotocol/server": "2.3.1",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "express": "5.2.1",
+    "standardwebhooks": "1.1.1",
     "ws": "8.22.0",
     "zod": "4.6.5"
   },

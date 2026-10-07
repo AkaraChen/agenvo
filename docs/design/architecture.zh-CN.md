@@ -43,7 +43,7 @@ MCP 客户端通过动态注册和 S256 PKCE 授权码流程取得令牌。访�
 
 ## 执行语义与故障
 
-MCP 只暴露 `instances_list`、`instance_describe`、`runtime_call`，由实例声明共同的 management.* 方法与具体原生方法。共同管理单位是 Thread，`management.threads.observe` 返回该会话的状态、事件和待回应请求；不提供独立 Run 对象。没有通用任务状态库，也不把终端 idle 映射为业务任务成功。
+MCP 工具暴露 `instances_list`、`instance_describe`、`runtime_call`，由实例声明共同的 management.* 方法与具体原生方法。共同管理单位是 Thread，`management.threads.observe` 返回该会话的状态、事件和待回应请求；不提供独立 Run 对象。没有通用任务状态库，也不把终端 idle 映射为业务任务成功。
 
 | execution | 语义 | 调用方动作 |
 | --- | --- | --- |
@@ -64,3 +64,5 @@ Herdr 适配器连接独立的原生服务，不提供 session.start/stop。原�
 协议版本为 1。现有请求头、心跳消息、`siyin.describe`、序列化错误名、`SiyinRelay` Durable Object 类和 `siyin.sqlite` 文件名是兼容标识；修改它们需要协议或存储迁移。旧配置目录只通过显式设置选择，CLI 不自动扫描或搬移。升级操作见[迁移指南](../migration.zh-CN.md)。
 
 测试入口和环境条件见[贡献指南](../../CONTRIBUTING.zh-CN.md)。
+
+事件通过 MCP Events 的 `runtime.changed` 订阅推送，使用现有设备 WebSocket 和 Relay 持久存储。详见[原生事件驱动的观察](events.zh-CN.md)。

@@ -87,3 +87,5 @@ Codex creation, resume and input always apply `danger-full-access` and `approval
 Codex `threads.resume` reloads and subscribes without sending input. `archive` and `unarchive` change visibility, not cancellation or destruction. Attach mode disconnects without stopping the independent app-server. Managed-stdio owns its explicitly configured child process. Herdr owns its own service lifecycle.
 
 After `unknown`, inspect native state before deciding whether another write is needed. Native turn IDs, request IDs and cursors are not idempotency keys. Agenvo does not automatically replay writes after disconnect. Check outputs and deliverables to assess task success.
+
+Use [event subscriptions](events.md) to wake the consumer on changes. Read current state and output after each notification instead of continuously polling.

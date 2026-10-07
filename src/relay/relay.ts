@@ -1,3 +1,4 @@
+import { sendWebhook } from "./webhook.js";
 import { OwnerAuth } from "../admin/auth.js";
 import { DurableObject } from "cloudflare:workers";
 import { Relay, type RecordStore } from "./core.js";
@@ -56,14 +57,27 @@ export class SiyinRelay extends DurableObject<Env> {
       store,
       sockets: (id) => ctx.getWebSockets(id),
       accept: (ws, id) => ctx.acceptWebSocket(ws as WebSocket, [id]),
-      scheduleCleanup: () => ctx.storage.setAlarm(Date.now() + 600000),
+      sendWebhook: (url, body, headers) =>
+        this.deliverWebhook(url, body, headers),
+      scheduleCleanup: async (at = Date.now() + 600000) => {
+        const current = await ctx.storage.getAlarm();
+        if (current === null || current > at) await ctx.storage.setAlarm(at);
+      },
     });
     ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair("siyin:ping", "siyin:pong"),
     );
   }
+  protected deliverWebhook(
+    url: string,
+    body: string,
+    headers: Record<string, string>,
+  ) {
+    return sendWebhook(url, body, headers);
+  }
   async ownerPage(request: Request) {
-    await this.ctx.storage.setAlarm(Date.now() + 600000);
+    if ((await this.ctx.storage.getAlarm()) === null)
+      await this.ctx.storage.setAlarm(Date.now() + 600000);
     return this.owner.fetch(
       request,
       request.headers.get("CF-Connecting-IP") ?? "unknown",
@@ -96,6 +110,15 @@ export class SiyinRelay extends DurableObject<Env> {
     const pair = new WebSocketPair();
     this.relay.connect(id, pair[1]);
     return new Response(null, { status: 101, webSocket: pair[0] });
+  }
+  eventsList(grant: string) {
+    return this.relay.eventsList(grant);
+  }
+  eventsSubscribe(grant: string, input: unknown) {
+    return this.relay.eventsSubscribe(grant, input);
+  }
+  eventsUnsubscribe(grant: string, input: unknown) {
+    return this.relay.eventsUnsubscribe(grant, input);
   }
   createPairing(input: unknown, address: string) {
     return this.relay.createPairing(input, address);
@@ -141,7 +164,7 @@ export class SiyinRelay extends DurableObject<Env> {
     return this.relay.call(grant, input);
   }
   webSocketMessage(ws: WebSocket, raw: string | ArrayBuffer) {
-    this.relay.webSocketMessage(ws, raw);
+    return this.relay.webSocketMessage(ws, raw);
   }
   webSocketClose(ws: WebSocket, code: number, reason: string) {
     this.relay.webSocketClose(ws, code, reason);
@@ -149,8 +172,8 @@ export class SiyinRelay extends DurableObject<Env> {
   webSocketError(ws: WebSocket) {
     this.relay.webSocketError(ws);
   }
-  alarm() {
-    this.relay.alarm();
+  async alarm() {
+    await this.relay.alarm();
     this.owner.cleanup();
   }
 }

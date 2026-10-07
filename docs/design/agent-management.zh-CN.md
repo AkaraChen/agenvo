@@ -64,9 +64,9 @@ Herdr 的原生 agent.prompt 写入终端；Codex send 调用 turn/start。同�
 - 活动状态：starting、idle、working、blocked、unknown，附原生状态、观察时间和来源。Herdr done 归为空闲观察，保留 completion_seq；Codex notLoaded 和 systemError 不归为空闲。
 - 原生事件结果：Codex turn/completed 可表达完成、失败或中断。事件保留原生轮次 ID 和错误，即使当前 Thread 已进入下一轮，也不能仅返回最新状态而丢失此前失败。
 
-Codex 首次 observe 未订阅的 Thread 时，调用 thread/resume（excludeTurns: true）建立订阅，不发送输入，然后读取当前元数据与该 Thread 的待回应请求。因为 resume 会加载上下文并应用全权限设置，observe 的 readOnly 标志为 false。订阅失败不伪装成空事件；归档、未持久化或原生历史不可用等失败保持原生错误。以后通过当前连接收到的通知增量观察，订阅不补发过去事件。
+Connector 自动订阅已加载的 Codex Thread。首次 observe 尚未订阅的 Thread 时，调用 thread/resume（excludeTurns: true）建立订阅，不发送输入，然后读取当前元数据与该 Thread 的待回应请求。因为 resume 会加载上下文并应用全权限设置，observe 的 readOnly 标志为 false。订阅失败不伪装成空事件；归档、未持久化或原生历史不可用等失败保持原生错误。以后通过当前连接收到的通知增量观察，订阅不补发过去事件。
 
-Herdr observe 每次主动查询 agent.get 并读取 agent.read 终端快照，不依赖先前管理调用。启动中的对象先返回启动状态，活跃后才读取终端。快照声明读取行数与有界覆盖，不转写为结构化 assistant 消息；两次采样之间的状态变化可能丢失。它不提供后台事件订阅。启动引用变为活跃引用后，调用方使用返回的新引用并重新开始游标。
+Herdr observe 每次主动查询 agent.get 并读取 agent.read 终端快照，不依赖先前管理调用。启动中的对象先返回启动状态，活跃后才读取终端。快照声明读取行数与有界覆盖，不转写为结构化 assistant 消息；两次采样之间的状态变化可能丢失。Connector 另外通过原生订阅把状态变化发送为 `runtime.changed` webhook，终端内容仍按需读取，详见[事件设计](events.zh-CN.md)。启动引用变为活跃引用后，调用方使用返回的新引用并重新开始游标。
 
 Connector 使用一个有界记录，而不是为无限多个 Thread 建立持久缓存。每条记录关联原生 Thread 身份，输出分页前按目标筛选；游标包含记录代次、Thread 身份摘要和位置。跨 Thread 使用返回 invalid_cursor。其他 Thread 的事件不占当前页面条数，空页也能越过无关事件推进游标。快照和事件最多保留 256 条、512 KiB，单次事件页不超过 32 KiB；大事件截断仍保留可用的原生身份、状态和错误。完整结果还受现有 64 KiB 信封限制。
 

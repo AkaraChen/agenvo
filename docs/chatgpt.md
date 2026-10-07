@@ -16,3 +16,5 @@ If ChatGPT reports workspace permissions or security settings before opening Age
 To replace an old endpoint when the UI has no URL editor, create a new app under a temporary name and complete the steps above. Once verified, delete the old app and rename the new one to Agenvo.
 
 References: [official connection guide](https://developers.openai.com/plugins/deploy/connect-chatgpt) · [official OAuth flow](https://developers.openai.com/plugins/build/auth).
+
+Use [event subscriptions](events.md) to wake the consumer on changes. Read current state and output after each notification instead of continuously polling.

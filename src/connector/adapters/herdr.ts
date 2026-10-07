@@ -1,3 +1,5 @@
+import { HerdrEvents } from "./herdr-events.js";
+import type { RuntimeEvent } from "../../protocol/events.js";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { readdir, stat, realpath } from "node:fs/promises";
@@ -480,7 +482,70 @@ export class HerdrAdapter implements Adapter {
         : {}),
     });
   }
+  private stopEvents?: () => void;
+  watchEvents(emit: (event: RuntimeEvent) => void) {
+    this.stopEvents?.();
+    const watchers = new Map<
+      string,
+      { generation: string; watch: HerdrEvents }
+    >();
+    let stopped = false,
+      busy = false;
+    const discover = async () => {
+      if (busy || stopped || !this.available) return;
+      busy = true;
+      try {
+        const names = [
+          "default",
+          ...(await readdir(join(this.config.configRoot, "sessions")).catch(
+            () => [] as string[],
+          )),
+        ].filter((n) => session.safeParse(n).success);
+        const live = new Set<string>();
+        for (const name of names) {
+          const generation = await this.generation(name).catch(() => undefined);
+          if (!generation || stopped) continue;
+          live.add(name);
+          if (watchers.get(name)?.generation === generation) continue;
+          watchers.get(name)?.watch.close();
+          const watch = new HerdrEvents(
+            this.socket(name),
+            name,
+            generation,
+            emit,
+          );
+          watchers.set(name, { generation, watch });
+          watch.start();
+        }
+        for (const [name, value] of watchers)
+          if (!live.has(name)) {
+            value.watch.close();
+            watchers.delete(name);
+            emit({
+              eventId: crypto.randomUUID(),
+              timestamp: new Date().toISOString(),
+              serviceId: name,
+              generation: value.generation,
+              nativeType: "agenvo.resync_required",
+              native: { reason: "service_unavailable" },
+            });
+          }
+      } finally {
+        busy = false;
+      }
+    };
+    void discover();
+    const timer = setInterval(() => void discover(), 3000);
+    timer.unref();
+    return (this.stopEvents = () => {
+      stopped = true;
+      clearInterval(timer);
+      for (const v of watchers.values()) v.watch.close();
+      watchers.clear();
+    });
+  }
   async close() {
+    this.stopEvents?.();
     /* Herdr owns the server and its panes. */
   }
 }

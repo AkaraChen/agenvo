@@ -1,3 +1,4 @@
+import type { RuntimeEvent } from "../../protocol/events.js";
 import { type InstanceConfig } from "../config.js";
 import { bytes, LIMITS, page, type Outcome } from "../../protocol/index.js";
 import type { AgentManagement } from "./management.js";
@@ -13,6 +14,7 @@ export interface Adapter {
   version: string;
   available: boolean;
   onAvailabilityChange?: () => void;
+  watchEvents?(emit: (event: RuntimeEvent) => void): () => void;
   methods(): Method[];
   call(method: string, params: Record<string, unknown>): Promise<Outcome>;
   close(): Promise<void>;

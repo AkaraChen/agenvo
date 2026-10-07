@@ -1,3 +1,4 @@
+import type { RuntimeEvent } from "../../protocol/events.js";
 import {
   spawn,
   execFile,
@@ -220,6 +221,7 @@ export class CodexAdapter implements Adapter {
       throw new Fault("runtime_unavailable");
     this.reconnectAttempt = 0;
     this.available = true;
+    this.publishEvent("agenvo.resync_required", { reason: "native_connected" });
     this.onAvailabilityChange?.();
   }
   private write(value: unknown) {
@@ -280,6 +282,64 @@ export class CodexAdapter implements Adapter {
       }
     });
   }
+  private eventSink?: (event: RuntimeEvent) => void;
+  private stopEvents?: () => void;
+  watchEvents(emit: (event: RuntimeEvent) => void) {
+    this.stopEvents?.();
+    this.eventSink = emit;
+    let busy = false,
+      stopped = false;
+    const discover = async () => {
+      if (busy || stopped || !this.available) return;
+      busy = true;
+      try {
+        let cursor: string | undefined;
+        do {
+          const result: any = await this.rpc("thread/loaded/list", {
+            cursor,
+            limit: 50,
+          });
+          for (const id of result.data ?? []) {
+            if (stopped) return;
+            const threadId = typeof id === "string" ? id : id.id;
+            if (
+              typeof threadId === "string" &&
+              !this.resumeTargets.has(threadId)
+            )
+              await this.call("thread/resume", { threadId });
+          }
+          cursor = result.nextCursor ?? undefined;
+        } while (cursor && !stopped);
+      } catch {
+        /* Native disconnect/reconnect is reported by the transport. */
+      } finally {
+        busy = false;
+      }
+    };
+    void discover();
+    const timer = setInterval(() => void discover(), 3000);
+    timer.unref();
+    return (this.stopEvents = () => {
+      stopped = true;
+      clearInterval(timer);
+      this.eventSink = undefined;
+    });
+  }
+  private publishEvent(
+    nativeType: string,
+    native: Record<string, unknown>,
+    threadId?: string,
+  ) {
+    this.eventSink?.({
+      eventId: randomUUID(),
+      timestamp: new Date().toISOString(),
+      serviceId: "default",
+      generation: this.generation,
+      ...(threadId ? { threadId } : {}),
+      nativeType,
+      native: bytes(native) < 24000 ? native : { omittedBytes: bytes(native) },
+    });
+  }
   private receive(packet: any) {
     if (!packet || typeof packet !== "object")
       throw new Error("invalid_packet");
@@ -300,6 +360,25 @@ export class CodexAdapter implements Adapter {
       this.recount();
     }
     this.management.notify(packet.method, packet.params);
+    if (
+      [
+        "thread/started",
+        "thread/status/changed",
+        "thread/archived",
+        "thread/unarchived",
+        "thread/closed",
+        "turn/started",
+        "turn/completed",
+        "serverRequest/resolved",
+        "item/tool/requestUserInput",
+        "item/tool/call",
+      ].includes(packet.method)
+    )
+      this.publishEvent(
+        packet.method,
+        packet.params ?? {},
+        packet.params?.threadId ?? packet.params?.thread?.id,
+      );
     if (packet.method === "serverRequest/resolved") {
       for (const [id, r] of this.interactions)
         if (
@@ -430,7 +509,12 @@ export class CodexAdapter implements Adapter {
   private fail() {
     const wasAvailable = this.available;
     this.available = false;
-    if (wasAvailable) this.onAvailabilityChange?.();
+    if (wasAvailable) {
+      this.onAvailabilityChange?.();
+      this.publishEvent("agenvo.resync_required", {
+        reason: "native_disconnected",
+      });
+    }
     for (const p of this.pending.values())
       p.reject(
         new Fault(
@@ -606,7 +690,6 @@ export class CodexAdapter implements Adapter {
     this.validate(validator, original);
     const params = executionParams(this.config, method, original);
     if (
-      this.config.mode === "attach-unix" &&
       ["thread/start", "thread/resume"].includes(method) &&
       this.resumeTargets.size >= 128 &&
       !this.resumeTargets.has(String(params.threadId))
@@ -617,8 +700,7 @@ export class CodexAdapter implements Adapter {
       ["thread/start", "thread/resume"].includes(method) &&
       typeof result?.thread?.id === "string"
     ) {
-      if (this.config.mode === "attach-unix")
-        this.resumeTargets.add(result.thread.id);
+      this.resumeTargets.add(result.thread.id);
       this.management.subscribed(result.thread.id);
     }
     if (method === "thread/archive") {
@@ -635,6 +717,7 @@ export class CodexAdapter implements Adapter {
       );
   }
   async close() {
+    this.stopEvents?.();
     const child = this.child;
     if (this.config.mode === "attach-unix") {
       this.closed = true;
