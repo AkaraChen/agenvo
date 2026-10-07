@@ -1,5 +1,6 @@
 import { type InstanceConfig } from "../config.js";
 import { bytes, LIMITS, page, type Outcome } from "../../protocol/index.js";
+import type { AgentManagement } from "./management.js";
 export type Method = {
   name: string;
   description: string;
@@ -8,6 +9,7 @@ export type Method = {
 };
 export interface Adapter {
   config: InstanceConfig;
+  management: AgentManagement;
   version: string;
   available: boolean;
   onAvailabilityChange?: () => void;
@@ -20,19 +22,16 @@ export function describe(adapter: Adapter, params: Record<string, unknown>) {
     .methods()
     .filter((m) => !params.method || m.name === params.method);
   return {
-    policy:
-      adapter.config.kind === "codex"
-        ? adapter.config.mode === "attach-unix"
-          ? {
-              permissions: "native",
-              scope:
-                "Entire shared Codex home; thread settings remain owned by the native runtime",
-              allowSessionApproval: adapter.config.policy.allowSessionApproval,
-              lifecycle:
-                "Disconnect only; never starts or stops the native server",
-            }
-          : adapter.config.policy
-        : { shell: "arbitrary commands as the local OS user" },
+    managementVersion: 1,
+    management: {
+      ...adapter.management.capabilities(),
+      methods: adapter.management.methods().map((m) => m.name),
+    },
+    policy: {
+      execution: "full-access",
+      approvalPolicy: "never",
+      authentication: "paired_devices_and_authorized_mcp_clients",
+    },
     ...page(methods, params.cursor as string | undefined, 5),
   };
 }

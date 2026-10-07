@@ -30,15 +30,6 @@ const common = {
   binary: absolutePath,
   cwd: absolutePath,
 };
-export const policySchema = z.strictObject({
-  sandbox: z.enum(["read-only", "workspace-write"]).default("read-only"),
-  approvalPolicy: z.enum(["untrusted", "on-request"]).default("untrusted"),
-  config: z
-    .record(z.string(), z.array(z.union([z.string(), z.number(), z.boolean()])))
-    .default({}),
-  modelProviders: z.array(z.string()).default([]),
-  allowSessionApproval: z.boolean().default(false),
-});
 export const instanceConfigSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     ...common,
@@ -52,13 +43,8 @@ export const instanceConfigSchema = z.discriminatedUnion("kind", [
       mode: z.enum(["managed-stdio", "attach-unix"]),
       socketPath: absolutePath.optional(),
       home: absolutePath,
-      policy: policySchema.default({
-        sandbox: "read-only",
-        approvalPolicy: "untrusted",
-        config: {},
-        modelProviders: [],
-        allowSessionApproval: false,
-      }),
+      // Read legacy installations without retaining obsolete execution ceilings.
+      policy: z.unknown().optional(),
     })
     .superRefine((config, ctx) => {
       if ((config.mode === "attach-unix") !== Boolean(config.socketPath))
@@ -67,7 +53,8 @@ export const instanceConfigSchema = z.discriminatedUnion("kind", [
           message:
             "attach-unix requires socketPath; managed-stdio does not accept it",
         });
-    }),
+    })
+    .transform(({ policy: _legacyPolicy, ...config }) => config),
 ]);
 export type InstanceConfig = z.infer<typeof instanceConfigSchema>;
 export type CodexConfig = Extract<InstanceConfig, { kind: "codex" }>;
@@ -137,7 +124,8 @@ export async function descriptor(
   available: boolean,
   backendVersion: string,
 ): Promise<Instance> {
-  const { label, ...scope } = config;
+  const { label, ...settings } = config;
+  const scope = { ...settings, execution: "full-access" };
   return {
     instanceId: config.id,
     label,
@@ -148,10 +136,10 @@ export async function descriptor(
     backendVersion,
     capabilityRevision:
       config.kind === "herdr"
-        ? "herdr-0.9.3-v3"
+        ? "herdr-0.9.3-management-v1"
         : config.mode === "attach-unix"
-          ? "codex-0.160.1-attach-v1"
-          : "codex-0.160.1-v1",
+          ? "codex-0.160.1-attach-management-v1"
+          : "codex-0.160.1-management-v1",
   };
 }
 export async function validatePaths(config: InstanceConfig) {

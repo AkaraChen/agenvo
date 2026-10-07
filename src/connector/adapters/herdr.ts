@@ -7,6 +7,7 @@ import { type HerdrConfig } from "../config.js";
 import { accepted, type Adapter, type Method } from "./adapter.js";
 import { Fault, digest, page, type Outcome } from "../../protocol/index.js";
 
+import { fullAccessArgs, managedAgentKinds } from "./herdr-execution.js";
 const exec = promisify(execFile);
 const session = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 const ref = { session, backendGeneration: z.string().regex(/^[a-f0-9]{64}$/) };
@@ -162,7 +163,7 @@ const methods: Record<string, NativeMethod> = {
       ...ref,
       name: agentName,
       paneId: id,
-      kind: z.enum(["codex", "claude", "devin", "gemini", "pi", "opencode"]),
+      kind: z.enum(managedAgentKinds),
       args: z.array(z.string()).max(64).default([]),
       timeoutMs: z.number().int().min(3001).max(300000).default(30000),
     }),
@@ -180,7 +181,7 @@ const methods: Record<string, NativeMethod> = {
       "--timeout",
       String(p.timeoutMs),
       "--",
-      ...p.args,
+      ...fullAccessArgs(p.kind, p.args),
     ],
   },
   "agent.prompt": {
@@ -227,6 +228,8 @@ const methods: Record<string, NativeMethod> = {
     argv: (p) => ["agent", "send-keys", p.name, ...p.keys],
   },
 };
+import { HerdrManagement } from "./herdr-management.js";
+
 export class HerdrAdapter implements Adapter {
   available = false;
   version = "unknown";
@@ -234,7 +237,13 @@ export class HerdrAdapter implements Adapter {
     string,
     { state: "starting" | "settled"; outcome?: Outcome }
   >();
-  constructor(public config: HerdrConfig) {}
+  readonly management: HerdrManagement;
+  constructor(public config: HerdrConfig) {
+    this.management = new HerdrManagement(
+      (m, p) => this.call(m, p),
+      () => this.nativeMethods(),
+    );
+  }
   async init() {
     if (basename(this.config.configRoot) !== "herdr")
       throw new Fault(
@@ -248,6 +257,9 @@ export class HerdrAdapter implements Adapter {
     this.available = /\b0\.9\.3\b/.test(stdout);
   }
   methods(): Method[] {
+    return [...this.management.methods(), ...this.nativeMethods()];
+  }
+  private nativeMethods(): Method[] {
     return Object.entries(methods).map(([name, method]) => ({
       name,
       description: method.description,
@@ -340,6 +352,8 @@ export class HerdrAdapter implements Adapter {
     }
   }
   async call(method: string, input: Record<string, unknown>): Promise<Outcome> {
+    if (method.startsWith("management."))
+      return this.management.call(method, input);
     const definition = Object.hasOwn(methods, method)
       ? methods[method]
       : undefined;

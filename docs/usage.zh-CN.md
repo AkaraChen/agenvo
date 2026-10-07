@@ -19,12 +19,12 @@ agenvo instance add herdr --id work --config-root "$HOME/.config/herdr" --cwd "$
 ```sh
 mkdir -p "$HOME/.config/agenvo/codex/coding"
 CODEX_HOME="$HOME/.config/agenvo/codex/coding" codex login
-agenvo instance add codex --id coding --home "$HOME/.config/agenvo/codex/coding" --cwd "$HOME/code" --sandbox read-only
+agenvo instance add codex --id coding --home "$HOME/.config/agenvo/codex/coding" --cwd "$HOME/code"
 ```
 
-如果 Codex 登录要求目录已经存在，先创建目录。`--sandbox workspace-write` 和 `--approval-policy untrusted|on-request` 配置托管实例的本地权限上限，变更前应理解原生权限。远程调用不能提高这个上限。
+Codex 工作固定使用 `danger-full-access` 和 `approvalPolicy: never`，包括 attach 模式中的 thread 创建、恢复和新输入。执行权限请求自动回答。旧 sandbox/approval-policy CLI 选项已删除，旧配置中的 `policy` 在加载时丢弃。需要内容的用户问题和动态工具调用继续作为显式交互。
 
-实验性的 `--mode attach-unix --socket /absolute/control.sock` 可连接已有 Codex 控制端点，不启停该服务，并保留原生 thread 权限。桌面 App 已有的 stdio 进程不会自动提供这个端点。Agenvo 不配置或重启桌面 App；只有在你独立配置并验证兼容端点后才使用 attach，通常使用托管模式。
+实验性的 `--mode attach-unix --socket /absolute/control.sock` 可连接已有 Codex 控制端点，不启停该服务，对通过 Agenvo 提交的工作应用 full access。桌面 App 已有的 stdio 进程不会自动提供这个端点。Agenvo 不配置或重启桌面 App；只有在你独立配置并验证兼容端点后才使用 attach，通常使用托管模式。
 
 ## 配对与运行
 
@@ -63,7 +63,7 @@ agenvo client approve 'AUTHORIZATION_URL' --origin https://relay.example.com \
 
 先核对客户端身份和准确回调地址。批准后打开权限为 0600 的文件中的 `redirectTo`，完成原客户端登录。地址包含短期授权码，不要粘贴到聊天、日志或 Git。输出文件必须尚不存在。访问令牌有效期 15 分钟；授权最长 30 天，也可提前撤销。授权覆盖所有已批准实例，不按项目或设备隔离。
 
-MCP 工作流依次为发现实例、读取所选实例的方法说明、调用已经声明的方法。写操作后保留返回的原生 ID，通过原生 Agent/thread 状态和输出观察任务。Herdr 的 `idle` 不代表任务完成。Codex 在能力声明支持时提供结构化输入和审批，Herdr 使用原生终端交互。缺少输入不代表同意。
+共同接口流程见[管理 Agent 会话](management.zh-CN.md)。先发现后端能力，再调用已声明的方法；原生方法继续用于服务特有操作。使用 `management.threads.*` 和返回的 `threadRef`，通过 `threads.observe` 轮询状态、输出和待回应请求。结果不确定时先查询而不是重发，并检查观察记录的 gap。Herdr 的 idle 不代表任务完成。
 
 ## 撤销与诊断
 

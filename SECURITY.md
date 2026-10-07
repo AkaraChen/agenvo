@@ -2,7 +2,7 @@
 
 [简体中文](SECURITY.zh-CN.md)
 
-Agenvo grants remote access to local coding runtimes. Deploy it only for an owner and clients you trust. Herdr can run arbitrary commands as the local OS user. A workspace path is not a sandbox. Managed Codex policy limits apply only to that instance; attaching to a native server preserves its native permissions.
+Agenvo grants remote access to local coding runtimes. Deploy it only for an owner and clients you trust. Herdr can run arbitrary commands as the local OS user. A workspace path is not a sandbox. Codex work uses full access with execution approval disabled in both managed and attach modes. Agenvo automatically answers native permission requests. Existing Herdr agents retain the settings of their owning program; supported new launches request full access.
 
 ## Trust boundaries
 

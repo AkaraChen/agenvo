@@ -12,6 +12,7 @@ export function herdrFixture(
   const socket = join(config.configRoot, "sessions", session, "herdr.sock");
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    CODEX_HOME: join(config.cwd, "codex-test-home"),
     XDG_CONFIG_HOME: dirname(config.configRoot),
     HERDR_SOCKET_PATH: socket,
     HERDR_CONFIG_PATH: join(config.configRoot, "config.toml"),
@@ -32,6 +33,7 @@ export function herdrFixture(
     async start() {
       if (await exists()) throw new Error("Test endpoint already exists");
       await mkdir(dirname(socket), { recursive: true });
+      await mkdir(env.CODEX_HOME!, { recursive: true });
       const child = spawn(config.binary, ["server"], {
         cwd: config.cwd,
         env,

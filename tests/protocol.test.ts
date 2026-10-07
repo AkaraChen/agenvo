@@ -8,9 +8,10 @@ import {
   readBody,
 } from "../src/protocol/index.ts";
 import {
-  enforcePolicy,
-  enforceApproval,
-} from "../src/connector/adapters/codex-policy.ts";
+  executionParams,
+  automaticApproval,
+  validateAnswers,
+} from "../src/connector/adapters/codex-execution.ts";
 import { instanceConfigSchema } from "../src/connector/config.ts";
 import { bounded } from "../src/connector/adapters/adapter.ts";
 const config = instanceConfigSchema.parse({
@@ -56,128 +57,54 @@ test("UTF-8 limits and cursor preserve complete items", async () => {
     "accepted",
   );
 });
-test("all mutable Codex entry points retain local permissions", () => {
+test("all Codex work entry points force full access after caller overrides", () => {
   for (const method of ["thread/start", "thread/resume", "turn/start"]) {
-    for (const params of [
-      { approvalPolicy: "never" },
-      { approvalsReviewer: "auto_review" },
-      { cwd: "/etc" },
-      { config: { mcp_servers: {} } },
-      { modelProvider: "evil" },
-    ])
-      assert.throws(() => enforcePolicy(config, method, params), {
-        code: "policy_denied",
+    for (const mode of ["managed-stdio", "attach-unix"] as const) {
+      const p = executionParams({ ...config, mode }, method, {
+        approvalPolicy: "on-request",
+        sandbox: "read-only",
+        sandboxPolicy: { type: "readOnly" },
+        config: { sandbox_mode: "read-only" },
       });
-    const p = enforcePolicy(config, method, {});
-    assert.equal(p.approvalsReviewer, "user");
-    assert.equal(p.approvalPolicy, "untrusted");
+      assert.equal(p.approvalPolicy, "never");
+      if (method === "turn/start")
+        assert.deepEqual(p.sandboxPolicy, { type: "dangerFullAccess" });
+      else {
+        assert.equal(p.sandbox, "danger-full-access");
+        assert.equal(p.config.sandbox_mode, "danger-full-access");
+      }
+    }
   }
-  assert.throws(
-    () =>
-      enforcePolicy(config, "turn/start", {
-        sandboxPolicy: { type: "dangerFullAccess" },
-      }),
-    { code: "policy_denied" },
-  );
   assert.equal(canonical({ z: 1, a: 2 }), canonical({ a: 2, z: 1 }));
 });
-test("native input answers and persistent approval amendments are checked", () => {
-  assert.throws(
-    () =>
-      enforceApproval(
-        config,
-        "item/commandExecution/requestApproval",
-        {},
-        { decision: "acceptForSession" },
-      ),
-    { code: "policy_denied" },
+test("permission requests are automatic while user answers remain structured", () => {
+  assert.deepEqual(
+    automaticApproval("item/commandExecution/requestApproval", {}),
+    { decision: "accept" },
   );
-  assert.throws(
-    () =>
-      enforceApproval(
-        config,
-        "item/commandExecution/requestApproval",
-        {},
-        {
-          decision: {
-            acceptWithExecpolicyAmendment: { execpolicyAmendment: ["sh"] },
-          },
-        },
-      ),
-    { code: "policy_denied" },
+  assert.deepEqual(
+    automaticApproval("item/permissions/requestApproval", {
+      permissions: { network: { enabled: true } },
+    }),
+    {
+      permissions: { network: { enabled: true } },
+      scope: "session",
+      strictAutoReview: false,
+    },
   );
+  assert.equal(automaticApproval("item/tool/requestUserInput", {}), undefined);
   assert.throws(
     () =>
-      enforceApproval(
-        config,
+      validateAnswers(
         "item/tool/requestUserInput",
         { questions: [{ id: "q" }] },
         { answers: { wrong: { answers: ["yes"] } } },
       ),
-    { code: "policy_denied" },
+    { code: "invalid_params" },
   );
-  enforceApproval(
-    config,
+  validateAnswers(
     "item/tool/requestUserInput",
     { questions: [{ id: "q" }] },
     { answers: { q: { answers: ["yes"] } } },
   );
-});
-
-test("approval decisions cannot bypass network, filesystem or unsandboxed ceilings", () => {
-  const write = {
-    ...config,
-    policy: { ...config.policy, sandbox: "workspace-write" as const },
-  };
-  for (const params of [
-    {},
-    { cwd: "/work", networkApprovalContext: { host: "example.com" } },
-    {
-      cwd: "/work",
-      additionalPermissions: { fileSystem: { write: ["/etc"] } },
-    },
-  ])
-    assert.throws(
-      () =>
-        enforceApproval(
-          write,
-          "item/commandExecution/requestApproval",
-          params,
-          { decision: "accept" },
-        ),
-      { code: "policy_denied" },
-    );
-  enforceApproval(
-    write,
-    "item/commandExecution/requestApproval",
-    {
-      cwd: "/work",
-      additionalPermissions: { fileSystem: { write: ["/work"] } },
-    },
-    { decision: "accept" },
-  );
-  assert.throws(
-    () =>
-      enforceApproval(
-        write,
-        "item/fileChange/requestApproval",
-        { grantRoot: "/etc" },
-        { decision: "accept" },
-      ),
-    { code: "policy_denied" },
-  );
-  for (const permissions of [
-    { network: { enabled: true } },
-    { fileSystem: { write: ["/etc"] } },
-  ])
-    assert.throws(
-      () =>
-        enforceApproval(
-          write,
-          "item/permissions/requestApproval",
-          { permissions },
-          { permissions, scope: "turn", strictAutoReview: true },
-        ),
-      { code: "policy_denied" },
-    );
 });

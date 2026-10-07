@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:net";
 import { once } from "node:events";
@@ -12,7 +12,10 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { startServer } from "../../src/server/server.js";
 import { signOwnerRequest } from "../../src/cli/owner-key.js";
-import { digest, type Instance } from "../../src/protocol/index.js";
+import { CodexAdapter } from "../../src/connector/adapters/codex.js";
+import { instanceConfigSchema } from "../../src/connector/config.js";
+import { describe, accepted } from "../../src/connector/adapters/adapter.js";
+import { digest, asOutcome, type Instance } from "../../src/protocol/index.js";
 
 // Exercise the production HTTP routes behind the same Host-preserving boundary
 // used by the documented reverse proxy. No fixture authorization endpoints.
@@ -189,10 +192,10 @@ test(
     const instance: Instance = {
       instanceId: "test",
       label: "Test runtime",
-      kind: "herdr",
+      kind: "codex",
       fingerprint: "a".repeat(64),
       scope: {},
-      backendVersion: "0.9.3",
+      backendVersion: "0.160.1",
       capabilityRevision: "test",
       available: true,
     };
@@ -235,17 +238,39 @@ test(
     const welcome = once(ws, "message");
     ws.send(JSON.stringify({ v: 1, type: "hello", instances: [instance] }));
     assert.equal(JSON.parse((await welcome)[0].toString()).type, "welcome");
-    ws.on("message", (raw) => {
+    const adapterConfig = instanceConfigSchema.parse({
+      id: "test",
+      label: "Test runtime",
+      kind: "codex",
+      binary: resolve("tests/fixtures/codex-backend.mjs"),
+      cwd: dataDir,
+      home: dataDir,
+      mode: "managed-stdio",
+    });
+    if (adapterConfig.kind !== "codex") throw Error();
+    const adapter = new CodexAdapter(adapterConfig);
+    await adapter.init();
+    t.after(() => adapter.close());
+    ws.on("message", async (raw) => {
       const p = JSON.parse(raw.toString());
-      if (p.type === "call")
-        ws.send(
-          JSON.stringify({
-            v: 1,
-            type: "result",
-            requestId: p.requestId,
-            outcome: { execution: "accepted", result: { native: true } },
-          }),
-        );
+      if (p.type !== "call") return;
+      let outcome;
+      try {
+        outcome =
+          p.method === "siyin.describe"
+            ? accepted(describe(adapter, p.params))
+            : await adapter.call(p.method, p.params);
+      } catch (error) {
+        outcome = asOutcome(error);
+      }
+      ws.send(
+        JSON.stringify({
+          v: 1,
+          type: outcome.error ? "error" : "result",
+          requestId: p.requestId,
+          outcome,
+        }),
+      );
     });
     const mcp = new Client({ name: "integration", version: "1" });
     const transport = new StreamableHTTPClientTransport(
@@ -277,11 +302,52 @@ test(
       arguments: {
         deviceId: device.deviceId,
         instanceId: "test",
-        method: "agent.list",
+        method: "thread/list",
         params: {},
       },
     });
-    assert.match(JSON.stringify(result), /native/);
+    assert.match(JSON.stringify(result), /canAcceptDirectInput/);
+    const call = async (method: string, params = {}) => {
+      const response = await mcp.callTool({
+        name: "runtime_call",
+        arguments: {
+          deviceId: device.deviceId,
+          instanceId: "test",
+          method,
+          params,
+        },
+      });
+      assert.equal(response.isError, false, JSON.stringify(response));
+      return JSON.parse((response.content as any)[0].text).result;
+    };
+    const info = await mcp.callTool({
+      name: "instance_describe",
+      arguments: {
+        deviceId: device.deviceId,
+        instanceId: "test",
+        method: "management.threads.send",
+      },
+    });
+    assert.match(JSON.stringify(info), /managementVersion/);
+    const services = await call("management.services.list");
+    const created = await call("management.threads.create", {
+      serviceRef: services.items[0].serviceRef,
+    });
+    const sent = await call("management.threads.send", {
+      threadRef: created.thread.threadRef,
+      text: "Integration fixture",
+    });
+    assert.equal(sent.native.turn.id, "turn");
+    await call("management.threads.interrupt", {
+      threadRef: created.thread.threadRef,
+    });
+    const observed = await call("management.threads.observe", {
+      threadRef: created.thread.threadRef,
+      limit: 50,
+    });
+    assert.equal(observed.gap, false);
+    assert.ok(observed.items.some((i: any) => i.type === "turn/completed"));
+
     // A temporarily absent instance must still have its retained approval revoked.
     let changed = once(ws, "message");
     ws.send(JSON.stringify({ v: 1, type: "instances_changed", instances: [] }));
@@ -305,7 +371,7 @@ test(
       arguments: {
         deviceId: device.deviceId,
         instanceId: "test",
-        method: "agent.list",
+        method: "thread/list",
       },
     });
     assert.equal(reappeared.isError, true);
@@ -315,7 +381,7 @@ test(
       arguments: {
         deviceId: device.deviceId,
         instanceId: "test",
-        method: "agent.list",
+        method: "thread/list",
       },
     });
     assert.equal(denied.isError, true);

@@ -10,7 +10,7 @@ import { describe } from "../src/connector/adapters/adapter.js";
 import { instanceConfigSchema } from "../src/connector/config.js";
 
 // A second native client owns resolution; the adapter only owns its connection.
-test("attach preserves native settings, tracks peer resolution and reconnects without replay", async (t) => {
+test("attach applies full access, tracks peer resolution and reconnects without replay", async (t) => {
   const root = await realpath(await mkdtemp("/tmp/agenvo-attach-"));
   const http = createServer();
   const server = new WebSocketServer({ server: http });
@@ -32,7 +32,7 @@ test("attach preserves native settings, tracks peer resolution and reconnects wi
       const result =
         p.method === "initialize"
           ? { userAgent: "Codex Desktop/0.160.1 (test)", codexHome: root }
-          : p.method === "thread/resume"
+          : ["thread/resume", "thread/read"].includes(p.method)
             ? { thread: { id: "t" } }
             : {};
       ws.send(JSON.stringify({ id: p.id, result }));
@@ -61,20 +61,20 @@ test("attach preserves native settings, tracks peer resolution and reconnects wi
   await adapter.init();
   assert.equal(adapter.available, true);
   const info = describe(adapter, { method: "thread/resume" });
-  assert.equal((info.policy as any).permissions, "native");
-  assert.equal(
-    (info.items[0].inputSchema as any).properties.sandbox,
-    undefined,
-  );
+  assert.equal(info.policy.execution, "full-access");
+  assert.ok((info.items[0].inputSchema as any).properties.sandbox);
   await adapter.call("thread/resume", { threadId: "t", excludeTurns: true });
-  assert.deepEqual(calls.find((p) => p.method === "thread/resume").params, {
-    threadId: "t",
-    excludeTurns: true,
-  });
-  await assert.rejects(
-    adapter.call("thread/resume", { threadId: "t", sandbox: "read-only" }),
-    { code: "policy_denied" },
-  );
+  const resumed = calls.find((p) => p.method === "thread/resume").params;
+  assert.equal(resumed.sandbox, "danger-full-access");
+  assert.equal(resumed.approvalPolicy, "never");
+  assert.equal(resumed.cwd, undefined);
+  await adapter.call("thread/resume", { threadId: "t", sandbox: "read-only" });
+  const observations: any = (
+    await adapter.call("management.threads.observe", {
+      threadRef: adapter.management.refs.issue("thread", { threadId: "t" }),
+    })
+  ).result;
+
   const send = (p: any) => peer!.send(JSON.stringify(p));
   const barrier = () => adapter.call("model/list", {});
   const request = {
@@ -173,10 +173,21 @@ test("attach preserves native settings, tracks peer resolution and reconnects wi
     reconnectCalls.map((p) => p.method),
     ["initialize", "thread/resume"],
   );
-  assert.deepEqual(reconnectCalls[1].params, {
-    threadId: "t",
-    excludeTurns: true,
-  });
+  assert.equal(reconnectCalls[1].params.threadId, "t");
+  assert.equal(reconnectCalls[1].params.excludeTurns, true);
+  assert.equal(reconnectCalls[1].params.sandbox, "danger-full-access");
+  assert.equal(reconnectCalls[1].params.approvalPolicy, "never");
+  assert.equal(
+    (
+      (
+        await adapter.call("management.threads.observe", {
+          threadRef: adapter.management.refs.issue("thread", { threadId: "t" }),
+          cursor: observations.nextCursor,
+        })
+      ).result as any
+    ).gap,
+    true,
+  );
   assert.equal(
     ((await adapter.call("requests.list", {})).result as any).items.length,
     0,
@@ -265,7 +276,7 @@ test("CLI writes attach configuration only in the selected installation", async 
   const env = { ...process.env, AGENVO_CONFIG_DIR: root + "/connector" };
   await assert.rejects(
     run(process.execPath, [...args, "--sandbox", "read-only"], { env }),
-    (error: any) => JSON.parse(error.stdout).error.code === "invalid_arguments",
+    (error: any) => /Unknown option.*sandbox/.test(error.stderr),
   );
   await run(process.execPath, args, { env });
   const config = JSON.parse(

@@ -19,12 +19,12 @@ For an isolated, Connector-managed Codex app-server:
 ```sh
 mkdir -p "$HOME/.config/agenvo/codex/coding"
 CODEX_HOME="$HOME/.config/agenvo/codex/coding" codex login
-agenvo instance add codex --id coding --home "$HOME/.config/agenvo/codex/coding" --cwd "$HOME/code" --sandbox read-only
+agenvo instance add codex --id coding --home "$HOME/.config/agenvo/codex/coding" --cwd "$HOME/code"
 ```
 
-Create the home directory first if your Codex login requires it. `--sandbox workspace-write` and `--approval-policy untrusted|on-request` configure the managed instance's local ceiling. Review native permissions before changing them. Remote requests cannot raise that ceiling.
+Codex work always uses `danger-full-access` and `approvalPolicy: never`, including thread creation, resume and new input through attach mode. Execution permission requests are answered automatically. The old sandbox/approval-policy CLI options have been removed; legacy `policy` configuration is discarded when loaded. User questions and dynamic tool calls remain explicit interactions.
 
-Experimental `--mode attach-unix --socket /absolute/control.sock` connects to an existing Codex control endpoint. It never starts or stops that server and preserves its native thread permissions. A standard desktop App's existing stdio process does not automatically provide such an endpoint. Agenvo does not reconfigure or restart the desktop App. Only use attach mode when you have independently provisioned and tested a compatible endpoint; managed mode is the normal setup.
+Experimental `--mode attach-unix --socket /absolute/control.sock` connects to an existing Codex control endpoint. It never starts or stops that server and applies full access to work submitted through Agenvo. A standard desktop App's existing stdio process does not automatically provide such an endpoint. Agenvo does not reconfigure or restart the desktop App. Only use attach mode when you have independently provisioned and tested a compatible endpoint; managed mode is the normal setup.
 
 ## Pair and run
 
@@ -63,7 +63,7 @@ agenvo client approve 'AUTHORIZATION_URL' --origin https://relay.example.com \
 
 Inspect the client identity and exact callback before approving. Open the `redirectTo` URL in the saved mode-0600 file to finish the original client's login. It contains a short-lived authorization code: do not paste it into chat, logs or Git. The output path must not already exist. Access tokens last 15 minutes; grants expire after 30 days or owner revocation. All approved runtime instances are included; grants are not per-project or per-device.
 
-MCP workflows: list instances, describe the selected instance's methods, then call an advertised method. Preserve native IDs returned by writes. Use native agent/thread state and output to monitor work. Herdr `idle` is not proof of task completion. Structured Codex input/approval requests are supported where advertised; Herdr uses native terminal interactions. Do not treat absent input as consent.
+Use [Managing Agent threads](management.md) for the common management API. Discover advertised methods before calling them; native methods remain available for service-specific work. Use `management.threads.*` with the returned `threadRef`; poll `threads.observe` for current state, output and pending interactions. Query uncertain writes instead of resending them, and inspect observation gaps. Herdr `idle` is not proof of task completion.
 
 ## Revoke and diagnose
 

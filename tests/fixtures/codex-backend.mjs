@@ -64,6 +64,13 @@ const requests = [
   { method: "account/chatgptAuthTokens/refresh", params: {} },
 ];
 let responses = [];
+let calls = [];
+const thread = {
+  id: "t",
+  cwd: process.cwd(),
+  status: { type: "idle" },
+  canAcceptDirectInput: true,
+};
 const send = (value) =>
   process.stdout.write(JSON.stringify({ jsonrpc: "2.0", ...value }) + "\n");
 readline.createInterface({ input: process.stdin }).on("line", (line) => {
@@ -73,9 +80,10 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
     return;
   }
   if (packet.id === undefined) return;
+  calls.push({ method: packet.method, params: packet.params });
   let result = {};
   if (packet.method === "thread/start") {
-    result = { thread: { id: "t" } };
+    result = { thread };
     send({
       method: "item/started",
       params: {
@@ -137,11 +145,62 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
         ],
       },
     });
-  if (packet.method === "thread/read") result = { responses };
-  if (packet.method === "turn/interrupt")
+  if (packet.method === "thread/read") result = { responses, calls, thread };
+  if (packet.method === "thread/list")
+    result = { data: [thread], nextCursor: null };
+  if (["thread/resume", "thread/unarchive"].includes(packet.method))
+    result = { thread };
+  if (
+    packet.method === "thread/turns/list" &&
+    packet.params.itemsView === "notLoaded"
+  ) {
+    result = {
+      data: [
+        {
+          id: "turn",
+          status:
+            thread.status.type === "active" ? "inProgress" : "interrupted",
+        },
+      ],
+      nextCursor: null,
+    };
+  } else if (packet.method === "thread/turns/list") {
+    send({
+      id: packet.id,
+      error: { code: -32600, message: "list_turns is not supported yet" },
+    });
+    return;
+  }
+  if (packet.method === "turn/start") {
+    thread.status = { type: "active", activeFlags: [] };
+    result = { turn: { id: "turn", status: "inProgress", items: [] } };
+    send({ method: "turn/started", params: { threadId: "t", ...result } });
+    send({
+      method: "item/agentMessage/delta",
+      params: {
+        threadId: "t",
+        turnId: "turn",
+        itemId: "m",
+        delta: "Fixture output",
+      },
+    });
+  }
+  if (packet.method === "turn/steer") {
+    if (packet.params.expectedTurnId !== "turn") {
+      send({
+        id: packet.id,
+        error: { code: -32600, message: "Turn mismatch" },
+      });
+      return;
+    }
+    result = { turnId: "turn" };
+  }
+  if (packet.method === "turn/interrupt") {
+    thread.status = { type: "idle" };
     send({
       method: "turn/completed",
       params: { threadId: "t", turn: { id: "turn", status: "interrupted" } },
     });
+  }
   send({ id: packet.id, result });
 });

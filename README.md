@@ -2,7 +2,7 @@
 
 [简体中文](README.zh-CN.md)
 
-Agenvo connects an MCP client to coding runtimes on your own computers. A small, always-reachable relay forwards requests to outbound device connections. Tasks run on the device, in native Herdr or Codex environments.
+Agenvo gives MCP clients a common interface to services that manage coding agents on your own computers. A small, always-reachable relay forwards requests to outbound device connections. Tasks run on the device, in native Herdr or Codex environments.
 
 **Status:** early release, single owner per deployment. Herdr 0.9.3 and Codex CLI 0.160.1 are the tested adapter versions. Review the [security boundaries](SECURITY.md) before sharing a runtime.
 
@@ -22,14 +22,16 @@ flowchart LR
 
 ## What it does
 
-- Shares entire approved runtime instances, with discovery and native method schemas.
+- Shares entire approved Agent management services, including work created by other clients.
+- Unifies Thread discovery, creation, input and observation, with supported interruption, history and interactions; native turn details remain available.
+- Runs Codex work in full access without execution approval prompts.
 - Exposes three MCP tools: `instances_list`, `instance_describe`, and `runtime_call`.
 - Pairs devices using a fingerprint confirmed by the owner; new or changed instance scopes need approval.
 - Preserves native task IDs and execution outcomes. An accepted call is not a completed task.
 - Reconnects devices without replaying writes. An uncertain result must be checked against native state.
 - Attaches to independently running Herdr servers. The Connector never starts or stops Herdr sessions.
 
-Agenvo is a relay, not a task scheduler or a shell sandbox. A permitted Herdr instance can execute commands as its local user. All authorized MCP clients can reach all approved instances in that deployment, including instances approved later.
+Agenvo manages access and translates Agent management operations. It does not provide a shell sandbox or infer business success from an idle agent. A permitted Herdr instance can execute commands as its local user. All authorized MCP clients can reach all approved instances in that deployment, including instances approved later.
 
 ## Start from source
 
@@ -60,12 +62,14 @@ The VPS process stays running. Cloudflare does not require an always-on containe
 
 - [Migrating from Siyin](docs/migration.md) · [中文](docs/migration.zh-CN.md)
 
+- [Managing Agent threads](docs/management.md) · [中文](docs/management.zh-CN.md)
 - [Usage](docs/usage.md) · [中文](docs/usage.zh-CN.md)
 - [VPS deployment](docs/deployment-vps.md) · [中文](docs/deployment-vps.zh-CN.md)
 - [Cloudflare deployment](docs/deployment-cloudflare.md) · [中文](docs/deployment-cloudflare.zh-CN.md)
 - [Security](SECURITY.md) · [中文](SECURITY.zh-CN.md)
 - [Contributing and tests](CONTRIBUTING.md) · [中文](CONTRIBUTING.zh-CN.md)
 - [Architecture and protocol design / 架构与协议设计](docs/design/architecture.zh-CN.md)
+- [Agent management design (Chinese)](docs/design/agent-management.zh-CN.md) · [Interface audit (Chinese)](docs/design/agent-management-interface-audit.zh-CN.md)
 
 ## License
 

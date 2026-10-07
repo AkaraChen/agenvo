@@ -50,7 +50,7 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
     "instance_describe",
     {
       description:
-        "Read native method schemas and local policy before calling an instance. Paginate using cursor or select method.",
+        "Read management capabilities, method schemas and execution behavior before calling an instance. Paginate using cursor or select method.",
       inputSchema: z.strictObject({
         deviceId: identifier,
         instanceId: identifier,
@@ -72,7 +72,7 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
     "runtime_call",
     {
       description:
-        "Call a native method on one approved instance. accepted means backend confirmation, not task completion. starting has a native query key. After unknown or transport failure, inspect native state; never blindly repeat a write. Use instance_describe to discover supported input/approval methods. Poll requests.list only if that instance advertises it; Herdr uses agent state and terminal output instead. Never infer approval from silence.",
+        "Call an advertised management.* or native method on one approved instance. accepted means backend confirmation, not task completion. starting has a native query key. After unknown or transport failure, inspect native state; never blindly repeat a write. Use instance_describe to discover capabilities. Prefer management.services.list, then management.threads.*. Poll management.threads.observe with threadRef for state, output and pending interactions; inspect gaps. Permission approvals are automatic; user questions remain explicit interactions.",
       inputSchema: callSchema,
     },
     (input) => wrap(() => relay.call(grantId, input)),

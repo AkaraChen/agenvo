@@ -165,14 +165,22 @@ test("Herdr isolated sessions preserve references across connector reconstructio
   }
   assert.ok(recovered, "same pane must accept new work after interruption");
   // Start only the interactive UI: no prompt/model turn or approval is submitted.
-  await b.call("agent.start", {
-    ...ref,
-    name: "inspect",
-    paneId: nativePane,
-    kind: "codex",
-    timeoutMs: 4000,
-    args: ["--no-alt-screen"],
+  const creationServices: any = (await a.call("management.services.list", {}))
+    .result;
+  const creationServiceRef = creationServices.items.find(
+    (s: any) => s.native.session === "test",
+  ).serviceRef;
+  const started = await a.call("management.threads.create", {
+    serviceRef: creationServiceRef,
+    providerOptions: {
+      name: "inspect",
+      paneId: nativePane,
+      kind: "codex",
+      timeoutMs: 4000,
+      args: ["--no-alt-screen", "--no-daemon"],
+    },
   });
+  assert.equal(started.execution, "starting");
   let discovered = false;
   for (let i = 0; i < 70; i++) {
     const agents = await b.call("agent.list", ref);
@@ -182,12 +190,58 @@ test("Herdr isolated sessions preserve references across connector reconstructio
         discovered = true;
         break;
       } catch (error: any) {
-        if (error.native?.code !== "agent_explain_unavailable") throw error;
+        if (
+          !["agent_explain_unavailable", "agent_not_found"].includes(
+            error.native?.code,
+          )
+        )
+          throw error;
       }
     }
     await new Promise((r) => setTimeout(r, 100));
   }
+  if (!discovered) {
+    t.diagnostic(
+      JSON.stringify(await b.call("agent.get", { ...ref, name: "inspect" })),
+    );
+    t.diagnostic(
+      JSON.stringify(await b.call("pane.read", { ...ref, paneId: nativePane })),
+    );
+  }
   assert.ok(discovered, "native agent must be discoverable");
+  const query = (started.result as any).query;
+  const startup: any = (await a.call(query.method, query.params)).result;
+  assert.equal(startup.thread.native.name, "inspect");
+  const services: any = (await b.call("management.services.list", {})).result;
+  const serviceRef = services.items.find(
+    (s: any) => s.native.session === "test",
+  ).serviceRef;
+  const managed: any = (await b.call("management.threads.list", { serviceRef }))
+    .result;
+  const threadRef = managed.items.find(
+    (a: any) => a.native.name === "inspect",
+  ).threadRef;
+  assert.ok(
+    threadRef,
+    "Agent created through another connector is discoverable through management",
+  );
+  const metadata: any = (await b.call("management.threads.get", { threadRef }))
+    .result;
+  assert.equal(metadata.thread.native.name, "inspect");
+  const observation: any = (
+    await b.call("management.threads.observe", { threadRef })
+  ).result;
+  assert.equal(observation.thread.native.name, "inspect");
+  assert.ok(
+    observation.items.some(
+      (i: any) =>
+        i.type === "terminal.observed" && i.data.kind === "terminal_snapshot",
+    ),
+  );
+  await assert.rejects(b.call("management.threads.interrupt", { threadRef }), {
+    code: "unsupported_capability",
+  });
+
   assert.equal(
     (await b.call("agent.explain", { ...ref, name: nativePane })).execution,
     "accepted",
@@ -212,12 +266,15 @@ test("Herdr isolated sessions preserve references across connector reconstructio
   });
   await native.start();
   assert.notEqual(await a.generation("test"), ref.backendGeneration);
+  await assert.rejects(b.call("management.threads.get", { threadRef }), {
+    code: "stale_reference",
+  });
   await assert.rejects(a.call("pane.read", { ...ref, paneId: nativePane }), {
     code: "stale_reference",
   });
 });
 
-test("Codex native initialization and policy rejection at the adapter entry", async (t) => {
+test("Codex native management creates full-access threads without a model turn", async (t) => {
   const home = await realpath(await mkdtemp(join(tmpdir(), "agenvo-codex-")));
   const cfg = instanceConfigSchema.parse({
     kind: "codex",
@@ -227,7 +284,6 @@ test("Codex native initialization and policy rejection at the adapter entry", as
     cwd: home,
     home,
     mode: "managed-stdio",
-    policy: {},
   });
   if (cfg.kind !== "codex") throw new Error();
   const adapter = new CodexAdapter(cfg);
@@ -237,27 +293,39 @@ test("Codex native initialization and policy rejection at the adapter entry", as
   });
   await adapter.init();
   assert.equal(adapter.available, true);
-  await assert.rejects(
-    adapter.call("thread/start", { sandbox: "danger-full-access" }),
-    { code: "policy_denied" },
-  );
-  await assert.rejects(
-    adapter.call("thread/start", { permissions: "unrestricted" }),
-    { code: "invalid_params" },
-  );
-  await assert.rejects(
-    adapter.call("thread/start", {
-      config: { "mcp_servers.evil.command": "sh" },
-    }),
-    { code: "policy_denied" },
-  );
-  assert.equal((await adapter.call("requests.list", {})).execution, "accepted");
+  const services: any = (await adapter.call("management.services.list", {}))
+    .result;
+  for (const historyMode of ["legacy", "paginated"]) {
+    const created: any = (
+      await adapter.call("management.threads.create", {
+        serviceRef: services.items[0].serviceRef,
+        providerOptions: { historyMode, ephemeral: false },
+      })
+    ).result;
+    assert.ok(created.thread.threadRef);
+    assert.equal(created.executionSettings.approvalPolicy, "never");
+    assert.equal(created.executionSettings.sandbox.type, "dangerFullAccess");
+    try {
+      const history = await adapter.call("management.threads.read", {
+        threadRef: created.thread.threadRef,
+      });
+      assert.equal((history.result as any).kind, "conversation_items");
+      t.diagnostic(historyMode + " history read succeeded");
+    } catch (error: any) {
+      assert.equal(error.code, "native_error");
+      assert.match(
+        JSON.stringify(error.native),
+        /not supported|not found|no rollout|not materialized/i,
+      );
+      t.diagnostic(
+        historyMode +
+          " history is unavailable for an empty thread: " +
+          JSON.stringify(error.native),
+      );
+    }
+  }
   await assert.rejects(
     adapter.call("requests.respond", { interactionId: "old", result: {} }),
     { code: "interaction_expired" },
-  );
-  assert.equal(
-    (await adapter.call("thread/list", { limit: 1 })).execution,
-    "accepted",
   );
 });

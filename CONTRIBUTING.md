@@ -23,7 +23,7 @@ npm run test:adapters
 npm run test:e2e
 ```
 
-These checks create isolated test environments. Linux user-service coverage additionally needs a working systemd user manager. Read the test prerequisites and skipped-test output before claiming native coverage. Never point tests at an everyday runtime or production relay. The Codex schema generator (`scripts/import-codex-schema.py`) must be run against the explicitly supported CLI version, followed by policy and adapter validation.
+These checks create isolated test environments. Linux user-service coverage additionally needs a working systemd user manager. Read the test prerequisites and skipped-test output before claiming native coverage. Never point tests at an everyday runtime or production relay. The Codex schema generator (`scripts/import-codex-schema.py`) must be run against the explicitly supported CLI version, followed by execution-settings and adapter validation.
 
 Source responsibilities:
 
@@ -33,8 +33,8 @@ Source responsibilities:
 - `src/connector`: device lifecycle and native runtime adapters.
 - `src/cli`: configuration, owner commands and service/deployment integration.
 
-New deployment hosts must reuse the routing core and preserve authorization, epoch and uncertain-execution semantics. Native adapter additions require discoverable schemas and meaningful input/approval boundaries. Do not add retry mechanisms that can duplicate writes.
+New deployment hosts must reuse the routing core and preserve authorization, epoch and uncertain-execution semantics. Native adapter additions require discoverable schemas and explicit capability and interaction semantics. Do not add retry mechanisms that can duplicate writes.
 
 Before sending a change, review the diff for private paths and credentials, run relevant tests, and state validation gaps. Use commits that each express one coherent behavior. Do not include generated schema or dependency updates without explaining their source and necessity.
 
-Native Codex coverage verifies initialization, schema discovery and policy rejection. With an explicitly supplied isolated `AGENVO_E2E_CODEX_HOME`, the e2e script also checks thread creation/read/archive through MCP. Structured input and approval handling are covered by deterministic app-server fixtures, not by a guaranteed live-model prompt.
+Native tests verify isolated Herdr discovery and observation, plus Codex full-access thread creation and turn control. Codex turn tests use a local held-open model endpoint to exercise real steering, interruption, history, resume and archive without external inference. Deterministic fixtures cover automatic permission responses, user questions and peer resolution. `npm run test:e2e` optionally uses an explicitly supplied isolated `AGENVO_E2E_CODEX_HOME`; never point it at an everyday home.

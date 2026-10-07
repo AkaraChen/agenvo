@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-Agenvo 把 MCP 客户端连接到你自己电脑上的编程运行时。持续可访问的 Relay 将请求转发到设备主动建立的连接，任务在设备上的原生 Herdr 或 Codex 环境中执行。
+Agenvo 为 MCP 客户端提供统一接口，管理你自己电脑上的 Agent 管理服务。持续可访问的 Relay 将请求转发到设备主动建立的连接，任务在设备上的原生 Herdr 或 Codex 环境中执行。
 
 **状态：**早期版本，每个部署只支持一个所有者。适配器验证版本为 Herdr 0.9.3 和 Codex CLI 0.160.1。共享运行时前请阅读[安全边界](SECURITY.zh-CN.md)。
 
@@ -22,14 +22,16 @@ flowchart LR
 
 ## 功能与边界
 
-- 共享整个已批准的运行时实例，提供发现和原生方法 schema。
+- 共享整个已批准的 Agent 管理服务，包括其他客户端创建的工作。
+- 以 Thread 统一发现、创建、输入和观察，按后端能力提供中断、历史与结构化交互，保留原生轮次信息。
+- Codex 工作使用 full access，不请求执行审批。
 - 提供三个 MCP 工具：`instances_list`、`instance_describe` 和 `runtime_call`。
 - 所有者核对指纹后配对设备；新增实例或权限范围变化需要批准。
 - 保留原生任务 ID 和执行结果。调用被接受不代表任务已经完成。
 - 设备断线后自动重连，但不会自动重放写操作。结果不确定时先查询原生状态。
 - 连接独立运行的 Herdr；Connector 不启动或停止 Herdr session。
 
-Agenvo 负责转发，不提供任务调度或 shell 沙箱。获准访问的 Herdr 实例可以用本机用户身份执行命令。同一部署中，所有有效 MCP 客户端均能访问全部已批准实例，包括将来批准的实例。
+Agenvo 负责访问控制和 Agent 管理操作转换，不提供 shell 沙箱，也不从空闲状态推断业务成功。获准访问的 Herdr 实例可以用本机用户身份执行命令。同一部署中，所有有效 MCP 客户端均能访问全部已批准实例，包括将来批准的实例。
 
 ## 从源码开始
 
@@ -60,12 +62,14 @@ VPS 需要常驻 Node 进程；Cloudflare 不需要常驻容器。两种 Relay �
 
 - [从嗣音迁移](docs/migration.zh-CN.md) · [English](docs/migration.md)
 
+- [管理 Agent 会话](docs/management.zh-CN.md) · [English](docs/management.md)
 - [使用指南](docs/usage.zh-CN.md) · [English](docs/usage.md)
 - [VPS 部署](docs/deployment-vps.zh-CN.md) · [English](docs/deployment-vps.md)
 - [Cloudflare 部署](docs/deployment-cloudflare.zh-CN.md) · [English](docs/deployment-cloudflare.md)
 - [安全边界](SECURITY.zh-CN.md) · [English](SECURITY.md)
 - [贡献与测试](CONTRIBUTING.zh-CN.md) · [English](CONTRIBUTING.md)
 - [架构与协议设计](docs/design/architecture.zh-CN.md)
+- [Agent 管理接口设计](docs/design/agent-management.zh-CN.md) · [原生接口核对记录](docs/design/agent-management-interface-audit.zh-CN.md)
 
 ## 许可证
 

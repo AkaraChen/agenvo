@@ -7,7 +7,7 @@ import { promisify } from "node:util";
 import WebSocket from "ws";
 import { connect as connectUnix } from "node:net";
 import { realpath, stat } from "node:fs/promises";
-import { dirname, resolve, relative, isAbsolute } from "node:path";
+import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Ajv, type ValidateFunction } from "ajv";
 import addFormats from "ajv-formats";
@@ -16,10 +16,11 @@ import schemas from "./schema/codex.json";
 import type { CodexConfig } from "../config.js";
 import { accepted, type Adapter, type Method } from "./adapter.js";
 import {
-  enforcePolicy,
-  enforceApproval,
-  sharedFields,
-} from "./codex-policy.js";
+  executionParams,
+  automaticApproval,
+  validateAnswers,
+} from "./codex-execution.js";
+import { CodexManagement } from "./codex-management.js";
 import {
   bytes,
   Fault,
@@ -49,8 +50,6 @@ type Interaction = {
   nativeId: string | number;
   method: string;
   params: Record<string, any>;
-  contentRead: boolean;
-  pathsWithinCeiling?: boolean;
 };
 type Rpc = { resolve(value: unknown): void; reject(error: Fault): void };
 export class CodexAdapter implements Adapter {
@@ -61,19 +60,23 @@ export class CodexAdapter implements Adapter {
   private socket?: WebSocket;
   private reconnect?: NodeJS.Timeout;
   private reconnectAttempt = 0;
-  private subscriptions = new Set<string>();
+  // Desired subscriptions survive transport loss; observed coverage does not.
+  private resumeTargets = new Set<string>();
   private generation = randomUUID();
   private id = 0;
   private pending = new Map<number, Rpc>();
   private interactions = new Map<string, Interaction>();
   private interactionBytes = 0;
-  private fileChanges = new Map<
-    string,
-    { threadId: string; turnId: string; item: any }
-  >();
   private readBuffer = Buffer.alloc(0);
   private closed = false;
-  constructor(public config: CodexConfig) {}
+  readonly management: CodexManagement;
+  constructor(public config: CodexConfig) {
+    this.management = new CodexManagement(
+      config,
+      (m, p) => this.call(m, p),
+      () => this.nativeMethods(),
+    );
+  }
   async init() {
     const { stdout } = await promisify(execFile)(
       this.config.binary,
@@ -100,11 +103,22 @@ export class CodexAdapter implements Adapter {
       }
       return;
     }
-    this.child = spawn(this.config.binary, ["app-server", "--stdio"], {
-      cwd: this.config.cwd,
-      env: { ...process.env, CODEX_HOME: this.config.home },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    this.child = spawn(
+      this.config.binary,
+      [
+        "-c",
+        'sandbox_mode="danger-full-access"',
+        "-c",
+        'approval_policy="never"',
+        "app-server",
+        "--stdio",
+      ],
+      {
+        cwd: this.config.cwd,
+        env: { ...process.env, CODEX_HOME: this.config.home },
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
     this.child.stderr.resume(); // Native logs may contain private prompts; never relay them.
     this.child.stdout.on("data", (data: Buffer) => {
       this.readBuffer = Buffer.concat([this.readBuffer, data]);
@@ -184,14 +198,22 @@ export class CodexAdapter implements Adapter {
     if ((await realpath(init.codexHome)) !== this.config.home)
       throw new Fault("backend_home_mismatch");
     this.write({ jsonrpc: "2.0", method: "initialized" });
-    // Resubscribe without resending turns or applying configuration overrides.
-    for (const threadId of this.subscriptions) {
+    // Restore subscriptions in full access without replaying any user input.
+    for (const threadId of this.resumeTargets) {
       try {
-        await this.rpc("thread/resume", { threadId, excludeTurns: true });
+        await this.rpc(
+          "thread/resume",
+          executionParams(this.config, "thread/resume", {
+            threadId,
+            excludeTurns: true,
+          }),
+        );
+        this.management.subscribed(threadId);
       } catch (error) {
-        if (error instanceof Fault && error.code === "native_error")
-          this.subscriptions.delete(threadId);
-        else throw error;
+        if (error instanceof Fault && error.code === "native_error") {
+          this.resumeTargets.delete(threadId);
+          this.management.unsubscribed(threadId);
+        } else throw error;
       }
     }
     if (this.socket !== ws || ws.readyState !== WebSocket.OPEN)
@@ -277,31 +299,8 @@ export class CodexAdapter implements Adapter {
           this.interactions.delete(id);
       this.recount();
     }
-    if (
-      packet.method === "item/started" &&
-      packet.params?.item?.type === "fileChange"
-    ) {
-      this.rememberFile(
-        packet.params.threadId,
-        packet.params.turnId,
-        packet.params.item,
-      );
-    } else if (packet.method === "item/fileChange/patchUpdated") {
-      const p = packet.params;
-      const previous = this.fileChanges.get(this.fileKey(p));
-      if (previous)
-        this.rememberFile(p.threadId, p.turnId, {
-          ...previous.item,
-          changes: p.changes,
-        });
-    } else if (
-      packet.method === "item/completed" &&
-      packet.params?.item?.type === "fileChange"
-    ) {
-      this.forgetFile(
-        this.fileKey({ ...packet.params, itemId: packet.params.item.id }),
-      );
-    } else if (packet.method === "serverRequest/resolved") {
+    this.management.notify(packet.method, packet.params);
+    if (packet.method === "serverRequest/resolved") {
       for (const [id, r] of this.interactions)
         if (
           r.nativeId === packet.params?.requestId &&
@@ -310,6 +309,37 @@ export class CodexAdapter implements Adapter {
           this.interactions.delete(id);
       this.recount();
     } else if (packet.method && packet.id !== undefined) {
+      try {
+        const result = automaticApproval(packet.method, packet.params ?? {});
+        if (result) {
+          this.validate(responseValidators.get(packet.method)!, result);
+          this.write({ jsonrpc: "2.0", id: packet.id, result });
+          this.management.record(
+            packet.params?.threadId,
+            "permission.submitted",
+            {
+              method: packet.method,
+              threadId: packet.params?.threadId,
+              automatic: true,
+            },
+          );
+          return;
+        }
+      } catch (error) {
+        this.write({
+          jsonrpc: "2.0",
+          id: packet.id,
+          error: {
+            code: -32000,
+            message: "Native approval could not be answered automatically",
+          },
+        });
+        this.management.record(packet.params?.threadId, "permission.failed", {
+          method: packet.method,
+          threadId: packet.params?.threadId,
+        });
+        return;
+      }
       if (!responseValidators.has(packet.method)) {
         if (this.config.mode === "attach-unix") return; // The owning app can answer unsupported requests.
         this.write({
@@ -332,8 +362,6 @@ export class CodexAdapter implements Adapter {
         nativeId: packet.id,
         method: packet.method,
         params: packet.params,
-        contentRead: false,
-        pathsWithinCeiling: false,
       };
       const size = bytes(interaction);
       if (
@@ -343,10 +371,7 @@ export class CodexAdapter implements Adapter {
             schemas.responses[packet.method as keyof typeof schemas.responses],
         }) >
           LIMITS.frame - 4096 ||
-        this.interactionBytes +
-          size +
-          [...this.fileChanges.values()].reduce((n, f) => n + bytes(f), 0) >
-          LIMITS.parse
+        this.interactionBytes + size > LIMITS.parse
       ) {
         if (this.config.mode === "attach-unix") return;
         this.write({
@@ -360,14 +385,18 @@ export class CodexAdapter implements Adapter {
         return;
       }
       this.interactions.set(interactionId, interaction);
+      this.management.record(packet.params?.threadId, "interaction.pending", {
+        interactionId,
+        method: packet.method,
+        threadId: packet.params?.threadId,
+      });
       this.recount();
     } else if (["thread/closed", "thread/archived"].includes(packet.method)) {
       const threadId = packet.params?.threadId;
-      this.subscriptions.delete(threadId);
+      this.resumeTargets.delete(threadId);
+      this.management.unsubscribed(threadId);
       for (const [id, r] of this.interactions)
         if (r.params.threadId === threadId) this.interactions.delete(id);
-      for (const [key, f] of this.fileChanges)
-        if (f.threadId === threadId) this.fileChanges.delete(key);
       this.recount();
     } else if (packet.method === "turn/completed") {
       for (const [id, r] of this.interactions)
@@ -376,12 +405,6 @@ export class CodexAdapter implements Adapter {
           r.params.turnId === packet.params?.turn?.id
         )
           this.interactions.delete(id);
-      for (const [key, file] of this.fileChanges)
-        if (
-          file.threadId === packet.params?.threadId &&
-          file.turnId === packet.params?.turn?.id
-        )
-          this.fileChanges.delete(key);
       this.recount();
     } else if (!packet.method && typeof packet.id === "number") {
       const pending = this.pending.get(packet.id);
@@ -397,62 +420,6 @@ export class CodexAdapter implements Adapter {
         );
       else pending?.resolve(packet.result);
     }
-    // Notifications are owned by Codex. v0.1 reads native history on demand.
-  }
-  private fileKey(p: Record<string, any>) {
-    return JSON.stringify([p.threadId, p.turnId, p.itemId]);
-  }
-  private forgetFile(key: string) {
-    this.fileChanges.delete(key);
-    for (const i of this.interactions.values())
-      if (this.fileKey(i.params) === key) {
-        i.contentRead = false;
-        i.pathsWithinCeiling = false;
-      }
-    this.recount();
-  }
-  private rememberFile(threadId: string, turnId: string, item: any) {
-    const key = this.fileKey({ threadId, turnId, itemId: item.id });
-    this.forgetFile(key);
-    const entry = { threadId, turnId, item };
-    if (bytes(entry) > LIMITS.frame - 4096) return;
-    this.fileChanges.set(key, entry);
-    while (
-      this.fileChanges.size > 0 &&
-      [...this.fileChanges.values()].reduce((n, f) => n + bytes(f), 0) +
-        this.interactionBytes >
-        LIMITS.parse
-    ) {
-      this.forgetFile(this.fileChanges.keys().next().value!);
-    }
-  }
-  private async withinWorkspace(item: any): Promise<boolean> {
-    if (!Array.isArray(item.changes) || !item.changes.length) return false;
-    const paths = item.changes.flatMap((change: any) => [
-      change.path,
-      ...(change.kind?.move_path ? [change.kind.move_path] : []),
-    ]);
-    return (
-      await Promise.all(
-        paths.map(async (path: unknown) => {
-          if (typeof path !== "string") return false;
-          const target = resolve(this.config.cwd, path);
-          try {
-            const actual = await realpath(target).catch(async (error) => {
-              if (error.code !== "ENOENT") throw error;
-              return resolve(
-                await realpath(dirname(target)),
-                target.split("/").at(-1)!,
-              );
-            });
-            const rel = relative(this.config.cwd, actual);
-            return rel !== ".." && !rel.startsWith("../") && !isAbsolute(rel);
-          } catch {
-            return false;
-          }
-        }),
-      )
-    ).every(Boolean);
   }
   private recount() {
     this.interactionBytes = [...this.interactions.values()].reduce(
@@ -475,7 +442,7 @@ export class CodexAdapter implements Adapter {
     this.pending.clear();
     this.interactions.clear();
     this.interactionBytes = 0;
-    this.fileChanges.clear();
+    this.management.reset();
     if (this.config.mode === "attach-unix") {
       const ws = this.socket;
       this.socket = undefined;
@@ -509,43 +476,38 @@ export class CodexAdapter implements Adapter {
     }
   }
   methods(): Method[] {
+    return [...this.management.methods(), ...this.nativeMethods()];
+  }
+  private nativeMethods(): Method[] {
     return [
       ...Object.entries(schemas.methods).map(([name, schema]) => ({
         name,
         readOnly: /(?:\/list|\/read)$/.test(name),
         description:
-          (this.config.mode === "attach-unix"
-            ? "Shared Codex 0.160.1 native method; existing thread settings are preserved."
-            : "Codex 0.160.1 native method; local policy applies.") +
+          "Codex 0.160.1 native method. Agent work uses full access and never requests execution approval." +
           (["thread/read", "thread/turns/list"].includes(name)
-            ? " Codex 0.160.1 may reject turn-history reads with list_turns is not supported yet; use thread/read without includeTurns for metadata."
+            ? " Native history can be unavailable; use observations for received events."
             : ""),
-        inputSchema:
-          this.config.mode === "attach-unix" && sharedFields[name]
-            ? {
-                ...schema,
-                properties: Object.fromEntries(
-                  Object.entries(schema.properties).filter(([key]) =>
-                    sharedFields[name].includes(key),
-                  ),
-                ),
-              }
-            : schema,
+        inputSchema: schema,
       })),
       {
         name: "requests.list",
         readOnly: true,
         description:
-          "Pending native input/approval requests. Read file changes with requests.read before approval; history may not contain pending items.",
+          "Pending user questions and dynamic tool requests received on this connection. Permission approvals are answered automatically.",
         inputSchema: z.toJSONSchema(
-          z.strictObject({ cursor: z.string().optional() }),
+          z.strictObject({
+            cursor: z.string().optional(),
+            threadId: z.string().optional(),
+            summary: z.boolean().optional(),
+          }),
         ),
       },
       {
         name: "requests.read",
         readOnly: true,
         description:
-          "Read the complete native pending file-change item. Fails explicitly if unavailable or too large; never fabricates a diff.",
+          "Read one pending native interaction and its response schema.",
         inputSchema: z.toJSONSchema(
           z.strictObject({ interactionId: z.string() }),
         ),
@@ -554,7 +516,7 @@ export class CodexAdapter implements Adapter {
         name: "requests.respond",
         readOnly: false,
         description:
-          "Answer one pending interaction once. Persistent policy amendments are denied. Native response schemas are included in requests.list.",
+          "Answer one pending user question or tool call once. Native response schemas are included in requests.list.",
         inputSchema: z.toJSONSchema(
           z.strictObject({
             interactionId: z.string(),
@@ -569,31 +531,31 @@ export class CodexAdapter implements Adapter {
     original: Record<string, unknown>,
   ): Promise<Outcome> {
     if (!this.available) throw new Fault("runtime_unavailable");
+    if (method.startsWith("management."))
+      return this.management.call(method, original);
     if (method === "requests.list") {
       const p = z
-        .strictObject({ cursor: z.string().optional() })
+        .strictObject({
+          cursor: z.string().optional(),
+          threadId: z.string().optional(),
+          summary: z.boolean().optional(),
+        })
         .parse(original);
       return accepted(
         page(
-          [...this.interactions.values()].map((i) => ({
-            ...i,
-            responseSchema:
-              schemas.responses[i.method as keyof typeof schemas.responses],
-            ...(i.method === "item/fileChange/requestApproval"
-              ? {
-                  read: {
-                    method: "requests.read",
-                    params: { interactionId: i.interactionId },
-                    itemId: i.params.itemId,
+          [...this.interactions.values()]
+            .filter((i) => !p.threadId || i.params.threadId === p.threadId)
+            .map((i) =>
+              p.summary
+                ? { interactionId: i.interactionId, method: i.method }
+                : {
+                    ...i,
+                    responseSchema:
+                      schemas.responses[
+                        i.method as keyof typeof schemas.responses
+                      ],
                   },
-                  localApprovalRequired:
-                    !i.contentRead ||
-                    (this.config.mode !== "attach-unix" &&
-                      (!i.pathsWithinCeiling ||
-                        this.config.policy.sandbox === "read-only")),
-                }
-              : {}),
-          })),
+            ),
           p.cursor,
         ),
       );
@@ -602,25 +564,13 @@ export class CodexAdapter implements Adapter {
       const p = z.strictObject({ interactionId: z.string() }).parse(original);
       const interaction = this.interactions.get(p.interactionId);
       if (!interaction) throw new Fault("interaction_expired");
-      if (interaction.method !== "item/fileChange/requestApproval")
-        throw new Fault("unsupported_method");
-      const file = this.fileChanges.get(this.fileKey(interaction.params));
-      if (!file)
-        throw new Fault(
-          "local_approval_required",
-          "Complete pending changes are unavailable or exceed capacity; handle locally",
-        );
-      const within =
-        this.config.mode === "attach-unix" ||
-        (await this.withinWorkspace(file.item));
-      if (this.fileChanges.get(this.fileKey(interaction.params)) !== file)
-        throw new Fault(
-          "content_changed",
-          "Read the changed proposal again before deciding",
-        );
-      interaction.contentRead = true;
-      interaction.pathsWithinCeiling = within;
-      return accepted(file);
+      return accepted({
+        ...interaction,
+        responseSchema:
+          schemas.responses[
+            interaction.method as keyof typeof schemas.responses
+          ],
+      });
     }
     if (method === "requests.respond") {
       const p = z
@@ -632,21 +582,7 @@ export class CodexAdapter implements Adapter {
       const interaction = this.interactions.get(p.interactionId);
       if (!interaction) throw new Fault("interaction_expired");
       this.validate(responseValidators.get(interaction.method)!, p.result);
-      enforceApproval(
-        this.config,
-        interaction.method,
-        interaction.params,
-        p.result,
-      );
-      if (
-        interaction.method === "item/fileChange/requestApproval" &&
-        String(p.result.decision).startsWith("accept") &&
-        (!interaction.contentRead || !interaction.pathsWithinCeiling)
-      )
-        throw new Fault(
-          "local_approval_required",
-          "Read complete native changes within the configured workspace before approving; otherwise handle locally.",
-        );
+      validateAnswers(interaction.method, interaction.params, p.result);
       this.interactions.delete(p.interactionId);
       this.recount();
       this.write({
@@ -668,23 +604,27 @@ export class CodexAdapter implements Adapter {
     const validator = methodValidators.get(method);
     if (!validator) throw new Fault("unsupported_method");
     this.validate(validator, original);
-    const params = enforcePolicy(this.config, method, original);
+    const params = executionParams(this.config, method, original);
     if (
       this.config.mode === "attach-unix" &&
       ["thread/start", "thread/resume"].includes(method) &&
-      this.subscriptions.size >= 128 &&
-      !this.subscriptions.has(String(params.threadId))
+      this.resumeTargets.size >= 128 &&
+      !this.resumeTargets.has(String(params.threadId))
     )
       throw new Fault("resource_exhausted");
     const result: any = await this.rpc(method, params);
     if (
-      this.config.mode === "attach-unix" &&
       ["thread/start", "thread/resume"].includes(method) &&
       typeof result?.thread?.id === "string"
-    )
-      this.subscriptions.add(result.thread.id);
-    if (method === "thread/archive")
-      this.subscriptions.delete(String(params.threadId));
+    ) {
+      if (this.config.mode === "attach-unix")
+        this.resumeTargets.add(result.thread.id);
+      this.management.subscribed(result.thread.id);
+    }
+    if (method === "thread/archive") {
+      this.resumeTargets.delete(String(params.threadId));
+      this.management.unsubscribed(String(params.threadId));
+    }
     return accepted(result);
   }
   private validate(validator: ValidateFunction, input: unknown) {
@@ -700,7 +640,7 @@ export class CodexAdapter implements Adapter {
       this.closed = true;
       clearTimeout(this.reconnect);
       this.reconnect = undefined;
-      this.subscriptions.clear();
+      this.resumeTargets.clear();
     }
     this.fail();
     if (!child || child.exitCode !== null || child.signalCode !== null) return;
