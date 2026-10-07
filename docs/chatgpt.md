@@ -2,7 +2,7 @@
 
 [中文](chatgpt.zh-CN.md) · [README](../README.md)
 
-This guide separates observed ChatGPT steps from pending authorization checks. On October 7, 2026, the form was accessible, but creation returned `Custom apps aren't allowed in this context. Check your workspace permissions or security settings`. The ChatGPT connection was therefore not completed. Successful OAuth/MCP checks through the Agenvo CLI do not establish that ChatGPT is connected.
+On October 7, 2026, Agenvo was created and installed, reaching the Connect Agenvo dialog. OAuth connection and actual tool calls remain unverified. Earlier creation attempts were rejected; creation succeeded after the user removed the old Siyin MCP servers and plugins. This sequence does not establish a platform quota. Successful OAuth/MCP checks through the Agenvo CLI do not establish that ChatGPT is connected.
 
 ## Prerequisites
 
@@ -41,6 +41,8 @@ A subsequent check of **Settings → Security and login** showed Lockdown mode o
 For an enterprise workspace, also review Workspace apps and Permissions & roles using the [official plugin controls guide](https://learn.chatgpt.com/docs/enterprise/apps-and-connectors). Do not assume these enterprise administration controls exist for a personal account. The observed Lockdown setting is ruled out, but the backend reason for rejecting creation remains unknown.
 
 ## Authorization after creation is permitted
+
+After creation, ChatGPT displays **Connect Agenvo**. Choose **Continue to Agenvo** to connect. In this attempt the button became available again without opening an authorization page. Browser diagnostics showed HTTP 403 on ChatGPT's own `mfa_requirement` request, with a Cloudflare managed challenge HTML response. This happens before redirecting to Agenvo: it is not an Agenvo OAuth rejection and does not establish that MFA is missing. Complete any ChatGPT security verification in the initiating browser, then resume connection for the existing plugin; do not recreate it or disable MFA.
 
 The following is Agenvo's supported client authorization flow; **it was not reached in this ChatGPT attempt**. If ChatGPT opens the relay's `/authorize?...` page, inspect that complete URL on the owner machine:
 

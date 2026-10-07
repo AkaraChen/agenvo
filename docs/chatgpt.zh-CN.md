@@ -2,7 +2,7 @@
 
 [English](chatgpt.md) · [README](../README.zh-CN.md)
 
-本指南区分已经观察到的 ChatGPT 界面流程与尚未完成的授权验收。2026-10-07 实测可以进入添加表单，但 ChatGPT 在创建时返回 `Custom apps aren't allowed in this context. Check your workspace permissions or security settings`，因此本次没有完成 ChatGPT 连接。Agenvo CLI 的 OAuth/MCP 验收通过不能代替 ChatGPT 端验收。
+2026-10-07 实测已创建并安装 Agenvo 插件，进入 Connect Agenvo 授权弹窗；OAuth 连接和实际工具调用尚未完成。早先创建被拒绝，用户删除旧 Siyin MCP 和插件后再次创建成功，但不能据此断言平台存在数量限制。Agenvo CLI 的 OAuth/MCP 验收不能代替 ChatGPT 端验收。
 
 ## 前提
 
@@ -42,7 +42,9 @@ ChatGPT 账户或工作区必须允许添加自定义 MCP。界面会随账户�
 
 ## 创建获准后的授权步骤
 
-以下是 Agenvo 已支持的客户端授权流程，**尚未在本次 ChatGPT 创建流程中走通**。如果 ChatGPT 打开 Relay 的 `/authorize?...` 页面，将该完整地址交给所有者 CLI 检查：
+创建成功后，ChatGPT 显示 **Connect Agenvo**，点击 **Continue to Agenvo** 发起连接。本次该按钮恢复可点击状态，但没有打开授权页。浏览器诊断显示 ChatGPT 自身的 `mfa_requirement` 请求收到 HTTP 403，响应为 Cloudflare managed challenge HTML。这个请求发生在跳转到 Agenvo 之前，不能把它当成 Agenvo OAuth 拒绝，也不能据此认定用户尚未开启 MFA。应在原浏览器完成 ChatGPT 要求的安全验证后，从已创建插件继续连接，不要重新创建插件或关闭 MFA。
+
+以下是 Agenvo 已支持的客户端授权流程，**尚未在本次 ChatGPT 流程中走通**。如果 ChatGPT 打开 Relay 的 `/authorize?...` 页面，将该完整地址交给所有者 CLI 检查：
 
 ```sh
 agenvo client inspect 'AUTHORIZATION_URL' --origin https://YOUR_RELAY
