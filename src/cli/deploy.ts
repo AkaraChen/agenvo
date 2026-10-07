@@ -1,8 +1,9 @@
-import { spawn } from "node:child_process";
+import { spawn, execFile } from "node:child_process";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { promisify } from "node:util";
 import { Fault } from "../protocol/index.js";
 import { provisionOwnerKey, ownerKeyPath } from "./owner-key.js";
 const require = createRequire(import.meta.url);
@@ -59,14 +60,20 @@ export async function deploy(options: Record<string, string | boolean>) {
     dirname(require.resolve("wrangler/package.json")),
     "bin/wrangler.js",
   );
+  let deploymentOutput = "";
   await new Promise<void>((done, reject) => {
     const child = spawn(
       process.execPath,
       [wrangler, "deploy", "--config", configPath],
-      { stdio: "inherit" },
+      { stdio: ["ignore", "pipe", "inherit"] },
     );
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      process.stdout.write(chunk);
+      deploymentOutput = (deploymentOutput + chunk).slice(-65536);
+    });
     child.on("error", reject);
-    child.on("exit", (code) =>
+    child.on("close", (code) =>
       code === 0
         ? done()
         : reject(
@@ -77,8 +84,24 @@ export async function deploy(options: Record<string, string | boolean>) {
           ),
     );
   });
+  const versionId = deploymentOutput.match(
+    /Current Version ID:\s+([0-9a-f-]{36})/,
+  )?.[1];
+  if (!versionId)
+    throw new Fault(
+      "deployment_metadata_unavailable",
+      "Worker uploaded, but Wrangler did not return its version ID. Retain the manifest and inspect the deployment before retrying.",
+    );
+  const { stdout } = await promisify(execFile)(
+    process.execPath,
+    [wrangler, "versions", "view", versionId, "--config", configPath, "--json"],
+    { maxBuffer: 1024 * 1024 },
+  );
+  bindDeploymentResources(config, JSON.parse(stdout));
+  await writeFile(configPath, JSON.stringify(config, null, 2) + "\n");
   return {
     origin,
+    versionId,
     config: configPath,
     pairingKey: await ownerKeyPath(origin),
     access: {
@@ -95,4 +118,29 @@ export async function deploy(options: Record<string, string | boolean>) {
       next: "Use agenvo connect --approve on the owner machine, pairing approve for remote devices, and client login for browserless OAuth. Cloudflare Access is optional for browser administration; public MCP/OAuth/device endpoints must stay outside Access.",
     },
   };
+}
+
+// Wrangler auto-provisioning may not rewrite a generated deployment manifest.
+// Pin the resources from the uploaded version so upgrades retain OAuth state.
+export function bindDeploymentResources(config: any, version: any) {
+  const bindings = version?.resources?.bindings;
+  if (!Array.isArray(bindings))
+    throw new Fault("deployment_metadata_unavailable");
+  const resolved = (config.kv_namespaces ?? []).map((binding: any) => {
+    const actual = bindings.find(
+      (b: any) => b.type === "kv_namespace" && b.name === binding.binding,
+    );
+    if (
+      typeof actual?.namespace_id !== "string" ||
+      !/^[a-f0-9]{32}$/.test(actual.namespace_id)
+    )
+      throw new Fault("deployment_metadata_unavailable");
+    if (binding.id && binding.id !== actual.namespace_id)
+      throw new Fault(
+        "deployment_binding_mismatch",
+        "Uploaded KV namespace differs from the saved manifest; no resource identifiers were overwritten.",
+      );
+    return { ...binding, id: actual.namespace_id };
+  });
+  config.kv_namespaces = resolved;
 }
