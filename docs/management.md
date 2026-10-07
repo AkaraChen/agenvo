@@ -68,13 +68,13 @@ For Codex, the first observation resumes and subscribes to the Thread if this co
 
 For Herdr, each observation actively queries current Agent state and reads a bounded terminal snapshot, without needing earlier `get` or `read` calls. `lines` defaults to 80, up to 500. The events describe sampled state and output, not a terminal delta stream; transitions between polls can be missed. A pending startup can be observed, but output is unavailable until it becomes live. When the response supplies a live reference, use it for subsequent operations and start a new observation cursor.
 
-The per-instance journal retains up to 256 entries within 512 KiB. Events are filtered before returning a Thread page; oversized entries are marked `truncated`. Eviction conservatively reports a gap even if discarded events belonged to another Thread. Connection reset clears the journal. After rediscovery, a Codex Thread's previous cursor reports `gap: true`; a cursor cannot reconstruct lost events. Neither backend's observation buffer is a durable task history.
+Observations use a bounded in-memory buffer. Oversized events are marked `truncated`; eviction or connection reset can return `gap: true`, even if other Threads caused the eviction. Use current state and native history to recover context: a cursor cannot reconstruct lost events.
 
 Use `management.threads.get` for metadata only. Use `management.threads.read` for native turn history (Codex) or a terminal snapshot (Herdr). Codex detailed item pagination remains available through native `thread/items/list`, using native IDs. Empty, ephemeral or unsupported history can fail explicitly; a new Codex thread may not materialize until its first message.
 
 ## Interrupt and answer requests
 
-`management.threads.interrupt` takes only `threadRef`. Codex resolves the latest native turn with a bounded metadata query, then sends one interruption request bound to that turn. No active execution returns `no_active_execution` without sending an interrupt. An unsupported native history query returns its error. If the turn changes before interruption, the native mismatch is returned; Agenvo does not retarget or retry. `interruption: requested` is a request confirmation: observe the native completion event for the actual outcome.
+`management.threads.interrupt` takes `threadRef` and requests interruption of the current Codex turn. No active turn returns `no_active_execution`; an unavailable history query returns its error. If the turn changes before interruption, Agenvo returns the native mismatch without retargeting or retrying. `interruption: requested` is a request confirmation: observe the native completion event for the actual outcome.
 
 Precise same-turn input is available through native `turn/steer` with `threadId` and `expectedTurnId`. Exact turn interruption remains available through native `turn/interrupt`. Herdr does not advertise Thread interruption; terminal key operations retain their native semantics.
 
@@ -87,11 +87,3 @@ Codex creation, resume and input always apply `danger-full-access` and `approval
 Codex `threads.resume` reloads and subscribes without sending input. `archive` and `unarchive` change visibility, not cancellation or destruction. Attach mode disconnects without stopping the independent app-server. Managed-stdio owns its explicitly configured child process. Herdr owns its own service lifecycle.
 
 After `unknown`, inspect native state before deciding whether another write is needed. Native turn IDs, request IDs and cursors are not idempotency keys. Agenvo does not automatically replay writes after disconnect. Check outputs and deliverables to assess task success.
-
-## Upgrade an existing Connector
-
-The three MCP tools and protocol 1 envelope remain compatible with existing Relays. Old Connectors do not advertise `managementVersion`; use their native methods. The common management API is not yet released: its previous Agent/Run method names are replaced without compatibility aliases. Re-read `instance_describe` after updating.
-
-Legacy Codex `policy` fields are discarded on configuration load; `--sandbox` and `--approval-policy` CLI flags are removed. Descriptors include `execution: full-access`, changing their scope fingerprint. Approve an updated instance fingerprint through the owner CLI when restarting an upgraded Connector. Remote-access authentication is separate from disabled execution approvals. Installing code does not restart production or desktop services.
-
-Herdr `agent.start` accepts Codex, Claude and Devin, whose explicit bypass flags are implemented. This narrows the previous launch-kind list; discovery still includes other existing Agent kinds.

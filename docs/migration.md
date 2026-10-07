@@ -1,44 +1,33 @@
-# Migrating from Siyin
+# Upgrade older installations
 
-[简体中文](migration.zh-CN.md)
+[简体中文](migration.zh-CN.md) · [README](../README.md)
 
-Agenvo is the new name of the Siyin MCP relay. This repository continues the relay's history. The unrelated earlier Agenvo project is preserved in [agenvo-legacy](https://github.com/Xuanwo/agenvo-legacy); its binaries and configuration are not compatible with this relay. Build this checkout and inspect `node dist/cli.js --help` before replacing any existing `agenvo` command.
+Use this guide for installations created under the Siyin name or the former owner-key authentication flow. New installations can follow the deployment guides directly.
 
-## New installations
+## Connector
 
-Use `agenvo`, `AGENVO_CONFIG_DIR` (default `~/.config/agenvo`), and the Agenvo deployment guides. Copy `wrangler.jsonc` to a private local manifest; the VPS Compose domain variable is `AGENVO_DOMAIN`. Connector user services use the `io.agenvo.connector.` prefix.
-
-## Existing installations
-
-Renaming a repository does not upgrade a deployed relay or restart a Connector. Keep your existing deployment running until you choose an upgrade window. Building the new checkout does not modify installed services.
-
-Keep the same origin, device configuration, runtime paths, state directory, and Cloudflare resource IDs. The three MCP tools and protocol version 1 are unchanged. Wire headers, heartbeat messages, `siyin.describe`, serialized fault names, the `SiyinRelay` Durable Object class, and the VPS `siyin.sqlite` filename retain their existing identities. These strings are compatibility identifiers, not unfinished branding changes.
-
-### Owner and Connector configuration
-
-Explicitly select the existing configuration directory:
+Select the old configuration explicitly; Agenvo does not move it automatically:
 
 ```sh
 export AGENVO_CONFIG_DIR="$HOME/.config/siyin"
 node /absolute/path/to/agenvo/dist/cli.js status --json
 ```
 
-Configuration selection is `AGENVO_CONFIG_DIR`, then the legacy `SIYIN_CONFIG_DIR`, then `~/.config/agenvo`. Agenvo does not automatically discover or copy `~/.config/siyin`. Do not change the configured Codex homes or Herdr roots merely to rename the project.
+Configuration selection is `AGENVO_CONFIG_DIR`, then `SIYIN_CONFIG_DIR`, then `~/.config/agenvo`. Keep the configured Herdr roots and Codex homes.
 
-For a service upgrade, finish active managed Codex turns first. Use the old CLI and the old configuration directory to run `service uninstall`; this stops the old `io.siyin.connector.*` service. Then use the new CLI with `AGENVO_CONFIG_DIR` pointing to that same directory to run `service install`. A manually started Connector must also be stopped before replacement. Never run both services against the same configuration. Herdr itself remains independently running; stopping a managed Codex Connector stops its managed processes. If the old CLI is unavailable, stop and remove its exact launchd/systemd unit before installing the new service.
+Finish managed Codex turns before replacing the Connector: stopping it stops its managed processes, but leaves independent Herdr and attached Codex servers running. Use the old CLI with the old configuration to run `service uninstall`, then the new CLI with the same configuration to run `service install`. If the old CLI is unavailable, remove its exact `io.siyin.connector.*` launchd/systemd unit first. Never run two Connectors against one configuration.
 
-### Cloudflare
+Codex now always uses full access. Old `policy` fields are discarded; `--sandbox` and `--approval-policy` are unsupported. Approve changed instance fingerprints in `/admin`, then re-read `instance_describe`. Connectors without `managementVersion` support native methods only. Unreleased `agents.*` and `runs.*` methods have been replaced by `management.threads.*`. Herdr new launches support Codex, Claude and Devin; other existing Agent kinds remain discoverable.
 
-Preserve the Worker name, ORIGIN, KV ID, DO binding and migration history. Point the old manifest's `main` at the new checkout's `src/relay/worker.ts`. Remove `OWNER_PUBLIC_KEY`, `OWNER_EMAIL`, `ACCESS_ISSUER` and `ACCESS_AUD`, and set `secrets.required` to `["ADMIN_SECRET"]`. Inject the new administrator key with Wrangler secrets and deploy with `npx wrangler deploy --config EXISTING_MANIFEST`. Remove old Access login interception and verify built-in login at `/admin`.
+## Relay
 
-Do not recreate storage for an upgrade. With the same ORIGIN, existing device credentials and OAuth grants remain valid; owner signing keys are no longer accepted. A domain change is a separate migration requiring client reconfiguration and acceptance.
+Keep the origin and persistent state to retain device credentials and OAuth grants. Administrator authentication now uses a shared secret; old owner signing keys are no longer accepted.
 
-### Single VPS
+- **Cloudflare:** preserve the Worker name, KV ID, DO binding and migration history. Point the manifest's `main` to the new checkout's `src/relay/worker.ts`. Remove `OWNER_PUBLIC_KEY`, `OWNER_EMAIL`, `ACCESS_ISSUER` and `ACCESS_AUD`; set `secrets.required` to `["ADMIN_SECRET"]`. Set that secret with Wrangler and deploy using the existing manifest. Remove any old Access login interception and verify `/admin`.
+- **VPS:** stop the Relay and back up the entire data directory. Keep the origin, data path, Compose project/volumes and service user. Remove `ownerPublicKey` from Relay JSON, supply `AGENVO_ADMIN_SECRET` through the [deployment environment](deployment-vps.md), and restart using the new executable.
 
-Stop the old Relay and back up the full state directory before switching the executable. Reuse the existing Relay JSON configuration, origin, data directory, and `siyin.sqlite` file, including its WAL/SHM files. Only one process may own the database. When replacing a Compose checkout, preserve the Compose project name and volume mappings so it mounts the original data and Caddy volumes; set `AGENVO_DOMAIN` to the existing domain. For systemd, update the installed unit's executable path without changing its user or state permissions. The new `agenvo.service` template is intended for new installations, not a replacement for an existing deployment's paths.
+Do not rename the `SiyinRelay` DO class or `siyin.sqlite` database; they remain storage compatibility identifiers. There is no automatic Cloudflare/VPS state migration.
 
-After upgrading, check `/health`, inspect `agenvo admin state --origin https://YOUR_EXISTING_RELAY`, and verify `instances_list` from the existing MCP client. The health response now identifies the service as `agenvo`. Check native state before retrying any write whose result became uncertain during the upgrade.
+Use Wrangler/Compose/systemd for deployment and the MCP client's browser OAuth flow for login. The old `agenvo deploy` and `agenvo client` commands are no longer available. Retire old owner key files after verifying `/health`, administrator login and `instances_list` from your MCP client.
 
-## Administrator authentication upgrade
-
-For VPS, remove `ownerPublicKey` from the JSON configuration, set `AGENVO_ADMIN_SECRET` in the process environment and restart. Preserve other configuration and the data directory. Administrators sign in through the browser; explicit CLI administration uses the same key in its environment. `agenvo deploy` and `agenvo client login/inspect/approve/call` have been removed: use platform deployment tools and the original MCP client's browser OAuth flow. Old owner key files are not deleted automatically; archive or remove them securely after accepting the upgrade.
+For a domain change, update Connector URLs and client configuration, then [reconnect ChatGPT](chatgpt.md). Verify the new connection before deleting the old deployment. Inspect native state before repeating any write interrupted by the upgrade.

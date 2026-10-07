@@ -68,13 +68,13 @@ Codex 首次观察未订阅的会话时，通过原生 resume 加载并订阅。
 
 Herdr 每次观察都会主动查询 Agent 状态并读取有界终端快照，无需先调用 `get` 或 `read`。`lines` 默认 80，最多 500。事件是状态和输出的采样，不是终端增量流；两次轮询之间的变化可能遗漏。启动中的引用可以观察，但活跃后才有输出。结果提供活跃引用后，后续操作使用新引用，并重新开始观察游标。
 
-每个实例的内存记录最多 256 条、512 KiB。返回分页前按 Thread 筛选，过大事件标记 `truncated`。记录淘汰时保守报告缺口，即使丢弃事件属于其他 Thread。连接重建清空记录；重新发现 Codex Thread 后，旧游标返回 `gap: true`，不能恢复丢失事件。观察缓冲不构成持久任务历史。
+观察记录使用有界内存缓冲。过大事件标记 `truncated`；淘汰或连接重建可能返回 `gap: true`，即使淘汰由其他 Thread 引起。此时结合当前状态和原生历史恢复上下文，游标不能重建丢失事件。
 
 只看元数据可以用 `management.threads.get`。按需读取历史或快照使用 `management.threads.read`：Codex 返回原生轮次分页，Herdr 返回终端快照。Codex 详细 item 分页继续用原生 `thread/items/list` 和原生 ID。空会话、临时会话或不支持的历史读取会明确失败；新 Codex thread 可能要到首条消息后才持久化。
 
 ## 中断与回答请求
 
-`management.threads.interrupt` 只需要 `threadRef`。Codex 先用有界元数据查询定位最新轮次，再发送一次绑定该轮次的中断。无活跃执行返回 `no_active_execution`，不发送中断；原生历史查询不可用时返回其错误。如果中断前轮次已经变化，保留原生拒绝，不重新选择下一轮，也不重试。`interruption: requested` 只说明请求已确认，实际结果需要观察原生完成事件。
+`management.threads.interrupt` 接受 `threadRef`，请求中断当前 Codex 轮次。无活跃轮次时返回 `no_active_execution`；原生历史查询不可用时返回其错误。如果中断前轮次已经变化，返回原生拒绝，不重新选择下一轮或重试。`interruption: requested` 只说明请求已确认，实际结果需要观察原生完成事件。
 
 精确向指定活跃轮次追加输入，使用原生 `turn/steer` 的 `threadId` 和 `expectedTurnId`；精确轮次中断可用原生 `turn/interrupt`。Herdr 不声明 Thread 中断能力，终端按键仍保持原生语义。
 
@@ -87,11 +87,3 @@ Codex 创建、恢复和提交输入始终使用 `danger-full-access`、`approva
 Codex `threads.resume` 加载并订阅，不发送输入；`archive`、`unarchive` 改变可见性，不表示取消或销毁。attach 模式断开时不停止独立 app-server，managed-stdio 管理显式配置的子进程。Herdr 自己管理服务生命周期。
 
 调用结果为 `unknown` 时，先检查原生状态，再判断是否重新发送。原生 turn ID、请求 ID 和游标都不是幂等键。断线后不自动重放写操作。业务成功需要检查输出和交付物。
-
-## 升级已有 Connector
-
-三个 MCP 工具和 protocol 1 信封继续兼容现有 Relay。旧 Connector 不声明 `managementVersion`，继续使用原生方法。共同管理接口尚未发布，本次直接替换此前的 Agent/Run 方法名，不保留兼容别名。升级后重新读取 `instance_describe`。
-
-旧 Codex `policy` 字段在加载时丢弃，CLI 移除 `--sandbox` 和 `--approval-policy`。实例描述包含 `execution: full-access`，会改变授权指纹；重启升级后的 Connector 时，通过 owner CLI 批准新指纹。远程访问认证与已禁用的执行审批是不同机制。安装代码不会重启生产或桌面服务。
-
-Herdr `agent.start` 接受已实现显式 bypass 参数的 Codex、Claude 和 Devin。这收紧了此前可启动的类型列表，但不隐藏其他已有 Agent。

@@ -2,7 +2,7 @@
 
 [English](deployment-cloudflare.md) · [README](../README.zh-CN.md)
 
-使用 Wrangler 部署 Worker、SQLite Durable Object 和 OAuth KV，无需常驻容器。Agenvo CLI 不负责部署。准备 Cloudflare 账号、Node.js 24.13+，在仓库运行 `npm ci`。
+使用 Wrangler 部署 Worker、SQLite Durable Object 和 OAuth KV，无需常驻容器。准备 Cloudflare 账号、Node.js 24.13+，在仓库运行 `npm ci`。
 
 ## 配置与部署
 
@@ -24,14 +24,12 @@ npx wrangler deploy --config wrangler.local.json
 curl --fail https://relay.example.com/health
 ```
 
-打开 `https://relay.example.com/admin`，使用该密钥登录，随后[配对设备](usage.zh-CN.md)和[连接 ChatGPT](chatgpt.zh-CN.md)。无需邮箱、Access 应用、所有者公私钥或首次设置链接。不要在 MCP、OAuth、配对或 Connector 端点前放置额外登录墙。
-
-平台已配置 API token 时可在 CI 中调用 Wrangler；管理员密钥仍通过平台 secret 注入。自动化管理可显式提供 `AGENVO_ADMIN_SECRET`，详见使用指南。ChatGPT 的首次连接仍在浏览器登录并批准。
+打开 `https://relay.example.com/admin`，使用该密钥登录，随后[配对设备](usage.zh-CN.md)和[连接 ChatGPT](chatgpt.zh-CN.md)。不要在 MCP、OAuth、配对或 Connector 端点前放置额外登录墙。
 
 ## 升级与恢复
 
-使用原来的 manifest 和资源 ID 重新运行 `wrangler deploy`。普通升级保持 ORIGIN 不变；域名迁移需重新配置客户端并检查 Connector 地址。更改管理员密钥会使网页会话失效，但不会撤销已批准的设备或 OAuth grant。需要阻止这些访问时，在管理页分别撤销。
+使用原来的 manifest 和资源 ID 运行 `npx wrangler deploy --config wrangler.local.json`。普通升级保持 ORIGIN 不变；域名迁移需重新配置客户端并检查 Connector 地址。更改管理员密钥会使网页会话失效，但不会撤销已批准的设备或 OAuth grant。需要阻止这些访问时，在管理页分别撤销。
 
-DO 保存配对、网页会话和路由授权；KV 保存 OAuth Provider 状态。备份部署配置并保护 secret。首版不提供 CF/VPS 之间的状态迁移工具。删除存储需要重新配对和授权；撤销不停止原生任务。
+DO 保存配对、网页会话和路由授权；KV 保存 OAuth Provider 状态。备份部署配置并保护 secret。首版不提供 CF/VPS 之间的状态迁移工具。删除存储需要重新配对和授权。
 
-验收需要公网 `/health`、网页登录、设备配对，以及目标 MCP 客户端实际调用 `instances_list`。本地 workerd 测试不能代替你的云账号与客户端验收。
+检查 `/health`、登录并配对设备，再从 MCP 客户端调用 `instances_list`，确认客户端能访问设备。

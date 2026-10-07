@@ -1,6 +1,6 @@
 # Agent 管理服务的统一接口
 
-状态：Thread 管理接口已实现，并在个人 Cloudflare 部署及两台 Herdr Connector 上启用；外部客户端切换仍待验收。Herdr 0.9.3 和 Codex CLI 0.160.1 的原生接口基线见[核对记录](agent-management-interface-audit.zh-CN.md)，面向调用者的完整流程见[中文使用说明](../management.zh-CN.md)。
+面向调用者的流程见[管理 Agent 会话](../management.zh-CN.md)，适配器的原生版本约束见[接口依据](agent-management-interface-audit.zh-CN.md)。
 
 ## 目标与对象
 
@@ -76,32 +76,18 @@ Connector 使用一个有界记录，而不是为无限多个 Thread 建立持�
 
 ## 中断、交互与故障
 
-Codex Thread 中断先以 thread/turns/list 查询最新一条轮次元数据（desc、limit: 1、itemsView: notLoaded）。没有 inProgress 轮次时返回 no_active_execution，查询失败时不派发中断。取得 turnId 后只发送一次 turn/interrupt；不能在原生拒绝或超时后重选当前轮次，避免误中断下一轮。响应只确认请求，完成事件才说明实际结果。原生 turn ID 校验在真实 Codex 两种连接模式下验证。
+Codex Thread 中断先以 thread/turns/list 查询最新一条轮次元数据（desc、limit: 1、itemsView: notLoaded）。没有 inProgress 轮次时返回 no_active_execution，查询失败时不派发中断。取得 turnId 后只发送一次 turn/interrupt；不能在原生拒绝或超时后重选当前轮次，避免误中断下一轮。响应只确认请求，完成事件才说明实际结果。
 
 Herdr 不支持这一中断契约；Esc/Ctrl+C 继续作为原生终端操作，不伪装成任务级取消。archive、interrupt 和关闭 workspace 是不同动作。Relay 或 Connector 断开不隐式取消原生工作。
 
 Codex observe 返回该 Thread 的待回应请求摘要和 interactionRef；完整内容通过 interactions.read 获取。interactions.list 按 Thread 筛选后分页，提供原生 response schema。其分页游标与观察游标不同。动态工具调用和用户问题必须按实际 schema 回答；权限请求自动处理。其他客户端已回答、轮次结束或连接重建时，旧交互引用失效。回复成功可能只代表已提交，不能据此证明赢得原生多客户端竞争。
 
-所有 Codex 创建、恢复和输入路径，包括 attach 模式与原生入口，强制 danger-full-access / never，权限请求自动回答。旧权限上限与配置白名单移除。Herdr 已有终端保持自身设置；支持的新启动加入原生 bypass 参数。设备配对、远程访问授权与实例指纹仍然有效，它们不属于 Agent 执行审批。
+所有 Codex 创建、恢复和输入路径，包括 attach 模式与原生入口，强制 danger-full-access / never，权限请求自动回答。Herdr 已有终端保持自身设置；支持的新启动加入原生 bypass 参数。设备配对、远程访问授权与实例指纹仍然有效，它们不属于 Agent 执行审批。
 
 `Outcome.execution` 描述调用交付状态：not_started、starting、accepted、rejected、unknown，与 Thread 活动和原生轮次结果分开。只有确定没有派发时才能说 not_started；断线或超时造成的执行不确定性保持 unknown。Thread/turn ID、调用关联 ID 和观察游标都不是幂等键。没有原生去重契约就不重放写操作。
 
-## 实现与迁移
+## 实现归属
 
-共同方法注册、输入校验和引用由 management.ts 维护；有界记录由 observations.ts 维护；HerdrManagement 与 CodexManagement 各自负责原生映射、观察及控制，不让 Relay 维护执行状态。统一与原生方法复用原适配器传输和执行配置。
+共同方法注册、输入校验和引用由 `management.ts` 维护；有界观察记录由 `observations.ts` 维护。`HerdrManagement` 与 `CodexManagement` 负责原生映射、观察及控制，统一方法和原生方法复用适配器传输与执行配置。Relay 只路由调用，不保存另一套任务状态。
 
-共同管理接口尚未发布，直接用 threads.* 替换先前内部实现，不保留 agents.*、runs.* 或 observations.list 兼容别名。同步修改 MCP 提示、文档和测试。既有三个 MCP 工具、原生方法及 protocol 1 信封保持不变；managementVersion 缺省的旧 Connector 继续按原生方法使用。没有存量任务数据迁移。
-
-实例描述中的 execution: full-access 改变旧授权指纹，实际升级重启时需要通过现有 owner CLI 批准更新。此次代码重构不自动重启日常 Connector、Herdr、Codex 或生产 Relay。
-
-## 实现与已验证范围
-
-验证沿公共 Thread 接口覆盖创建、输入、单独观察、当前执行中断和生命周期操作，同时保留原生 steer 测试。固定的协议测试覆盖跨 Thread 事件筛选、游标误用、分页和缺口、交互归属、错误传播以及中断竞争时不重选目标。原生版本为 Herdr 0.9.3、Codex CLI 0.160.1。
-
-真实 Codex 使用隔离 HOME 与本地保持打开的模型端点，验证 managed-stdio 和 attach-unix 两种模式、第二客户端发现及 observe 自动订阅、原生完成通知和错误 turn ID 拒绝。Herdr 使用独立测试服务验证另一个 Connector 创建的 Agent 可发现，并直接通过 observe 读取状态和终端。测试不连接日常会话，不调用外部模型。Worker/VPS 集成测试覆盖 Relay；VPS 路径从 MCP 经过 HTTP、WebSocket 到真实适配器协议 fixture。
-
-暂不承诺原生忙碌输入的所有分支、所有多客户端交互类型、Herdr 两次采样间的完整事件或跨 Connector 重启的事件恢复。Linux systemd 测试在 macOS 跳过；本地协议和模型 fixture 不证明外部真实模型、组织策略或所有 Agent CLI 的完整行为。
-
-2026-10-07 Thread 重构验收：25 项单元测试、3 项 Worker/VPS 集成测试、4 项真实适配器测试通过，共 32 项；1 项 Linux systemd 测试因 macOS 环境跳过。类型检查、构建、格式检查、差异空白检查及文档本地链接检查通过。
-
-同日生产部署验证了 Cloudflare 公网 OAuth/MCP、CLI 配对和授权、token 刷新、Mac 与 Linux Connector 常驻连接，以及 Mac 活跃 Herdr Thread 的状态和终端观察。Linux 设备没有活跃 Agent，因此只验证了实例在线、服务发现和空 Thread 列表，未声称验证其活跃任务观察。第二次部署保留原 KV 和 OAuth 授权。Codex 生产接入未启用；原生日常服务未重启。部署验收客户端不代表外部助手已切换，旧入口须保留到外部客户端验收完成。
+回归测试需要保护引用归属、游标缺口、自动订阅的副作用、中断竞争和原生错误传播。测试入口与隔离要求见[贡献指南](../../CONTRIBUTING.zh-CN.md)。

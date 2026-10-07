@@ -23,7 +23,9 @@ npm run test:adapters
 npm run test:e2e
 ```
 
-These checks create isolated test environments. Linux user-service coverage additionally needs a working systemd user manager. Read the test prerequisites and skipped-test output before claiming native coverage. Never point tests at an everyday runtime or production relay. The Codex schema generator (`scripts/import-codex-schema.py`) must be run against the explicitly supported CLI version, followed by execution-settings and adapter validation.
+Native tests use isolated Herdr/Codex environments and a local model endpoint, without external inference. `test:e2e` can use an isolated `AGENVO_E2E_CODEX_HOME`; never point it at an everyday home or production service. Linux user-service tests require a systemd user manager; check skipped-test output for actual coverage.
+
+When updating Codex schemas, run `scripts/import-codex-schema.py` against the supported CLI version and validate execution settings and adapters.
 
 Source responsibilities:
 
@@ -36,5 +38,3 @@ Source responsibilities:
 New deployment hosts must reuse the routing core and preserve authorization, epoch and uncertain-execution semantics. Native adapter additions require discoverable schemas and explicit capability and interaction semantics. Do not add retry mechanisms that can duplicate writes.
 
 Before sending a change, review the diff for private paths and credentials, run relevant tests, and state validation gaps. Use commits that each express one coherent behavior. Do not include generated schema or dependency updates without explaining their source and necessity.
-
-Native tests verify isolated Herdr discovery and observation, plus Codex full-access thread creation and turn control. Codex turn tests use a local held-open model endpoint to exercise real steering, interruption, history, resume and archive without external inference. Deterministic fixtures cover automatic permission responses, user questions and peer resolution. `npm run test:e2e` optionally uses an explicitly supplied isolated `AGENVO_E2E_CODEX_HOME`; never point it at an everyday home.

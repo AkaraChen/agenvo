@@ -7,7 +7,7 @@ Agenvo grants remote access to local coding runtimes. Deploy it only for an owne
 ## Trust boundaries
 
 - One owner per deployment. Every authorized MCP client can access every approved instance, including later approvals. Multi-tenant hosting and mutually untrusted clients are unsupported.
-- Inject the administrator key through platform secrets or a protected process environment; use at least 32 random bytes. It is separate from OAuth tokens and device credentials. Ordinary Connectors never store it. Browser login creates a seven-day Secure, HttpOnly, SameSite=Lax session; writes require the exact Origin. Logout revokes that session and key rotation invalidates all browser sessions. Revoke device credentials and client grants separately. Protect configuration, credentials and backups.
+- Inject the administrator key through platform secrets or a protected process environment; use at least 32 random bytes. It is separate from OAuth tokens and device credentials. Ordinary Connectors never store it. Browser sessions last seven days. Logout revokes that session and key rotation invalidates all browser sessions. Revoke device credentials and client grants separately. Protect configuration, credentials and backups.
 - Public endpoints require HTTPS/WSS. VPS HTTP listeners belong behind a trusted HTTPS proxy and must not be directly exposed. Host checks do not replace TLS.
 - Device approval requires comparison with the device's own fingerprint. Changing an instance scope requires a fresh approval.
 - A compromised Relay operator can observe traffic and alter authorization. This is not end-to-end encryption against the Relay host.
@@ -18,6 +18,6 @@ Avoid logging OAuth redirects, bearer tokens, native output or approval contents
 
 ## Reporting a vulnerability
 
-If this repository's host provides private vulnerability reporting, use that channel. Otherwise contact the maintainer privately through the contact information on their profile to establish a secure channel before sharing details. Do not open a public issue containing credentials, exploit details or private runtime output. Include the affected revision, deployment target, prerequisites and a minimal safe reproducer. No response-time or bounty commitment is implied.
+If this repository's host provides private vulnerability reporting, use that channel. Otherwise contact the maintainer privately through the contact information on their profile to establish a secure channel before sharing details. Do not open a public issue containing credentials, exploit details or private runtime output. Include the affected revision, deployment target, prerequisites and a minimal safe reproducer.
 
-This early release has no independent security audit. Run `npm audit`, keep the supported runtimes current within tested compatibility, and review updates before production rollout. A dependency override for `sharp` fixes the transitive Wrangler image-decoding advisory; remove it when Wrangler's supported dependency range includes a fixed version.
+This early release has no independent security audit. Run `npm audit`, keep the supported runtimes current within tested compatibility, and review updates before production rollout.

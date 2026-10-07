@@ -23,7 +23,9 @@ npm run test:adapters
 npm run test:e2e
 ```
 
-测试创建隔离环境。Linux 用户服务覆盖还需要可用的 systemd 用户管理器。声明原生覆盖前应核对测试条件与跳过输出，不能让测试连接日常运行时或生产 Relay。Codex schema 生成脚本 `scripts/import-codex-schema.py` 必须针对明确支持的 CLI 版本运行，随后验证执行配置与适配器。
+原生测试使用隔离 Herdr/Codex 环境和本地模型端点，不调用外部模型。`test:e2e` 可使用独立的 `AGENVO_E2E_CODEX_HOME`，不能指向日常 HOME 或生产服务。Linux 用户服务测试需要 systemd 用户管理器；检查跳过输出以确认实际覆盖。
+
+更新 Codex schema 时，使用 `scripts/import-codex-schema.py` 指定支持的 CLI 版本，并验证执行配置与适配器。
 
 源码职责：
 
@@ -36,5 +38,3 @@ npm run test:e2e
 新增部署宿主应复用路由核心，保留授权、epoch 和执行结果不确定的语义。新增适配器需要可发现的 schema 和明确的能力与交互语义，不添加可能重复写入的自动重试。
 
 交付前检查私有路径与凭据，运行相关测试并说明验证缺口。每个 commit 表达一项连贯行为。生成的 schema 或依赖升级需说明来源和必要性。
-
-原生测试验证隔离 Herdr 的发现和观察，以及 Codex 的 full-access thread 创建和轮次控制。Codex 轮次测试使用保持打开的本地模型端点，验证真实的 steer、中断、历史、恢复和归档，不调用外部模型。确定性 fixture 覆盖自动权限响应、用户问题和其他客户端处理请求后的失效。`npm run test:e2e` 可选使用显式提供的隔离 `AGENVO_E2E_CODEX_HOME`，不能指向日常 HOME。

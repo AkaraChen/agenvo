@@ -4,7 +4,7 @@
 
 Agenvo gives MCP clients a common interface to services that manage coding agents on your own computers. A small, always-reachable relay forwards requests to outbound device connections. Tasks run on the device, in native Herdr or Codex environments.
 
-**Status:** early release, single owner per deployment. Herdr 0.9.3 and Codex CLI 0.160.1 are the tested adapter versions. Review the [security boundaries](SECURITY.md) before sharing a runtime.
+**Status:** early release, tested with Herdr 0.9.3 and Codex CLI 0.160.1.
 
 ```mermaid
 flowchart LR
@@ -20,18 +20,9 @@ flowchart LR
     B --> X["Codex app-server"]
 ```
 
-## What it does
+Three MCP tools let clients discover instances, create and manage Threads, send input, observe output, and interrupt, resume or archive where supported. Shared services include threads created by other clients.
 
-- Shares entire approved Agent management services, including work created by other clients.
-- Unifies Thread discovery, creation, input and observation, with supported interruption, history and interactions; native turn details remain available.
-- Runs Codex work in full access without execution approval prompts.
-- Exposes three MCP tools: `instances_list`, `instance_describe`, and `runtime_call`.
-- Pairs devices using a fingerprint confirmed by the owner; new or changed instance scopes need approval.
-- Preserves native task IDs and execution outcomes. An accepted call is not a completed task.
-- Reconnects devices without replaying writes. An uncertain result must be checked against native state.
-- Attaches to independently running Herdr servers. The Connector never starts or stops Herdr sessions.
-
-Agenvo manages access and translates Agent management operations. It does not provide a shell sandbox or infer business success from an idle agent. A permitted Herdr instance can execute commands as its local user. All authorized MCP clients can reach all approved instances in that deployment, including instances approved later.
+Each deployment has one owner. Authorized clients can access all approved instances, including later approvals. Codex uses full access without execution approval prompts. Herdr runs independently; the Connector attaches to it. Read the [security boundaries](SECURITY.md) before sharing a service.
 
 ## Start from source
 
@@ -45,32 +36,21 @@ npm run build
 node dist/cli.js --help
 ```
 
-Use `node /absolute/path/to/agenvo/dist/cli.js` in place of `agenvo` in the guides, or run `npm link` to install the local CLI. There is no published npm package required by these instructions.
+Use `node /absolute/path/to/agenvo/dist/cli.js` in place of `agenvo` in the guides, or run `npm link` to install the local CLI.
 
 1. Deploy a relay using [Cloudflare](docs/deployment-cloudflare.md) or a [single VPS](docs/deployment-vps.md).
 2. [Configure and pair a Connector](docs/usage.md) on each computer.
 3. Add `https://YOUR_RELAY/mcp` to an MCP client, then approve its OAuth request.
 
-| Deployment | Persistent state | Owner administration | Operations |
-| --- | --- | --- | --- |
-| Cloudflare | Durable Object SQLite, OAuth KV | Built-in browser login and management | Managed Worker, hibernating device sockets |
-| Single VPS | SQLite on a persistent local disk | Built-in browser login and management | One Node process, HTTPS proxy, backups |
-
-The VPS process stays running. Cloudflare does not require an always-on container. Neither target runs the coding agent in the relay.
+Cloudflare uses a Worker with hibernating device connections; it needs no always-on container. A VPS runs a persistent Node.js process with SQLite. Tasks execute on the devices.
 
 ## Documentation
 
-- [Migrating from Siyin](docs/migration.md) · [中文](docs/migration.zh-CN.md)
-
-- [Managing Agent threads](docs/management.md) · [中文](docs/management.zh-CN.md)
-- [Usage](docs/usage.md) · [中文](docs/usage.zh-CN.md)
-- [Connect ChatGPT](docs/chatgpt.md) · [中文](docs/chatgpt.zh-CN.md)
-- [VPS deployment](docs/deployment-vps.md) · [中文](docs/deployment-vps.zh-CN.md)
-- [Cloudflare deployment](docs/deployment-cloudflare.md) · [中文](docs/deployment-cloudflare.zh-CN.md)
-- [Security](SECURITY.md) · [中文](SECURITY.zh-CN.md)
-- [Contributing and tests](CONTRIBUTING.md) · [中文](CONTRIBUTING.zh-CN.md)
-- [Architecture and protocol design / 架构与协议设计](docs/design/architecture.zh-CN.md)
-- [Agent management design (Chinese)](docs/design/agent-management.zh-CN.md) · [Interface audit (Chinese)](docs/design/agent-management-interface-audit.zh-CN.md)
+- [Connect devices](docs/usage.md) · [Connect ChatGPT](docs/chatgpt.md)
+- [Manage Agent threads](docs/management.md)
+- [Cloudflare deployment](docs/deployment-cloudflare.md) · [VPS deployment](docs/deployment-vps.md)
+- [Security](SECURITY.md) · [Upgrade older installations](docs/migration.md)
+- [Contributing and tests](CONTRIBUTING.md) · [Architecture (Chinese)](docs/design/architecture.zh-CN.md) · [Management design (Chinese)](docs/design/agent-management.zh-CN.md)
 
 ## License
 

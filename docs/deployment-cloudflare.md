@@ -2,7 +2,7 @@
 
 [简体中文](deployment-cloudflare.zh-CN.md) · [README](../README.md)
 
-Deploy the Worker, SQLite Durable Object and OAuth KV with Wrangler. No always-on container is required. The Agenvo CLI does not deploy infrastructure. Prepare a Cloudflare account and Node.js 24.13+, then run `npm ci` in the checkout.
+Deploy the Worker, SQLite Durable Object and OAuth KV with Wrangler. No always-on container is required. Prepare a Cloudflare account and Node.js 24.13+, then run `npm ci` in the checkout.
 
 ## Configure and deploy
 
@@ -24,14 +24,12 @@ npx wrangler deploy --config wrangler.local.json
 curl --fail https://relay.example.com/health
 ```
 
-Open `https://relay.example.com/admin`, sign in with the key, then [pair devices](usage.md) and [connect ChatGPT](chatgpt.md). No email provider, Access application, owner key pair or initial setup link is required. Keep MCP, OAuth, pairing and Connector endpoints outside additional login walls.
-
-CI can invoke Wrangler using a preconfigured Cloudflare API token; inject the administrator key through platform secrets. Explicit administrator automation can use `AGENVO_ADMIN_SECRET`, as described in the usage guide. Initial ChatGPT authorization still uses browser login and consent.
+Open `https://relay.example.com/admin`, sign in with the key, then [pair devices](usage.md) and [connect ChatGPT](chatgpt.md). Keep MCP, OAuth, pairing and Connector endpoints outside additional login walls.
 
 ## Upgrade and recover
 
-Run `wrangler deploy` with the same manifest and resource IDs. Ordinary upgrades keep ORIGIN stable; domain migrations require updating clients and checking Connector URLs. Rotating the administrator key invalidates browser sessions, but does not revoke paired devices or OAuth grants. Revoke those independently in the management page when needed.
+Run `npx wrangler deploy --config wrangler.local.json` with the same manifest and resource IDs. Ordinary upgrades keep ORIGIN stable; domain migrations require updating clients and checking Connector URLs. Rotating the administrator key invalidates browser sessions, but does not revoke paired devices or OAuth grants. Revoke those independently in the management page when needed.
 
-The DO stores pairing, browser sessions and relay authorization; KV holds OAuth provider state. Back up the manifest and protect secrets. Automatic CF/VPS state migration is not supported. Deleting storage requires fresh pairing and consent. Revocation does not stop native work.
+The DO stores pairing, browser sessions and relay authorization; KV holds OAuth provider state. Back up the manifest and protect secrets. Automatic CF/VPS state migration is not supported. Deleting storage requires fresh pairing and consent.
 
-Acceptance requires public `/health`, browser login, device pairing and an actual `instances_list` call from the intended MCP client. Local workerd tests do not establish cloud-account or client acceptance.
+Verify `/health`, sign in, pair a device, and call `instances_list` from your MCP client to check that it can reach the device.
