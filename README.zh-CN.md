@@ -64,6 +64,7 @@ VPS 需要常驻 Node 进程；Cloudflare 不需要常驻容器。两种 Relay �
 
 - [管理 Agent 会话](docs/management.zh-CN.md) · [English](docs/management.md)
 - [使用指南](docs/usage.zh-CN.md) · [English](docs/usage.md)
+- [连接 ChatGPT](docs/chatgpt.zh-CN.md) · [English](docs/chatgpt.md)
 - [VPS 部署](docs/deployment-vps.zh-CN.md) · [English](docs/deployment-vps.md)
 - [Cloudflare 部署](docs/deployment-cloudflare.zh-CN.md) · [English](docs/deployment-cloudflare.md)
 - [安全边界](SECURITY.zh-CN.md) · [English](SECURITY.md)

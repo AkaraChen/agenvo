@@ -64,6 +64,7 @@ The VPS process stays running. Cloudflare does not require an always-on containe
 
 - [Managing Agent threads](docs/management.md) · [中文](docs/management.zh-CN.md)
 - [Usage](docs/usage.md) · [中文](docs/usage.zh-CN.md)
+- [Connect ChatGPT](docs/chatgpt.md) · [中文](docs/chatgpt.zh-CN.md)
 - [VPS deployment](docs/deployment-vps.md) · [中文](docs/deployment-vps.zh-CN.md)
 - [Cloudflare deployment](docs/deployment-cloudflare.md) · [中文](docs/deployment-cloudflare.zh-CN.md)
 - [Security](SECURITY.md) · [中文](SECURITY.zh-CN.md)
