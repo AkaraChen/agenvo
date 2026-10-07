@@ -20,4 +20,4 @@ Avoid logging OAuth redirects, bearer tokens, native output or approval contents
 
 If this repository's host provides private vulnerability reporting, use that channel. Otherwise contact the maintainer privately through the contact information on their profile to establish a secure channel before sharing details. Do not open a public issue containing credentials, exploit details or private runtime output. Include the affected revision, deployment target, prerequisites and a minimal safe reproducer.
 
-This early release has no independent security audit. Run `npm audit`, keep the supported runtimes current within tested compatibility, and review updates before production rollout.
+Agenvo has not been publicly released or independently security-audited. Run `npm audit`, keep the supported runtimes current within tested compatibility, and review updates before production rollout.

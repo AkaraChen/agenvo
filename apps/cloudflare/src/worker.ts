@@ -21,7 +21,7 @@ import {
   VERSION,
   PROTOCOL,
 } from "@agenvo/protocol";
-export { SiyinRelay } from "./relay.js";
+export { AgenvoRelay } from "./relay.js";
 
 const log = logger.child({ component: "worker" });
 

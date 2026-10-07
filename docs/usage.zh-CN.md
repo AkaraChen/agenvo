@@ -4,6 +4,8 @@
 
 以下命令假设 Relay 已部署到 `https://relay.example.com`。所有者与设备可以是不同电脑。`AGENVO_CONFIG_DIR` 选择本次安装的配置目录，Herdr 默认使用 `~/.config/agenvo/herdr`，Codex 使用 `~/.config/agenvo/codex-app-server`。每个 Connector 独立配对、持有凭据并安装服务；不要让两个 Connector 共享同一个目录或复制同一份凭据。
 
+连接器命令尚未安装时，先按[安装指南](installation.zh-CN.md)完成构建。
+
 ## 配置运行时
 
 先通过 Herdr 自身应用或服务独立启动 Herdr，再共享整个配置环境：

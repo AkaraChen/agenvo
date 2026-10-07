@@ -158,8 +158,8 @@ export async function run<T extends InstanceConfig>(
     const current = (socket = new WebSocket(url, {
       headers: {
         Authorization: "Bearer " + secret,
-        "Siyin-Device-Id": deviceId,
-        "Siyin-Protocol": String(PROTOCOL),
+        "Agenvo-Device-Id": deviceId,
+        "Agenvo-Protocol": String(PROTOCOL),
       },
       maxPayload: LIMITS.parse,
       handshakeTimeout: 10000,
@@ -185,7 +185,7 @@ export async function run<T extends InstanceConfig>(
           current.terminate();
           return;
         }
-        if (current.readyState === WebSocket.OPEN) current.send("siyin:ping");
+        if (current.readyState === WebSocket.OPEN) current.send("agenvo:ping");
       }, 30000);
     });
     current.on("unexpected-response", (_request, response) => {
@@ -204,7 +204,7 @@ export async function run<T extends InstanceConfig>(
     });
     current.on("message", async (raw) => {
       const text = raw.toString();
-      if (text === "siyin:pong") {
+      if (text === "agenvo:pong") {
         lastPong = Date.now();
         return;
       }
@@ -277,7 +277,7 @@ export async function run<T extends InstanceConfig>(
         if (!adapter.available) throw new Fault("runtime_unavailable");
         inFlight.add(p.requestId);
         outcome =
-          p.method === "siyin.describe"
+          p.method === "agenvo.describe"
             ? accepted(describe(adapter, p.params))
             : await adapter.call(p.method, p.params);
       } catch (error) {

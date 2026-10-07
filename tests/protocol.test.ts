@@ -16,7 +16,6 @@ const config = instanceConfigSchema.parse({
   cwd: "/work",
   home: "/home/codex",
   mode: "managed-stdio",
-  policy: {},
 });
 if (config.kind !== "codex") throw new Error();
 test("UTF-8 limits and cursor preserve complete items", async () => {

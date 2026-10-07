@@ -424,8 +424,8 @@ test(
       const ws = new WebSocket(base.replace("http:", "ws:") + "/connect", {
         headers: {
           Authorization: "Bearer " + secret,
-          "Siyin-Device-Id": deviceId,
-          "Siyin-Protocol": "1",
+          "Agenvo-Device-Id": deviceId,
+          "Agenvo-Protocol": "1",
         },
       });
       await new Promise<void>((resolve, reject) => {
@@ -527,7 +527,7 @@ test(
         ...args,
       });
       const packet = await received;
-      assert.equal(packet.method, "siyin.describe");
+      assert.equal(packet.method, "agenvo.describe");
       assert.deepEqual(packet.params, args);
       ws.send(
         JSON.stringify({
@@ -680,8 +680,8 @@ test(
         await mf.dispatchFetch("https://agenvo.test/connect", {
           headers: {
             Authorization: "Bearer " + secret,
-            "Siyin-Device-Id": deviceId,
-            "Siyin-Protocol": "1",
+            "Agenvo-Device-Id": deviceId,
+            "Agenvo-Protocol": "1",
           },
         })
       ).status,

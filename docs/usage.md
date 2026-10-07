@@ -4,6 +4,8 @@
 
 Commands below assume a deployed `https://relay.example.com`. The owner and devices can be different machines. `AGENVO_CONFIG_DIR` selects an installation; it defaults to `~/.config/agenvo/herdr` for Herdr and `~/.config/agenvo/codex-app-server` for Codex. Do not share this directory between simultaneous Connector processes.
 
+If the connector commands are not installed, follow [installation](installation.md) first.
+
 ## Configure a runtime
 
 Start Herdr independently using Herdr's own application/service, then share its entire configuration environment:

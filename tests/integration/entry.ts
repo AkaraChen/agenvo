@@ -2,11 +2,11 @@
 import { logs } from "../support/worker-logs.js";
 import { logger } from "@agenvo/logging";
 import worker, {
-  SiyinRelay as ProductionRelay,
+  AgenvoRelay as ProductionRelay,
 } from "../../apps/cloudflare/src/worker.js";
 import { sendWebhook } from "@agenvo/relay/webhook";
 import { mcp } from "@agenvo/relay/mcp";
-export class SiyinRelay extends ProductionRelay {
+export class AgenvoRelay extends ProductionRelay {
   async eventDiagnostics() {
     return {
       alarm: await this.ctx.storage.getAlarm(),

@@ -77,8 +77,7 @@ export async function startServer(
       "insecure_data_directory",
       "The data directory must be owned by this user with mode 0700",
     );
-  // Preserve the on-disk identity when an existing Siyin deployment upgrades.
-  const dbPath = join(config.dataDir, "siyin.sqlite");
+  const dbPath = join(config.dataDir, "agenvo.sqlite");
   try {
     const file = await open(dbPath, "wx", 0o600);
     await file.close();
@@ -267,7 +266,7 @@ export async function startServer(
             : relay.cancelPairing(p.code, secret)),
         );
       } else if (path === "/disconnect" && req.method === "POST") {
-        const id = headers.get("siyin-device-id") ?? "";
+        const id = headers.get("agenvo-device-id") ?? "";
         if (
           !(await relay.authenticateDevice(
             id,
@@ -346,12 +345,12 @@ export async function startServer(
       if (
         req.headers.host !== new URL(config.origin).host ||
         req.url !== "/connect" ||
-        req.headers["siyin-protocol"] !== String(PROTOCOL)
+        req.headers["agenvo-protocol"] !== String(PROTOCOL)
       ) {
         reject();
         return;
       }
-      const id = String(req.headers["siyin-device-id"] ?? "");
+      const id = String(req.headers["agenvo-device-id"] ?? "");
       if (
         !(await relay.authenticateDevice(
           id,
@@ -370,8 +369,8 @@ export async function startServer(
           return;
         }
         ws.on("message", (data, binary) => {
-          if (!binary && data.toString() === "siyin:ping") {
-            peer.send("siyin:pong");
+          if (!binary && data.toString() === "agenvo:ping") {
+            peer.send("agenvo:pong");
             return;
           }
           void relay

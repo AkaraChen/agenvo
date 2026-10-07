@@ -117,8 +117,8 @@ test(
     const ws = new WebSocket(origin.replace("http:", "ws:") + "/connect", {
       headers: {
         Authorization: "Bearer test-device",
-        "Siyin-Device-Id": device.deviceId,
-        "Siyin-Protocol": "1",
+        "Agenvo-Device-Id": device.deviceId,
+        "Agenvo-Protocol": "1",
       },
     });
     t.after(() => ws.terminate());

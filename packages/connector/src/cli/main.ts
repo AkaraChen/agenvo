@@ -94,7 +94,7 @@ export async function connectorCli<T extends InstanceConfig>(
       headers: {
         "Content-Type": "application/json",
         ...(secret ? { Authorization: "Bearer " + secret } : {}),
-        ...(deviceId ? { "Siyin-Device-Id": deviceId } : {}),
+        ...(deviceId ? { "Agenvo-Device-Id": deviceId } : {}),
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15000),

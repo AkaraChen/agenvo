@@ -2,8 +2,6 @@ import { z } from "zod";
 
 export const VERSION = "0.1.0";
 export const PROTOCOL = 1;
-// Protocol 1 retains its Siyin wire identifiers so independently upgraded
-// relays and connectors remain compatible. Branding is not a protocol version.
 export const LIMITS = {
   frame: 64 * 1024,
   parse: 1024 * 1024,
@@ -57,7 +55,7 @@ export class Fault extends Error {
     public native?: unknown,
   ) {
     super(message);
-    this.name = "SiyinFault:" + code + ":" + execution;
+    this.name = "AgenvoFault:" + code + ":" + execution;
   }
   outcome(): Outcome {
     return {
@@ -81,7 +79,7 @@ export function transportedFault(error: unknown): Fault | undefined {
   if (error instanceof Fault) return error;
   if (error instanceof Error) {
     const match =
-      /^SiyinFault:([a-z_]+):(not_started|starting|accepted|rejected|unknown)$/.exec(
+      /^AgenvoFault:([a-z_]+):(not_started|starting|accepted|rejected|unknown)$/.exec(
         error.name,
       );
     if (match) return new Fault(match[1], error.message, match[2] as Execution);

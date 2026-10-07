@@ -311,8 +311,8 @@ test(
       headers: {
         Host: new URL(origin).host,
         Authorization: "Bearer " + secret,
-        "Siyin-Device-Id": device.deviceId,
-        "Siyin-Protocol": "1",
+        "Agenvo-Device-Id": device.deviceId,
+        "Agenvo-Protocol": "1",
       },
     });
     t.after(() => ws.terminate());
@@ -339,7 +339,7 @@ test(
       let outcome;
       try {
         outcome =
-          p.method === "siyin.describe"
+          p.method === "agenvo.describe"
             ? accepted(describe(adapter, p.params))
             : await adapter.call(p.method, p.params);
       } catch (error) {

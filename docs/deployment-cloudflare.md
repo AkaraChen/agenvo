@@ -12,7 +12,7 @@ npx wrangler login
 npx wrangler kv namespace create OAUTH_KV --config wrangler.local.json
 ```
 
-Edit `wrangler.local.json`: set your Worker `name`, canonical public HTTPS `vars.ORIGIN`, and the returned namespace ID in `kv_namespaces[0].id`. For an existing deployment, preserve its KV ID, DO bindings and migration history instead of creating new resources. This local manifest is ignored by Git.
+Edit `wrangler.local.json`: set your Worker `name`, canonical public HTTPS `vars.ORIGIN`, and the returned namespace ID in `kv_namespaces[0].id`. This local manifest is ignored by Git.
 
 For your own domain, add `routes: [{ "pattern": "relay.example.com", "custom_domain": true }]` and set `workers_dev: false`. The domain must belong to an active zone in this Cloudflare account; Wrangler configures the route and certificate. Keep `workers_dev: true` for a workers.dev address. ORIGIN must match the public address exactly, without a path or trailing slash.
 
@@ -26,11 +26,11 @@ curl --fail https://relay.example.com/health
 
 Open `https://relay.example.com/admin`, sign in with the key, then [pair devices](usage.md) and [connect ChatGPT](chatgpt.md). Keep MCP, OAuth, pairing and Connector endpoints outside additional login walls.
 
-## Upgrade and recover
+## Manage access and state
 
-Run `npx wrangler deploy --config wrangler.local.json` with the same manifest and resource IDs. Ordinary upgrades keep ORIGIN stable; domain migrations require updating clients and checking Connector URLs. Rotating the administrator key invalidates browser sessions, but does not revoke paired devices or OAuth grants. Revoke those independently in the management page when needed.
+Keep ORIGIN stable; changing the public address requires reconnecting clients and updating Connector URLs. Rotating the administrator key invalidates browser sessions, but does not revoke paired devices or OAuth grants. Revoke those independently in the management page when needed.
 
-The DO stores pairing, browser sessions and relay authorization; KV holds OAuth provider state. Back up the manifest and protect secrets. Automatic CF/VPS state migration is not supported. Deleting storage requires fresh pairing and consent.
+The DO stores pairing, browser sessions and relay authorization; KV holds OAuth provider state. Back up the manifest and protect secrets. Deleting storage requires fresh pairing and consent.
 
 Verify `/health`, sign in, pair a device, and call `instances_list` from your MCP client to check that it can reach the device.
 

@@ -102,10 +102,10 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
               relay.call(grantId, {
                 deviceId,
                 instanceId,
-                method: "siyin.describe",
+                method: "agenvo.describe",
                 params,
               }),
-            { deviceId, instanceId, method: "siyin.describe" },
+            { deviceId, instanceId, method: "agenvo.describe" },
           ),
       );
       server.registerTool(

@@ -12,7 +12,7 @@ npx wrangler login
 npx wrangler kv namespace create OAUTH_KV --config wrangler.local.json
 ```
 
-编辑 `wrangler.local.json`：设置自己的 Worker `name`、公开 HTTPS `vars.ORIGIN`，把创建命令返回的 KV ID 填入 `kv_namespaces[0].id`。使用已有部署时保留原来的 KV ID、DO 绑定和迁移历史，不重新创建资源。此文件已被 Git 忽略。
+编辑 `wrangler.local.json`：设置自己的 Worker `name`、公开 HTTPS `vars.ORIGIN`，把创建命令返回的 KV ID 填入 `kv_namespaces[0].id`。此文件已被 Git 忽略。
 
 使用自己的自定义域名时，增加 `routes: [{ "pattern": "relay.example.com", "custom_domain": true }]`，并设置 `workers_dev: false`。域名必须属于该 Cloudflare 账号的有效 zone；Wrangler 配置路由及证书。使用 workers.dev 地址时保留 `workers_dev: true`。ORIGIN 必须与实际访问地址一致，不包含路径或结尾斜杠。
 
@@ -26,11 +26,11 @@ curl --fail https://relay.example.com/health
 
 打开 `https://relay.example.com/admin`，使用该密钥登录，随后[配对设备](usage.zh-CN.md)和[连接 ChatGPT](chatgpt.zh-CN.md)。不要在 MCP、OAuth、配对或 Connector 端点前放置额外登录墙。
 
-## 升级与恢复
+## 管理访问与状态
 
-使用原来的 manifest 和资源 ID 运行 `npx wrangler deploy --config wrangler.local.json`。普通升级保持 ORIGIN 不变；域名迁移需重新配置客户端并检查 Connector 地址。更改管理员密钥会使网页会话失效，但不会撤销已批准的设备或 OAuth grant。需要阻止这些访问时，在管理页分别撤销。
+保持 ORIGIN 稳定；更换公网地址后需要重新连接客户端并更新 Connector 地址。更改管理员密钥会使网页会话失效，但不会撤销已批准的设备或 OAuth grant。需要阻止这些访问时，在管理页分别撤销。
 
-DO 保存配对、网页会话和路由授权；KV 保存 OAuth Provider 状态。备份部署配置并保护 secret。首版不提供 CF/VPS 之间的状态迁移工具。删除存储需要重新配对和授权。
+DO 保存配对、网页会话和路由授权；KV 保存 OAuth Provider 状态。备份部署配置并保护 secret。删除存储需要重新配对和授权。
 
 检查 `/health`、登录并配对设备，再从 MCP 客户端调用 `instances_list`，确认客户端能访问设备。
 

@@ -7,10 +7,8 @@ import { PROTOCOL, type Call } from "@agenvo/protocol";
 
 const log = logger.child({ component: "worker.relay" });
 
-/** Cloudflare owns socket hibernation, SQL transactions and scheduled cleanup.
- * Keep the deployed class name: changing it would require a state migration.
- */
-export class SiyinRelay extends DurableObject<Env> {
+/** Cloudflare owns socket hibernation, SQL transactions and scheduled cleanup. */
+export class AgenvoRelay extends DurableObject<Env> {
   private relay: Relay;
   private owner: OwnerAuth;
   constructor(ctx: DurableObjectState, env: Env) {
@@ -68,7 +66,7 @@ export class SiyinRelay extends DurableObject<Env> {
       },
     });
     ctx.setWebSocketAutoResponse(
-      new WebSocketRequestResponsePair("siyin:ping", "siyin:pong"),
+      new WebSocketRequestResponsePair("agenvo:ping", "agenvo:pong"),
     );
   }
   protected deliverWebhook(
@@ -93,7 +91,7 @@ export class SiyinRelay extends DurableObject<Env> {
     return this.owner.requireApi(request);
   }
   async fetch(request: Request) {
-    const id = request.headers.get("siyin-device-id") ?? "";
+    const id = request.headers.get("agenvo-device-id") ?? "";
     const secret =
       request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
     if (!(await this.relay.authenticateDevice(id, secret)))
@@ -103,7 +101,7 @@ export class SiyinRelay extends DurableObject<Env> {
       return Response.json(this.relay.revoke("device", id));
     if (path !== "/connect") return new Response(null, { status: 404 });
     if (
-      request.headers.get("siyin-protocol") !== String(PROTOCOL) ||
+      request.headers.get("agenvo-protocol") !== String(PROTOCOL) ||
       request.headers.get("upgrade")?.toLowerCase() !== "websocket"
     )
       return Response.json(

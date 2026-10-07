@@ -37,11 +37,11 @@ Install Node.js 24.13+ and build the checkout in `/opt/agenvo`. Create a dedicat
 
 `agenvo-server serve` also accepts a configuration `tls` object with absolute `cert` and `key` file paths for direct TLS. Certificate renewal and restarting after rotation are the operator's responsibility. HTTP is an internal proxy transport only; public URLs and Connector connections must use HTTPS/WSS.
 
-## Upgrade, back up and recover
+## Back up and restart
 
-Stop the Relay before making a filesystem backup; copy the entire data directory, the public configuration and proxy configuration. Keep a separate encrypted backup of the administrator key. Do not copy only `siyin.sqlite` while the process is running: its WAL may contain newer transactions.
+Stop the Relay before making a filesystem backup; copy the entire data directory, the public configuration and proxy configuration. Keep a separate encrypted backup of the administrator key. Do not copy only `agenvo.sqlite` while the process is running: its WAL may contain newer transactions.
 
-For an upgrade, take a stopped backup, rebuild the image, and restart the same Compose project with the same data directory. The database retains paired devices and OAuth grants. Active requests interrupted by restart have uncertain outcomes: inspect native state before repeating a write. Connectors reconnect automatically; Herdr remains independent. Restore the previous image and matching backup if an upgrade fails. Database schema versions are checked at startup; there is no cross-platform state migration tool in this release.
+Restart the same Compose project with its data directory to retain paired devices and OAuth grants. Active requests interrupted by restart have uncertain outcomes: inspect native state before repeating a write. Connectors reconnect automatically; Herdr remains independent.
 
 Restart the Relay after administrator key rotation. Browser sessions become invalid; revoke device credentials and OAuth grants separately when needed.
 

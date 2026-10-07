@@ -10,14 +10,14 @@
     "bindings": [
       {
         "name": "RELAY",
-        "class_name": "SiyinRelay",
+        "class_name": "AgenvoRelay",
       },
     ],
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["SiyinRelay"],
+      "new_sqlite_classes": ["AgenvoRelay"],
     },
   ],
   "kv_namespaces": [
