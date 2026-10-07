@@ -53,6 +53,8 @@ const args = parseArgs({
       "client-id",
       "redirect-uri",
       "output",
+      "credentials",
+      "params-file",
       "data-dir",
       "host",
       "port",
@@ -64,6 +66,8 @@ const args = parseArgs({
         ["json", { type: "boolean" }],
         ["trusted-proxy", { type: "boolean" }],
         ["no-browser", { type: "boolean" }],
+        ["no-wait", { type: "boolean" }],
+        ["approve", { type: "boolean" }],
         ["cancel", { type: "boolean" }],
         ["recover-lock", { type: "boolean" }],
         ["help", { type: "boolean" }],
@@ -137,7 +141,7 @@ async function main() {
   if (options.version) return output({ version: VERSION });
   if (options.help || !command)
     return console.log(
-      `Agenvo ${VERSION}\n\nagenvo deploy --origin https://WORKER.SUBDOMAIN.workers.dev [--name agenvo] [--owner EMAIL --issuer URL --aud AUD]\nagenvo relay init --origin https://RELAY --data-dir PATH --output CONFIG [--host 127.0.0.1 --port 8080 --trusted-proxy]\nagenvo relay serve --config CONFIG\nagenvo admin state --origin https://RELAY\nagenvo admin approve-instance --device-id ID --instance-id ID --fingerprint SHA256 --origin https://RELAY\nagenvo admin revoke device|instance|grant --id ID [--instance-id ID] --origin https://RELAY\nagenvo instance add herdr --id work --config-root PATH [--cwd PATH]\nagenvo instance add codex --id coding --home PATH [--mode managed-stdio|attach-unix] [--socket PATH]\nagenvo connect https://RELAY [--name DEVICE]\nagenvo connect --cancel\nagenvo pairing list --origin https://RELAY\nagenvo pairing approve CODE --fingerprint SHA256 --origin https://RELAY\nagenvo client inspect AUTHORIZATION_URL --origin https://RELAY\nagenvo client approve AUTHORIZATION_URL --origin https://RELAY --client-id ID --redirect-uri URI --output PRIVATE_FILE\nagenvo run\nagenvo service install|uninstall\nagenvo status --json\nagenvo doctor [--recover-lock]\nagenvo disconnect\n\nConfig: ${dir}\nManaged Codex homes default to a separate local directory. attach-unix uses an existing server and uses full access without execution approval prompts; it never starts or stops that server. Log in there with CODEX_HOME=PATH codex login.\nAfter changing instances, explicitly restart the connector and approve new scopes with agenvo admin approve-instance.`,
+      `Agenvo ${VERSION}\n\nagenvo deploy --origin https://WORKER.SUBDOMAIN.workers.dev [--name agenvo] [--owner EMAIL --issuer URL --aud AUD]\nagenvo relay init --origin https://RELAY --data-dir PATH --output CONFIG [--host 127.0.0.1 --port 8080 --trusted-proxy]\nagenvo relay serve --config CONFIG\nagenvo admin state --origin https://RELAY\nagenvo admin approve-instance --device-id ID --instance-id ID --fingerprint SHA256 --origin https://RELAY\nagenvo admin revoke device|instance|grant --id ID [--instance-id ID] --origin https://RELAY\nagenvo instance add herdr --id work --config-root PATH [--cwd PATH]\nagenvo instance add codex --id coding --home PATH [--mode managed-stdio|attach-unix] [--socket PATH]\nagenvo connect https://RELAY [--name DEVICE] [--approve | --no-wait --no-browser]\nagenvo connect --cancel\nagenvo pairing list --origin https://RELAY\nagenvo pairing approve CODE --fingerprint SHA256 --origin https://RELAY\nagenvo client login --origin https://RELAY --name CLIENT --output PRIVATE_FILE\nagenvo client call TOOL --credentials PRIVATE_FILE [--params-file JSON_FILE]\nagenvo client inspect AUTHORIZATION_URL --origin https://RELAY\nagenvo client approve AUTHORIZATION_URL --origin https://RELAY --client-id ID --redirect-uri URI --output PRIVATE_FILE\nagenvo run\nagenvo service install|uninstall\nagenvo status --json\nagenvo doctor [--recover-lock]\nagenvo disconnect\n\nConfig: ${dir}\nManaged Codex homes default to a separate local directory. attach-unix uses an existing server and uses full access without execution approval prompts; it never starts or stops that server. Log in there with CODEX_HOME=PATH codex login.\nAfter changing instances, explicitly restart the connector and approve new scopes with agenvo admin approve-instance.`,
     );
   if (command === "relay")
     return output(await relayCommand(subcommand, options));
@@ -301,7 +305,15 @@ async function main() {
       code: p.code,
       fingerprint: p.fingerprint,
     });
-    openBrowser(p.approvalUrl);
+    if (options["no-wait"]) return;
+    if (options.approve) {
+      await pairingCommand("approve", p.code, {
+        origin: relay.origin,
+        fingerprint: p.fingerprint,
+      });
+    } else {
+      openBrowser(p.approvalUrl);
+    }
     const expires = p.expires;
     while (Date.now() < expires) {
       const result = await post(

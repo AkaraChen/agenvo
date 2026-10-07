@@ -92,7 +92,7 @@ export async function deploy(options: Record<string, string | boolean>) {
         config.vars.ACCESS_AUD &&
         config.vars.OWNER_EMAIL,
       ),
-      next: "In Cloudflare Zero Trust create one self-hosted Access app for these two paths, allow only the owner email, then rerun deploy with --issuer https://TEAM.cloudflareaccess.com --aud AUD. Public MCP/OAuth/device endpoints must stay outside Access. Wrangler login alone does not grant Access editing.",
+      next: "Use agenvo connect --approve on the owner machine, pairing approve for remote devices, and client login for browserless OAuth. Cloudflare Access is optional for browser administration; public MCP/OAuth/device endpoints must stay outside Access.",
     },
   };
 }

@@ -33,3 +33,24 @@ Durable Object 的 SQLite 保存设备批准、授权与路由状态；OAuth Pro
 升级时不要重命名或删除 Durable Object 绑定、迁移历史和 OAuth KV 命名空间。安全备份部署配置与所有者私钥。云端状态恢复依赖 Cloudflare 自身能力，首版没有可移植的完整导出或迁移到 VPS 的工具。删除部署后需要重新配对设备并授权客户端。撤销会阻止后续访问，但不会取消已经开始的原生任务。
 
 `npm run test:integration` 在本地 workerd 中验证真实 Durable Object/KV 绑定，不代表已在你的 Cloudflare 账号上验证公网部署。生产配置后还应检查 `/health`、配对一台设备，并从自己的 MCP 客户端完成一次无副作用读取。
+
+
+## 无人值守部署与验收
+
+机器已具备 Wrangler 登录状态或 `CLOUDFLARE_API_TOKEN` 时，部署和 Agenvo 授权均不需要浏览器或管理页。Cloudflare 账号的首次授权属于平台前提，不是每次部署的步骤。
+
+```sh
+agenvo deploy --name agenvo --origin https://agenvo.YOUR_SUBDOMAIN.workers.dev
+agenvo instance add herdr --id herdr --config-root "$HOME/.config/herdr" --cwd "$HOME/Code"
+agenvo connect https://agenvo.YOUR_SUBDOMAIN.workers.dev --name laptop --approve
+agenvo service install
+agenvo client login --origin https://agenvo.YOUR_SUBDOMAIN.workers.dev \
+  --name deployment-check --output "$HOME/.config/agenvo/client.json"
+agenvo client call instances_list --credentials "$HOME/.config/agenvo/client.json"
+```
+
+`connect --approve` 使用已有所有者签名密钥，并核对设备直接取得的指纹；没有所有者密钥的 runner 不能自行授权。远程 runner 使用 `connect --no-wait --no-browser --json`，由可信 SSH 调度程序取得 code 和 fingerprint，在所有者机器执行 `pairing approve`，随后在 runner 再次执行 `connect --no-browser` 完成配对并安装服务。全过程可由脚本完成，不要求手工抄写指纹，所有者密钥也不传到 runner。
+
+`client login` 注册 OAuth 客户端、签名批准、验证回调 state，并在本地完成 PKCE code 交换。访问及刷新 token 只写入新建的 0600 文件，禁止覆盖已有文件。`client call` 自动刷新即将过期的 access token，支持 `--params-file` 传入 MCP 参数。凭据文件不能提交到 Git；grant 到期或撤销后需再次以所有者凭据登录。这些命令使用与外部客户端相同的 OAuth/MCP 路由。
+
+第三方客户端仍有自己的连接配置和 OAuth 身份。CLI 创建的客户端不会自动修改 ChatGPT 或其他托管助手；最后这一步能否自动化取决于对方是否提供配置 API。不能用部署验收客户端的结果冒充第三方客户端已经迁移。
