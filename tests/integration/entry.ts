@@ -1,8 +1,37 @@
 // This fixture is built only by the local Workers integration suite.
-import worker, { SiyinRelay } from "../../src/relay/worker.js";
-export { SiyinRelay };
+import worker, {
+  SiyinRelay as ProductionRelay,
+} from "../../src/relay/worker.js";
+import { sendWebhook } from "../../src/relay/webhook.js";
+import { mcp } from "../../src/relay/mcp.js";
+export class SiyinRelay extends ProductionRelay {
+  async eventDiagnostics() {
+    return {
+      alarm: await this.ctx.storage.getAlarm(),
+      records: this.ctx.storage.sql
+        .exec(
+          "SELECT key, json_extract(value, '$.due') AS due FROM records WHERE key LIKE 'delivery:%' OR key LIKE 'subscription:%'",
+        )
+        .toArray(),
+    };
+  }
+  protected override async deliverWebhook(
+    url: string,
+    body: string,
+    headers: Record<string, string>,
+  ) {
+    // Local integration build only. Never expose this loopback mapping in production.
+    const target = new URL(url);
+    if (target.hostname !== "127.0.0.1")
+      throw new Error("unexpected_fixture_callback");
+    target.protocol = "http:";
+    return sendWebhook(target.href, body, headers);
+  }
+}
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    if (new URL(request.url).pathname === "/fixture-mcp")
+      return mcp(request, env.RELAY.getByName("owner"), "fixture-grant");
     if (new URL(request.url).pathname === "/fixture") {
       const { method, args } = (await request.json()) as any;
       const relay = env.RELAY.getByName("owner");

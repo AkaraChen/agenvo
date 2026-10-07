@@ -14,16 +14,24 @@ npm run format:check
 npm audit
 ```
 
-集成测试使用临时状态启动本地 workerd 和 Node 服务，经过真实 HTTP/WebSocket/MCP 入口，不需要 Cloudflare 账号。单元测试按需要使用确定性的原生服务 fixture。私有配置、凭据、原生日志和生成的构建产物不能进入 Git。
+集成测试使用临时状态启动本地 workerd 和 Node 服务，经过真实 HTTP/WebSocket/MCP 入口，不需要 Cloudflare 账号。单元测试使用协议 fixture 验证故障路径。
 
-可选原生验证需要 Herdr 0.9.3、Codex CLI 0.160.1 及其正常平台依赖：
+修改适配器、事件投递或完整用户流程时，安装支持的原生二进制并运行系统测试：
 
 ```sh
+node scripts/install-test-runtimes.mjs /tmp/agenvo-runtimes
+# 按安装器输出设置 PATH。
+npm run test:system
 npm run test:adapters
-npm run test:e2e
 ```
 
-原生测试使用隔离 Herdr/Codex 环境和本地模型端点，不调用外部模型。`test:e2e` 可使用独立的 `AGENVO_E2E_CODEX_HOME`，不能指向日常 HOME 或生产服务。Linux 用户服务测试需要 systemd 用户管理器；检查跳过输出以确认实际覆盖。
+安装器下载固定的 Herdr 0.9.3 和 Codex CLI 0.160.1，校验 Herdr 发布资产摘要。Linux/macOS CI 使用相同命令。`npm run test:ci` 将开头的检查（audit 除外）与系统测试合并。
+
+系统测试覆盖 OAuth 登录 → 设备配对 → MCP 发现与订阅 → 输入任务 → 原生通知 → 读取输出 → 继续或中断 → 取消订阅。真实 Connector 和独立 Herdr/Codex 进程使用本地模型 mock。测试入口清除继承凭证，提供临时 HOME、CODEX_HOME 和 Herdr 配置，fixture 负责清理进程。不要将测试指向个人部署。Linux 用户服务测试需要 systemd 用户管理器；检查跳过输出以确认实际覆盖。
+
+本地 webhook 接收端用测试密钥验证签名，测试专用地址映射让请求通过生产 HTTP 传输到达接收端。workerd 测试覆盖 Durable Object 存储和 alarm。这些测试不证明 ChatGPT UI 发现或实际 dot 唤醒；两者仍是独立的发布验收范围。
+
+私有配置、凭据、原生日志和生成的构建产物不能进入 Git。
 
 更新 Codex schema 时，使用 `scripts/import-codex-schema.py` 指定支持的 CLI 版本，并验证执行配置与适配器。
 

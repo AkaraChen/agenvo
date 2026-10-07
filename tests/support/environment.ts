@@ -1,0 +1,34 @@
+import { join } from "node:path";
+
+// Positive allowlist: never inherit API keys, OAuth state, native session context,
+// proxy settings or the developer's shell startup files into a test runtime.
+export function isolatedEnvironment(root: string): NodeJS.ProcessEnv {
+  return {
+    PATH: process.env.PATH,
+    ORIGIN: "",
+    ADMIN_SECRET: "",
+    HOME: root,
+    TMPDIR: root,
+    XDG_CONFIG_HOME: join(root, "config"),
+    XDG_DATA_HOME: join(root, "data"),
+    XDG_CACHE_HOME: join(root, "cache"),
+    CODEX_HOME: join(root, "codex"),
+    TERM: "xterm-256color",
+    LANG: "en_US.UTF-8",
+    SHELL: "/bin/sh",
+  };
+}
+export async function until<T>(
+  read: () => T | Promise<T>,
+  predicate: (value: T) => boolean,
+  timeout = 10000,
+): Promise<T> {
+  const deadline = Date.now() + timeout;
+  let value: T;
+  do {
+    value = await read();
+    if (predicate(value)) return value;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  } while (Date.now() < deadline);
+  throw new Error("Condition timed out: " + JSON.stringify(value));
+}

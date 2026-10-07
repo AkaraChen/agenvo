@@ -23,6 +23,23 @@ jobs:
       - run: npm test
       - run: npm run test:integration
       - run: npm audit --audit-level=high
+  native:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node scripts/install-test-runtimes.mjs "$RUNNER_TEMP/agenvo-runtimes"
+      - run: echo "$RUNNER_TEMP/agenvo-runtimes/bin" >> "$GITHUB_PATH"
+      - run: echo "$RUNNER_TEMP/agenvo-runtimes/node_modules/.bin" >> "$GITHUB_PATH"
+      - run: npm run test:system
+      - run: npm run test:adapters
   container:
     runs-on: ubuntu-latest
     steps:

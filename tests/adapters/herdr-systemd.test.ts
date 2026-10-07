@@ -7,11 +7,28 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { HerdrAdapter } from "../../src/connector/adapters/herdr.ts";
 import { herdrFixture } from "../fixtures/herdr-runtime.ts";
-const exec = promisify(execFile);
+const execute = promisify(execFile);
+const exec = (file: string, args: string[]) =>
+  execute(file, args, {
+    env: { ...process.env, XDG_RUNTIME_DIR: `/run/user/${process.getuid?.()}` },
+  });
 test(
   "Independent Herdr survives stopping the adapter systemd service",
   { skip: process.platform !== "linux" },
   async (t) => {
+    const userManager = await exec("systemctl", [
+      "--user",
+      "show-environment",
+    ]).then(
+      () => true,
+      () => false,
+    );
+    if (!userManager) {
+      t.skip(
+        "A systemd user manager is required for service lifecycle coverage",
+      );
+      return;
+    }
     const base = await mkdtemp("/tmp/agenvo-sd-");
     const root = join(base, "herdr");
     await mkdir(root);

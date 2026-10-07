@@ -7,6 +7,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
+import { isolatedEnvironment } from "../support/environment.js";
+import { once } from "node:events";
 import { digest } from "../../src/protocol/index.ts";
 
 test(
@@ -25,11 +27,24 @@ test(
         "127.0.0.1",
         "--port",
         "0",
+        "--inspector-port",
+        "0",
         "--persist-to",
         dir,
       ],
-      { stdio: ["ignore", "pipe", "pipe"] },
+      {
+        env: { ...isolatedEnvironment(dir), WRANGLER_SEND_METRICS: "false" },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
     );
+    t.after(async () => {
+      if (child.exitCode === null) {
+        const exited = once(child, "exit");
+        child.kill("SIGTERM");
+        await exited;
+      }
+      await rm(dir, { recursive: true, force: true });
+    });
     let workerOutput = "";
     const base = await new Promise<string>((resolve, reject) => {
       let output = "";
@@ -62,11 +77,6 @@ test(
           );
         }),
     };
-    t.after(async () => {
-      child.kill("SIGTERM");
-      await new Promise<void>((r) => child.once("exit", () => r()));
-      await rm(dir, { recursive: true, force: true });
-    });
     const fixture = async (method: string, ...args: unknown[]) => {
       const r = await mf.dispatchFetch("https://agenvo.test/fixture", {
         method: "POST",

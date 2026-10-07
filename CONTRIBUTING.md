@@ -14,16 +14,24 @@ npm run format:check
 npm audit
 ```
 
-Integration tests start local workerd and Node servers with temporary state, exercise real HTTP/WebSocket/MCP routes and do not require a Cloudflare account. Unit tests use deterministic native-server fixtures where appropriate. Keep private configuration, credentials, native logs and generated build outputs out of Git.
+Integration tests start local workerd and Node servers with temporary state and exercise real HTTP/WebSocket/MCP routes. They do not require a Cloudflare account. Unit tests use protocol fixtures to exercise failure paths.
 
-Optional native validation requires Herdr 0.9.3, Codex CLI 0.160.1 and their normal platform prerequisites:
+For changes to adapters, event delivery or the full user workflow, install the supported native binaries and run the system suites:
 
 ```sh
+node scripts/install-test-runtimes.mjs /tmp/agenvo-runtimes
+# Set PATH as printed by the installer.
+npm run test:system
 npm run test:adapters
-npm run test:e2e
 ```
 
-Native tests use isolated Herdr/Codex environments and a local model endpoint, without external inference. `test:e2e` can use an isolated `AGENVO_E2E_CODEX_HOME`; never point it at an everyday home or production service. Linux user-service tests require a systemd user manager; check skipped-test output for actual coverage.
+The installer downloads pinned Herdr 0.9.3 and Codex CLI 0.160.1 releases and checks the Herdr asset digest. Linux/macOS CI uses the same commands. `npm run test:ci` combines the initial checks (except audit) with system tests.
+
+System tests follow OAuth login → device pairing → MCP discovery/subscription → Agent input → native notification → reading output → follow-up/interruption → unsubscribe. Real Connector and independent Herdr/Codex processes use a local model mock. The launcher clears inherited credentials and provides temporary HOME, CODEX_HOME and Herdr configuration; fixtures clean up their processes. Never point tests at a personal deployment. Linux user-service tests require a systemd user manager; check skipped-test output for actual coverage.
+
+The local webhook receiver verifies signatures with test keys. A test-only callback mapping sends requests through the production HTTP transport to this receiver. Workerd tests exercise Durable Object storage and alarms. These tests do not prove ChatGPT UI discovery or actual dot wake-up; those remain separate release acceptance checks.
+
+Keep private configuration, credentials, native logs and generated outputs out of Git.
 
 When updating Codex schemas, run `scripts/import-codex-schema.py` against the supported CLI version and validate execution settings and adapters.
 

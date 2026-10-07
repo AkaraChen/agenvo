@@ -1,3 +1,4 @@
+import { isolatedEnvironment } from "../support/environment.js";
 // Test-owned native service. Runtime provisioning deliberately bypasses Agenvo.
 import { execFile, spawn } from "node:child_process";
 import { mkdir, stat } from "node:fs/promises";
@@ -10,16 +11,14 @@ export function herdrFixture(
   session: string,
 ) {
   const socket = join(config.configRoot, "sessions", session, "herdr.sock");
-  const env: NodeJS.ProcessEnv = {
-    ...process.env,
+  const env = {
+    ...isolatedEnvironment(config.cwd),
     CODEX_HOME: join(config.cwd, "codex-test-home"),
     XDG_CONFIG_HOME: dirname(config.configRoot),
     HERDR_SOCKET_PATH: socket,
     HERDR_CONFIG_PATH: join(config.configRoot, "config.toml"),
     HERDR_SESSION: session,
   };
-  delete env.HERDR_PANE_ID;
-  delete env.HERDR_WORKSPACE_ID;
   const exists = () =>
     stat(socket).then(
       () => true,
