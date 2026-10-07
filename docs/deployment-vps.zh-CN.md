@@ -14,7 +14,7 @@ agenvo relay init --origin https://relay.example.com \
   --output deploy/vps/relay.local.json
 ```
 
-命令生成 Relay 的公开配置，以及 `<AGENVO_CONFIG_DIR>/owner/<origin-hash>.json` 中的所有者私钥；`AGENVO_CONFIG_DIR` 默认是 `~/.config/agenvo`。私钥留在所有者电脑上并安全备份。只将 `relay.local.json` 复制到 VPS 仓库的 `deploy/vps/relay.local.json`。配置和私钥都不提交到 Git。
+命令只生成不含秘密的 Relay 配置。将该文件放到 VPS 的 `deploy/vps/relay.local.json`。另在密码管理器生成并保存至少 32 随机字节编码为 hex 或 base64url 的管理员密钥，在 VPS 的 `deploy/vps/.env` 中设置 `AGENVO_DOMAIN=relay.example.com` 和 `AGENVO_ADMIN_SECRET=<生成的密钥>`。Compose 将它注入 Relay，不需要所有者公私钥。环境文件必须为 0600，不能提交到 Git。
 
 在 VPS 的仓库根目录运行：
 
@@ -23,14 +23,13 @@ mkdir -p deploy/vps/data
 sudo chown 1000:1000 deploy/vps/data deploy/vps/relay.local.json
 sudo chmod 700 deploy/vps/data
 sudo chmod 600 deploy/vps/relay.local.json
-export AGENVO_DOMAIN=relay.example.com
-docker compose -f deploy/vps/compose.yaml up -d --build
+docker compose --env-file deploy/vps/.env -f deploy/vps/compose.yaml up -d --build
 curl --fail https://relay.example.com/health
 ```
 
-镜像中的 `node` 用户 UID 为 1000。Caddy 自动申请和续期公网证书。只有 Caddy 暴露端口，不应暴露 8080。代理必须保留原始 Host 请求头。容器日志记录生命周期，不记录原生任务输出。后续 Compose 命令仍需导出域名，也可保存到 `deploy/vps/.env`。
+镜像中的 `node` 用户 UID 为 1000。Caddy 自动申请和续期公网证书。只有 Caddy 暴露端口，不应暴露 8080。代理必须保留原始 Host 请求头。容器日志记录生命周期，不记录原生任务输出。后续 Compose 命令同样传入 `--env-file deploy/vps/.env`。
 
-随后[配对设备并授权 MCP 客户端](usage.zh-CN.md)。VPS 通过签名 CLI 管理，浏览器授权页会说明如何批准页面地址，不依赖 Cloudflare Access。
+随后[配对设备并授权 MCP 客户端](usage.zh-CN.md)。打开 `/admin` 使用管理员密钥登录。VPS 与 Cloudflare 共用内置的网页登录和授权流程。
 
 ## 不使用 Docker
 
@@ -40,7 +39,7 @@ curl --fail https://relay.example.com/health
 
 ## 升级、备份与恢复
 
-文件备份前先停止 Relay，复制整个数据目录、公开配置和代理配置。所有者私钥另行加密备份。运行期间不能只复制 `siyin.sqlite`，较新的事务可能仍在 WAL 文件中。
+文件备份前先停止 Relay，复制整个数据目录、公开配置和代理配置。管理员密钥另行加密备份。运行期间不能只复制 `siyin.sqlite`，较新的事务可能仍在 WAL 文件中。
 
 升级前制作停机备份，然后构建新镜像，在同一 Compose 项目中复用数据目录启动。数据库保留设备配对和 OAuth 授权。重启中断的在途调用结果不确定，重复写操作前先查询原生状态。Connector 会自动重连，Herdr 独立运行。升级失败时恢复旧镜像和对应备份。服务启动时检查数据库版本；首版不提供两种部署间的状态迁移工具。
 
@@ -50,6 +49,8 @@ SQLite 排他锁阻止第二个 Relay 使用同一数据库。首版不支持多
 
 `--trusted-proxy` 只信任一层反向代理，并按其转发的客户端地址限流。只有 Relay 完全位于该代理之后、外界不能绕过代理直连时才启用；代理必须覆盖不可信的转发头。Caddy 的默认代理配置提供此边界。直接 TLS 部署应保持关闭，此时忽略传入的转发头。公开配对每个客户端地址每十分钟最多十次。未配置可信代理时，代理后所有客户端共用该限制。
 
-VPS OAuth 回调只支持 HTTPS 或回环 HTTP，不支持应用自定义 scheme。未经批准的注册一小时后过期，等待过久需要客户端重新注册。已过期的 confidential client secret 对应注册会自动清理；所有者批准的 public client 保留注册。注册容量为 256，并受 SDK 的每客户端地址限流约束。所有者签名允许五秒时钟偏差，声明的有效期仍不得超过 60 秒。
+VPS OAuth 回调只支持 HTTPS 或回环 HTTP，不支持应用自定义 scheme。未经批准的注册一小时后过期，等待过久需要客户端重新注册。已过期的 confidential client secret 对应注册会自动清理；所有者批准的 public client 保留注册。注册容量为 256，并受 SDK 的每客户端地址限流约束。
 
 未发布开发版本创建的数据目录不属于受支持的升级来源；这类测试部署应重新创建并配对。VPS 的首个发布格式从当前实现开始。
+
+systemd 部署使用 `/etc/agenvo/admin.env`，内容为 `AGENVO_ADMIN_SECRET=...`，仅允许部署管理员读取（0600）。更换密钥后重启 Relay，已有网页会话失效；设备和 OAuth 授权保留。

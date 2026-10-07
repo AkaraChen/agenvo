@@ -9,7 +9,7 @@ Agenvo 为 MCP 客户端提供统一接口，管理你自己电脑上的 Agent �
 ```mermaid
 flowchart LR
     C["MCP 客户端"] -->|"HTTPS · OAuth"| R["Agenvo Relay"]
-    O["所有者 CLI"] -->|"签名批准与撤销"| R
+    O["管理员浏览器"] -->|"密钥登录 · 会话 Cookie"| R
     subgraph Deployment["选择一种部署"]
       R --- CF["Cloudflare Worker + Durable Object + KV"]
       R --- VPS["VPS · Node.js + SQLite + HTTPS 代理"]
@@ -53,8 +53,8 @@ node dist/cli.js --help
 
 | 部署 | 持久状态 | 所有者管理 | 运维方式 |
 | --- | --- | --- | --- |
-| Cloudflare | Durable Object SQLite、OAuth KV | 签名 CLI；可选 Access 保护的网页 | 托管 Worker、可休眠设备连接 |
-| 单 VPS | 持久磁盘上的 SQLite | 签名 CLI | 单个 Node 进程、HTTPS 代理、备份 |
+| Cloudflare | Durable Object SQLite、OAuth KV | 内置网页登录与管理页 | 托管 Worker、可休眠设备连接 |
+| 单 VPS | 持久磁盘上的 SQLite | 内置网页登录与管理页 | 单个 Node 进程、HTTPS 代理、备份 |
 
 VPS 需要常驻 Node 进程；Cloudflare 不需要常驻容器。两种 Relay 均不运行编程 Agent。
 

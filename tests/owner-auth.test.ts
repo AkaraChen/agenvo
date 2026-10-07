@@ -1,86 +1,176 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPair, exportJWK, createLocalJWKSet, SignJWT } from "jose";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
-  verifyOwnerToken,
-  owner,
-  sameOrigin,
-} from "../src/relay/owner-auth.ts";
-import { configSchema } from "../src/connector/config.ts";
+  OwnerAuth,
+  localReturn,
+  validateAdminSecret,
+} from "../src/admin/auth.js";
+import { SqliteStore } from "../src/server/store.js";
 
-test("Access owner requires signature, issuer, audience, expiry and exact identity", async () => {
-  const pair = await generateKeyPair("RS256");
-  const other = await generateKeyPair("RS256");
-  const keys = createLocalJWKSet({
-    keys: [{ ...(await exportJWK(pair.publicKey)), kid: "test", alg: "RS256" }],
+const origin = "https://relay.example.com";
+const secret = "test-secret-" + "a".repeat(64);
+const request = (path: string, init: RequestInit = {}) =>
+  new Request(origin + path, init);
+const login = (
+  value = secret,
+  next = "/admin",
+  headers: Record<string, string> = {},
+) =>
+  request("/login", {
+    method: "POST",
+    headers: { Origin: origin, ...headers },
+    body: new URLSearchParams({ secret: value, next }),
   });
-  const env = {
-    ACCESS_ISSUER: "https://test.cloudflareaccess.com",
-    ACCESS_AUD: "agenvo",
-    OWNER_EMAIL: "owner@example.com",
-  };
-  const token = (patch: Record<string, unknown> = {}, key = pair.privateKey) =>
-    new SignJWT({
-      iss: env.ACCESS_ISSUER,
-      aud: env.ACCESS_AUD,
-      sub: "owner",
-      email: env.OWNER_EMAIL,
-      type: "app",
-      exp: Math.floor(Date.now() / 1000) + 60,
-      ...patch,
-    })
-      .setProtectedHeader({ alg: "RS256", kid: "test" })
-      .sign(key);
-  assert.equal(await verifyOwnerToken(await token(), keys, env), "owner");
-  for (const patch of [
-    { iss: "https://evil.example" },
-    { aud: "other" },
-    { email: "other@example.com" },
-    { exp: 1 },
-    { sub: undefined },
-    { type: "service" },
-  ])
-    await assert.rejects(verifyOwnerToken(await token(patch), keys, env), {
-      code: "permission_denied",
-    });
-  await assert.rejects(
-    verifyOwnerToken(await token({}, other.privateKey), keys, env),
-    { code: "permission_denied" },
+async function fixture(t: any) {
+  const dir = await mkdtemp(join(tmpdir(), "agenvo-owner-"));
+  const store = new SqliteStore(join(dir, "state.sqlite"));
+  t.after(async () => {
+    store.close();
+    await rm(dir, { recursive: true, force: true });
+  });
+  const config = { ORIGIN: origin, ADMIN_SECRET: secret };
+  return { store, config, auth: new OwnerAuth(store, config) };
+}
+function cookie(response: Response) {
+  return response.headers
+    .getSetCookie()
+    .map((v) => v.split(";")[0])
+    .join("; ");
+}
+
+test("owner sessions persist, rotate on login, expire and reject cross-origin use", async (t) => {
+  const { store, config, auth } = await fixture(t);
+  assert.equal((await auth.fetch(login("wrong"), "ip")).status, 401);
+  const response = await auth.fetch(
+    login(secret, "/authorize?state=abc"),
+    "ip",
   );
-  await assert.rejects(
-    owner(new Request("https://agenvo.test/admin"), {} as Env),
-    { code: "owner_not_configured" },
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get("location"), "/authorize?state=abc");
+  assert.match(
+    response.headers.get("set-cookie")!,
+    /Secure; HttpOnly; SameSite=Lax/,
   );
-  assert.throws(
-    () =>
-      sameOrigin(
-        new Request("https://agenvo.test/admin", {
-          headers: { Origin: "https://evil.test" },
-        }),
-        { ORIGIN: "https://agenvo.test" } as Env,
-      ),
-    { code: "csrf_rejected" },
-  );
-});
-test("stored connector configuration cannot downgrade or redirect credential transport", () => {
-  for (const relay of [
-    "http://example.com",
-    "https://example.com/path",
-    "https://name:secret@example.com",
-    "https://example.com?x=1",
-  ])
-    assert.equal(
-      configSchema.safeParse({ schema: 1, name: "test", instances: [], relay })
-        .success,
-      false,
-    );
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  const loginPage = await auth.fetch(request("/login"), "ip");
+  assert.equal(loginPage.headers.get("referrer-policy"), "same-origin");
+  const session = cookie(response);
+  const browser = request("/admin", { headers: { Cookie: session } });
+  assert.equal(await new OwnerAuth(store, config).authenticated(browser), true);
   assert.equal(
-    configSchema.safeParse({
-      schema: 1,
-      name: "test",
-      instances: [],
-      relay: "https://example.com",
-    }).success,
+    await new OwnerAuth(store, {
+      ...config,
+      ORIGIN: "https://other.test",
+    }).authenticated(browser),
+    false,
+  );
+  const fresh = await auth.fetch(
+    login(secret, "/admin", { Cookie: session }),
+    "ip",
+  );
+  assert.equal(await auth.authenticated(browser), false);
+  assert.equal(
+    await auth.authenticated(
+      request("/admin", { headers: { Cookie: cookie(fresh) } }),
+    ),
     true,
   );
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() + 7 * 86400000 + 1 });
+  assert.equal(
+    await auth.authenticated(
+      request("/admin", { headers: { Cookie: cookie(fresh) } }),
+    ),
+    false,
+  );
+});
+
+test("logout and secret rotation invalidate browser sessions; OAuth and device state are untouched", async (t) => {
+  const { auth, store, config } = await fixture(t);
+  store.put("device:test", { id: "test" });
+  store.put("grant:test", { id: "test" });
+  const response = await auth.fetch(login(), "ip");
+  const headers = { Cookie: cookie(response), Origin: origin };
+  await auth.fetch(request("/logout", { method: "POST", headers }), "ip");
+  assert.equal(await auth.authenticated(request("/admin", { headers })), false);
+  const second = await auth.fetch(login(), "ip");
+  config.ADMIN_SECRET = "b".repeat(64);
+  assert.equal(
+    await auth.authenticated(
+      request("/admin", { headers: { Cookie: cookie(second) } }),
+    ),
+    false,
+  );
+  assert.deepEqual(store.get("device:test"), { id: "test" });
+  assert.deepEqual(store.get("grant:test"), { id: "test" });
+});
+
+test("login and cookie-authorized writes require the exact Origin; Bearer automation uses the same secret", async (t) => {
+  const { auth } = await fixture(t);
+  await assert.rejects(
+    auth.fetch(login(secret, "/admin", { Origin: "https://evil.test" }), "ip"),
+    { code: "csrf_rejected" },
+  );
+  await assert.rejects(
+    auth.fetch(
+      request("/login", {
+        method: "POST",
+        body: new URLSearchParams({ secret }),
+      }),
+      "ip",
+    ),
+    { code: "csrf_rejected" },
+  );
+  const response = await auth.fetch(login(), "ip");
+  await assert.rejects(
+    auth.requireApi(
+      request("/api/admin/revoke", {
+        method: "POST",
+        headers: { Cookie: cookie(response) },
+      }),
+    ),
+    { code: "csrf_rejected" },
+  );
+  await auth.requireApi(
+    request("/api/admin/revoke", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + secret },
+    }),
+  );
+  await assert.rejects(
+    auth.requireApi(
+      request("/api/admin/state", {
+        headers: { Authorization: "Bearer device-or-client-token" },
+      }),
+    ),
+    { code: "permission_denied" },
+  );
+});
+
+test("login attempts are bounded and return targets never leave this deployment", async (t) => {
+  const { auth } = await fixture(t);
+  for (let n = 0; n < 10; n++)
+    assert.equal((await auth.fetch(login("wrong"), "ip")).status, 401);
+  await assert.rejects(auth.fetch(login("wrong"), "ip"), {
+    code: "rate_limited",
+  });
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() + 600001 });
+  assert.equal((await auth.fetch(login(), "ip")).status, 303);
+  for (const target of [
+    "https://evil.test",
+    "//evil.test",
+    "/\\evil.test",
+    "/logout",
+    "/admin/../logout",
+  ])
+    assert.equal(localReturn(target, origin), "/admin");
+  assert.equal(
+    localReturn("/admin/pair?code=123", origin),
+    "/admin/pair?code=123",
+  );
+  assert.throws(() => validateAdminSecret("short"), {
+    code: "owner_not_configured",
+  });
 });

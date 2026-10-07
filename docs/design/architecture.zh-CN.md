@@ -9,8 +9,8 @@ Agenvo 将远程 MCP 请求送到用户批准的本地运行时。Relay 持有�
 ```mermaid
 flowchart TB
   MCP["MCP HTTP 接口 · src/relay/mcp.ts"] --> CORE["Relay 核心 · src/relay/core.ts"]
-  CF["Cloudflare OAuth / Access"] --> MCP
-  VPS["VPS OAuth / 所有者签名"] --> MCP
+  CF["Cloudflare OAuth"] --> MCP
+  VPS["VPS OAuth"] --> MCP
   CORE --> PORT["RecordStore / RelayHost / RelaySocket"]
   PORT --> DO["Durable Object SQL + 可休眠 WebSocket"]
   PORT --> NODE["Node SQLite + ws + HTTPS 代理"]
@@ -19,9 +19,9 @@ flowchart TB
   CON --> CODEX["Codex 适配器 · app-server"]
 ```
 
-`src/relay/core.ts` 维护设备配对、实例指纹批准、授权、连接 epoch、并发限制、请求关联和结果交付。核心不依赖 Cloudflare 或 Node API。`src/relay/admin.ts` 共用签名管理端点的校验、撤销与错误语义；未知撤销目标返回 404，不报告成功。存储事务必须同步执行，不在事务内等待网络。
+`src/relay/core.ts` 维护设备配对、实例指纹批准、授权、连接 epoch、并发限制、请求关联和结果交付。核心不依赖 Cloudflare 或 Node API。`src/relay/admin.ts` 共用管理端点的校验、撤销与错误语义；未知撤销目标返回 404，不报告成功。存储事务必须同步执行，不在事务内等待网络。
 
-Cloudflare 的 `src/relay/relay.ts` 实现 Durable Object 宿主与 RPC 边界，保留原有 SQLite records 表；`worker.ts` 提供 HTTP、OAuth 和可选 Access 网页。VPS 的 `src/server` 实现 Node HTTP/WebSocket、SQLite 和 MCP SDK OAuth Provider。两种 OAuth 实现使用平台各自支持的存储与协议库，共用 Relay 授权检查和 MCP 接口。没有为统一库接口而在 VPS 模拟 Cloudflare 运行时。
+Cloudflare 的 `src/relay/relay.ts` 实现 Durable Object 宿主与 RPC 边界，保留原有 SQLite records 表；`worker.ts` 提供 HTTP 与 OAuth，管理页和登录逻辑位于共享的 src/admin。VPS 的 `src/server` 实现 Node HTTP/WebSocket、SQLite 和 MCP SDK OAuth Provider。两种 OAuth 实现使用平台各自支持的存储与协议库，共用 Relay 授权检查和 MCP 接口。没有为统一库接口而在 VPS 模拟 Cloudflare 运行时。
 
 VPS 只有一个进程持有数据库排他锁。状态目录属于运行用户且权限 0700，数据库为 0600。公网 HTTPS 可以由代理或 Node TLS 提供；内部 HTTP 不构成公网明文支持。两种部署间没有自动迁移，切换需要新的设备配对和客户端授权。
 
@@ -29,7 +29,13 @@ VPS 只有一个进程持有数据库排他锁。状态目录属于运行用户�
 
 设备以本地产生的秘密进行配对。Relay 只保存摘要；所有者根据设备终端指纹批准设备及其初始实例。设备主动建立 WSS，认证成功后获得新的 epoch，同设备旧连接失效。实例 hello 包含范围指纹；新增或变更范围在再次批准前不能调用。
 
-所有者 CLI 用本机 ES256 私钥签署绑定 origin、HTTP 方法、路径、请求体摘要和最长 60 秒声明有效期、五秒时钟容差的请求。Relay 只持公钥。OAuth consent 另有签名用途域，防止跨接口复用。Cloudflare 网页还验证 Access JWT 与 CSRF；VPS 只提供 CLI 所有者管理。
+管理员在部署平台配置一项高熵登录密钥：Cloudflare secret `ADMIN_SECRET`，VPS 进程环境 `AGENVO_ADMIN_SECRET`。`src/admin/auth.ts` 共用登录、持久会话、限流、退出和 Origin 校验。网页登录生成随机的七天会话，存储只保留 token 摘要、origin、到期时间和管理员密钥摘要；浏览器收到 Secure、HttpOnly、SameSite=Lax 的 `__Host-` cookie。退出删除当前会话，更换密钥使旧会话失效。密钥轮换不撤销设备或客户端授权，三种凭据生命周期独立。每个来源地址十分钟内最多十次登录尝试；错误不会回显密钥，成功登录清除该来源计数。CF 使用可信连接地址，VPS 只按显式代理配置读取来源。
+
+管理员登录密钥至少使用 32 随机字节，编码为 hex 或 base64url；它不是用户自选的低熵口令，因此摘要比较不使用密码拉伸。比较使用定长摘要与恒时比较。无账号注册、邮件验证、Passkey 初始化或 CLI 首次认领。ORIGIN 来自部署配置，不内置维护者域名。部署由 Wrangler/Compose/systemd 负责，CLI 不接管平台凭据与资源生命周期。
+
+浏览器登录与 OAuth 同意分开：未登录的 `/authorize` 保留本地请求地址并跳转 `/login`；登录返回原授权页，明确同意后自动回到注册的客户端回调。返回地址只允许同 origin 的管理与授权路径。所有 cookie 授权的写操作校验准确 Origin。CF 使用 OAuth Provider 的一次性 consent handle 和浏览器绑定；VPS 将 consent handle 摘要、登录会话摘要、原授权请求与十分钟到期时间存入 SQLite，并在使用时消费。批准/拒绝都返回原 state 与匹配元数据的 issuer。OAuth token 不等同管理员会话。
+
+`src/admin/management.ts` 为 CF/VPS 共用设备、实例与 grant 的网页管理。可选 CLI 管理自动化从显式的 `AGENVO_ADMIN_SECRET` 环境变量读取同一个管理员密钥，使用 Bearer 访问管理 API；它不会进入 Connector 配置或服务定义。默认 `connect` 打开网页完成配对，远程无浏览器设备只需提供配对链接和指纹。旧 ES256 管理请求和 CLI OAuth 批准入口移除。
 
 MCP 客户端通过动态注册和 S256 PKCE 授权码流程取得令牌。访问令牌 15 分钟，授权最长 30 天。VPS 将授权码、访问令牌、刷新令牌的摘要持久化；刷新令牌只用一次，重用撤销对应授权。原始令牌不进入日志。设备、实例和客户端授权均可独立撤销。
 
@@ -57,10 +63,10 @@ Herdr 适配器连接独立的原生服务，不提供 session.start/stop。原�
 
 持续回归包括协议、执行配置和管理契约单元测试、原生输入与审批 fixture、实际 workerd 绑定测试，以及实际 Node HTTP/OAuth/MCP/WebSocket 与 SQLite 重启测试。原生适配器测试另需安装已验证版本的 Herdr/Codex；不能用 fixture 结果声称特定客户端或云账号已通过生产验收。
 
-Docker 构建用于检查 Linux 分发产物，真实公网证书、DNS、Cloudflare Access 策略和各 MCP 客户端登录仍由部署者在自己的环境验收。CI 不连接维护者的个人运行时、账号或生产 Relay。
+Docker 构建用于检查 Linux 分发产物，真实公网证书、DNS 和各 MCP 客户端登录仍由部署者在自己的环境验收。CI 不连接维护者的个人运行时、账号或生产 Relay。
 
 ## 改名与兼容标识
 
-Agenvo 延续嗣音的协议版本 1。CLI、文案及新安装默认值采用新名称；线上协议字符串、所有者签名用途域、Durable Object 类名和 VPS 数据库文件名保持不变，避免将品牌调整变成协议或数据迁移。旧 `SIYIN_CONFIG_DIR` 仅作为显式配置的后备入口，新变量优先；不自动扫描或搬移旧目录。部署者按[迁移说明](../migration.zh-CN.md)切换服务，仓库改名不触发生产升级。
+Agenvo 延续嗣音的协议版本 1。CLI、文案及新安装默认值采用新名称；线上设备协议字符串、Durable Object 类名和 VPS 数据库文件名保持不变，避免将品牌调整变成协议或数据迁移。旧 `SIYIN_CONFIG_DIR` 仅作为显式配置的后备入口，新变量优先；不自动扫描或搬移旧目录。部署者按[迁移说明](../migration.zh-CN.md)切换服务，仓库改名不触发生产升级。
 
 管理引用绑定适配器生命周期，观察记录在 Connector 内存中有界保存；淘汰和原生连接变化显式报告 gap。Relay 不保存另一套任务状态，继续使用有限 JSON 响应和既有协议 1。

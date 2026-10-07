@@ -1,17 +1,35 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "agenvo-test",
   "main": "integration/entry.ts",
   "compatibility_date": "2026-10-06",
   "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
   "durable_objects": {
-    "bindings": [{ "name": "RELAY", "class_name": "SiyinRelay" }],
+    "bindings": [
+      {
+        "name": "RELAY",
+        "class_name": "SiyinRelay",
+      },
+    ],
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SiyinRelay"] }],
-  "kv_namespaces": [{ "binding": "OAUTH_KV" }],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["SiyinRelay"],
+    },
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "OAUTH_KV",
+    },
+  ],
   "vars": {
     "ORIGIN": "https://agenvo.test",
-    "ACCESS_ISSUER": "",
-    "ACCESS_AUD": "",
-    "OWNER_EMAIL": "",
+    "ADMIN_SECRET": "test-admin-secret-not-for-production-1234567890",
+  },
+  "observability": {
+    "enabled": false,
   },
 }

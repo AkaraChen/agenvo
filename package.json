@@ -20,8 +20,6 @@
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "express": "5.2.1",
-    "jose": "6.2.12",
-    "wrangler": "4.147.0",
     "ws": "8.22.0",
     "zod": "4.6.5"
   },
@@ -33,7 +31,8 @@
     "esbuild": "^0.28.2",
     "prettier": "^3.9.9",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "wrangler": "4.147.0"
   },
   "bin": {
     "agenvo": "dist/cli.js"

@@ -1,4 +1,4 @@
-import { ownerOrigin, loadOwnerKey, signOwnerRequest } from "./owner-key.js";
+import { ownerOrigin, adminRequest } from "./admin-client.js";
 import { Fault } from "../protocol/index.js";
 
 export async function pairingCommand(
@@ -23,29 +23,5 @@ export async function pairingCommand(
     action === "list"
       ? ""
       : JSON.stringify({ code, digest: options.fingerprint });
-  const key = await loadOwnerKey(origin).catch((error) => {
-    if (error.code === "ENOENT")
-      throw new Fault(
-        "pairing_key_missing",
-        "Run this command on the deployment machine with its AGENVO_CONFIG_DIR, or restore its owner key.",
-      );
-    throw error;
-  });
-  const token = await signOwnerRequest(key, origin, method, path, body);
-  const response = await fetch(origin + path, {
-    method,
-    redirect: "error",
-    headers: {
-      Authorization: "Bearer " + token,
-      "Content-Type": "application/json",
-    },
-    ...(body ? { body } : {}),
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!response.ok)
-    throw new Fault(
-      "pairing_api_rejected",
-      "Pairing API returned HTTP " + response.status,
-    );
-  return response.json();
+  return adminRequest(origin, method, path, body);
 }

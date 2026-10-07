@@ -9,7 +9,7 @@ Agenvo gives MCP clients a common interface to services that manage coding agent
 ```mermaid
 flowchart LR
     C["MCP client"] -->|"HTTPS · OAuth"| R["Agenvo Relay"]
-    O["Owner CLI"] -->|"Signed approval / revocation"| R
+    O["Administrator browser"] -->|"Key login · session cookie"| R
     subgraph Deployment["Choose one deployment"]
       R --- CF["Cloudflare Worker + Durable Object + KV"]
       R --- VPS["VPS · Node.js + SQLite + HTTPS proxy"]
@@ -53,8 +53,8 @@ Use `node /absolute/path/to/agenvo/dist/cli.js` in place of `agenvo` in the guid
 
 | Deployment | Persistent state | Owner administration | Operations |
 | --- | --- | --- | --- |
-| Cloudflare | Durable Object SQLite, OAuth KV | Signed CLI; optional Access-protected browser UI | Managed Worker, hibernating device sockets |
-| Single VPS | SQLite on a persistent local disk | Signed CLI | One Node process, HTTPS proxy, backups |
+| Cloudflare | Durable Object SQLite, OAuth KV | Built-in browser login and management | Managed Worker, hibernating device sockets |
+| Single VPS | SQLite on a persistent local disk | Built-in browser login and management | One Node process, HTTPS proxy, backups |
 
 The VPS process stays running. Cloudflare does not require an always-on container. Neither target runs the coding agent in the relay.
 

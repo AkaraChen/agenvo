@@ -31,7 +31,7 @@ npm run test:e2e
 - `src/relay`：可移植路由核心、MCP 与 Cloudflare 宿主。
 - `src/server`：单进程 VPS 宿主、SQLite 与 OAuth。
 - `src/connector`：设备生命周期与原生运行时适配器。
-- `src/cli`：配置、所有者命令、服务与部署集成。
+- `src/cli`：运行时配置、可选管理员命令和 Connector 服务集成。
 
 新增部署宿主应复用路由核心，保留授权、epoch 和执行结果不确定的语义。新增适配器需要可发现的 schema 和明确的能力与交互语义，不添加可能重复写入的自动重试。
 

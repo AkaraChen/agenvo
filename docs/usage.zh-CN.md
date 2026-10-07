@@ -28,40 +28,30 @@ Codex 工作固定使用 `danger-full-access` 和 `approvalPolicy: never`，包�
 
 ## 配对与运行
 
-在设备上运行并保持命令等待：
-
 ```sh
-agenvo connect https://relay.example.com --name laptop --no-browser
+agenvo connect https://relay.example.com --name laptop
 ```
 
-命令显示请求码和指纹。在所有者电脑上运行：
+命令打开管理页并等待。用管理员密钥登录，核对终端与页面的设备指纹及实例，点击批准。CLI 自动完成配对，然后执行 `agenvo run` 或 `agenvo service install`。无浏览器设备使用 `--no-browser`，在自己的浏览器打开输出的 approvalUrl；`--no-wait` 可先返回，批准后再次运行 connect。普通设备无需管理员密钥。Linux 用户服务注销后保活需要管理员开启 linger。
+
+添加或修改实例后重启 Connector，在 `/admin` 批准新的实例范围。管理页也提供设备、实例和客户端授权撤销。
+
+## 授权 MCP 客户端
+
+在支持 OAuth 动态注册、S256 PKCE 与 Streamable HTTP 的客户端中添加 `https://relay.example.com/mcp`。浏览器打开 Agenvo 后登录并核对客户端、回调和范围，点击允许，自动返回客户端。无需复制授权 URL、执行批准命令或打开回调文件。访问 token 有效 15 分钟，grant 最长 30 天；所有有效客户端均可访问所有已批准实例。
+
+## 可选管理自动化
+
+只有显式管理操作需要在管理终端安全注入 `AGENVO_ADMIN_SECRET`。不要将它写入 Connector 配置、服务定义或命令行参数。可用命令：
 
 ```sh
 agenvo pairing list --origin https://relay.example.com
 agenvo pairing approve CODE --fingerprint SHA256 --origin https://relay.example.com
-```
-
-必须与设备终端核对指纹，不能只依赖待批准列表。初次批准覆盖展示的实例。设备完成配对后运行 `agenvo run`，或者使用 `agenvo service install` 安装 macOS launchd/Linux systemd 用户服务。Linux 注销后保活依赖管理员开启 linger，Agenvo 不修改该主机策略。
-
-添加或修改实例后，重启 Connector，检查并批准新的范围：
-
-```sh
 agenvo admin state --origin https://relay.example.com
-agenvo admin approve-instance --device-id DEVICE --instance-id INSTANCE \
-  --fingerprint SHA256 --origin https://relay.example.com
+agenvo admin approve-instance --device-id DEVICE --instance-id INSTANCE --fingerprint SHA256 --origin https://relay.example.com
 ```
 
-## 授权 MCP 客户端
-
-客户端需支持 OAuth 动态注册、S256 PKCE 授权码流程和 Streamable HTTP。添加 `https://relay.example.com/mcp`，客户端打开授权地址后，在所有者电脑上执行：
-
-```sh
-agenvo client inspect 'AUTHORIZATION_URL' --origin https://relay.example.com
-agenvo client approve 'AUTHORIZATION_URL' --origin https://relay.example.com \
-  --client-id CLIENT_ID --redirect-uri 'EXACT_REDIRECT_URI' --output /private/path/consent.json
-```
-
-先核对客户端身份和准确回调地址。批准后打开权限为 0600 的文件中的 `redirectTo`，完成原客户端登录。地址包含短期授权码，不要粘贴到聊天、日志或 Git。输出文件必须尚不存在。访问令牌有效期 15 分钟；授权最长 30 天，也可提前撤销。授权覆盖所有已批准实例，不按项目或设备隔离。
+`connect --approve` 仅用于已经显式提供管理员密钥的可信管理终端。远程设备的配对可由管理终端批准，无需把管理员密钥传给设备。
 
 共同接口流程见[管理 Agent 会话](management.zh-CN.md)。先发现后端能力，再调用已声明的方法；原生方法继续用于服务特有操作。使用 `management.threads.*` 和返回的 `threadRef`，通过 `threads.observe` 轮询状态、输出和待回应请求。结果不确定时先查询而不是重发，并检查观察记录的 gap。Herdr 的 idle 不代表任务完成。
 

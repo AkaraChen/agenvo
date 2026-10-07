@@ -4,7 +4,6 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY src ./src
 COPY scripts/build.mjs ./scripts/build.mjs
-COPY wrangler.jsonc ./
 RUN npm run build && npm prune --omit=dev
 
 FROM node:24-bookworm-slim

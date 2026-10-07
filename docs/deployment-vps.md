@@ -14,7 +14,7 @@ agenvo relay init --origin https://relay.example.com \
   --output deploy/vps/relay.local.json
 ```
 
-This creates a public Relay configuration and a private owner key at `<AGENVO_CONFIG_DIR>/owner/<origin-hash>.json` (`AGENVO_CONFIG_DIR` defaults to `~/.config/agenvo`). Keep the private key on your owner machine and back it up securely. Only copy `relay.local.json` to the VPS checkout at `deploy/vps/relay.local.json`. Never put it or keys into Git.
+This command only generates non-secret Relay configuration. Place it at `deploy/vps/relay.local.json` on the VPS. Separately generate and save at least 32 random bytes encoded as hex or base64url in your password manager. Supply the key as `AGENVO_ADMIN_SECRET` through `deploy/vps/.env` on the VPS. Set both `AGENVO_DOMAIN=relay.example.com` and `AGENVO_ADMIN_SECRET=<your generated key>` in that file. Compose injects it into the Relay; no owner key pair is required. Use mode 0600 for that file and never commit it.
 
 On the VPS, from the repository root:
 
@@ -23,14 +23,13 @@ mkdir -p deploy/vps/data
 sudo chown 1000:1000 deploy/vps/data deploy/vps/relay.local.json
 sudo chmod 700 deploy/vps/data
 sudo chmod 600 deploy/vps/relay.local.json
-export AGENVO_DOMAIN=relay.example.com
-docker compose -f deploy/vps/compose.yaml up -d --build
+docker compose --env-file deploy/vps/.env -f deploy/vps/compose.yaml up -d --build
 curl --fail https://relay.example.com/health
 ```
 
-UID 1000 is the `node` user in the image. Caddy obtains and renews a public certificate. Only Caddy publishes ports; do not expose port 8080. Caddy must preserve the original Host header. Container logs contain lifecycle messages, not native task output. Keep the domain in `deploy/vps/.env` for future Compose commands, or export it each time.
+UID 1000 is the `node` user in the image. Caddy obtains and renews a public certificate. Only Caddy publishes ports; do not expose port 8080. Caddy must preserve the original Host header. Container logs contain lifecycle messages, not native task output. Pass `--env-file deploy/vps/.env` to subsequent Compose commands as well.
 
-Continue with [device pairing and MCP authorization](usage.md). VPS administration uses the signed CLI; the browser authorization page explains how to approve its URL. Cloudflare Access is not needed.
+Continue with [device pairing and MCP authorization](usage.md). Open `/admin` and sign in with the administrator key. VPS and Cloudflare share the same built-in browser login and consent flow.
 
 ## Without Docker
 
@@ -40,7 +39,7 @@ Install Node.js 24.13+ and build the checkout in `/opt/agenvo`. Create a dedicat
 
 ## Upgrade, back up and recover
 
-Stop the Relay before making a filesystem backup; copy the entire data directory, the public configuration and proxy configuration. Keep a separate encrypted backup of the owner private key. Do not copy only `siyin.sqlite` while the process is running: its WAL may contain newer transactions.
+Stop the Relay before making a filesystem backup; copy the entire data directory, the public configuration and proxy configuration. Keep a separate encrypted backup of the administrator key. Do not copy only `siyin.sqlite` while the process is running: its WAL may contain newer transactions.
 
 For an upgrade, take a stopped backup, rebuild the image, and restart the same Compose project with the same data directory. The database retains paired devices and OAuth grants. Active requests interrupted by restart have uncertain outcomes: inspect native state before repeating a write. Connectors reconnect automatically; Herdr remains independent. Restore the previous image and matching backup if an upgrade fails. Database schema versions are checked at startup; there is no cross-platform state migration tool in this release.
 
@@ -50,6 +49,8 @@ SQLite's exclusive lock prevents a second Relay from using the same database. Sc
 
 `--trusted-proxy` trusts exactly one reverse proxy hop and uses its forwarded client address for rate limiting. Enable it only when the Relay is reachable exclusively through that proxy, which must overwrite untrusted forwarded headers. Caddy's default proxy configuration provides this boundary. Direct TLS deployments should leave it disabled; supplied forwarded headers are then ignored. Public pairing is limited to ten attempts per client address per ten minutes. Without trusted proxy configuration, clients behind one proxy share that limit.
 
-VPS OAuth redirect URIs must use HTTPS or loopback HTTP; custom application schemes are unsupported. Unapproved registrations expire after one hour; restart the client's registration flow if it waited longer. Expired confidential-client secrets are removed automatically. Owner-approved public clients retain their registration. Registration is limited to 256 entries and the SDK's per-client-address rate limit. A valid owner signature tolerates five seconds of clock skew while retaining a maximum declared lifetime of 60 seconds.
+VPS OAuth redirect URIs must use HTTPS or loopback HTTP; custom application schemes are unsupported. Unapproved registrations expire after one hour; restart the client's registration flow if it waited longer. Expired confidential-client secrets are removed automatically. Owner-approved public clients retain their registration. Registration is limited to 256 entries and the SDK's per-client-address rate limit.
 
 Data directories created by unpublished development revisions are not a supported upgrade source; recreate those test deployments and pair again. The initial released VPS format starts with this implementation.
+
+For systemd, create `/etc/agenvo/admin.env` containing `AGENVO_ADMIN_SECRET=...`, readable only by the deployment administrator (0600). Restart the Relay after key rotation. Existing browser sessions become invalid; device credentials and OAuth grants remain valid.

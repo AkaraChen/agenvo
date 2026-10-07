@@ -28,40 +28,30 @@ Experimental `--mode attach-unix --socket /absolute/control.sock` connects to an
 
 ## Pair and run
 
-On the device:
-
 ```sh
-agenvo connect https://relay.example.com --name laptop --no-browser
+agenvo connect https://relay.example.com --name laptop
 ```
 
-Keep this command running. It prints a code and fingerprint. On the owner machine:
+The command opens the management page and waits. Sign in with the administrator key, compare the device fingerprint and listed instances with the terminal, and approve. Pairing completes automatically; use `agenvo run` or `agenvo service install` next. Headless devices can use `--no-browser` and open the printed approvalUrl on another computer. With `--no-wait`, run connect again after approval. Ordinary devices do not need the administrator key. Linux services require operator-configured linger to survive logout.
+
+After changing instances, restart the Connector and approve the new scope in `/admin`. The same page revokes devices, instances and client grants.
+
+## Authorize MCP clients
+
+Add `https://relay.example.com/mcp` in a client supporting dynamic OAuth registration, S256 PKCE and Streamable HTTP. Sign in on Agenvo's page, review the client, callback and scope, then allow access. The browser returns to the client automatically. No authorization URL copying, approval command or callback file is required. Access tokens last 15 minutes; grants last up to 30 days. All authorized clients can access every approved instance.
+
+## Optional administrator automation
+
+Inject `AGENVO_ADMIN_SECRET` securely into an explicit administration command's environment. Do not put it in Connector configuration, service definitions or command-line arguments. Available commands include:
 
 ```sh
 agenvo pairing list --origin https://relay.example.com
 agenvo pairing approve CODE --fingerprint SHA256 --origin https://relay.example.com
-```
-
-Compare the fingerprint with the device terminal, not only the pending request list. Initial approval covers the displayed instances. The device's command finishes after approval; run `agenvo run`, or `agenvo service install` for launchd on macOS/systemd user service on Linux. On Linux, logout persistence requires the administrator to enable linger; Agenvo does not change that host policy.
-
-After adding or changing instances, restart the Connector and inspect the new scope:
-
-```sh
 agenvo admin state --origin https://relay.example.com
-agenvo admin approve-instance --device-id DEVICE --instance-id INSTANCE \
-  --fingerprint SHA256 --origin https://relay.example.com
+agenvo admin approve-instance --device-id DEVICE --instance-id INSTANCE --fingerprint SHA256 --origin https://relay.example.com
 ```
 
-## Authorize the MCP client
-
-Add `https://relay.example.com/mcp` in a client supporting OAuth dynamic client registration, authorization-code flow with S256 PKCE, and Streamable HTTP. When it opens an authorization URL, use the owner CLI:
-
-```sh
-agenvo client inspect 'AUTHORIZATION_URL' --origin https://relay.example.com
-agenvo client approve 'AUTHORIZATION_URL' --origin https://relay.example.com \
-  --client-id CLIENT_ID --redirect-uri 'EXACT_REDIRECT_URI' --output /private/path/consent.json
-```
-
-Inspect the client identity and exact callback before approving. Open the `redirectTo` URL in the saved mode-0600 file to finish the original client's login. It contains a short-lived authorization code: do not paste it into chat, logs or Git. The output path must not already exist. Access tokens last 15 minutes; grants expire after 30 days or owner revocation. All approved runtime instances are included; grants are not per-project or per-device.
+`connect --approve` is only for trusted administrator terminals with an explicitly supplied administrator key. Approve remote devices from the administrator terminal without sending that key to the device.
 
 Use [Managing Agent threads](management.md) for the common management API. Discover advertised methods before calling them; native methods remain available for service-specific work. Use `management.threads.*` with the returned `threadRef`; poll `threads.observe` for current state, output and pending interactions. Query uncertain writes instead of resending them, and inspect observation gaps. Herdr `idle` is not proof of task completion.
 

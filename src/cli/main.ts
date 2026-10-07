@@ -26,9 +26,7 @@ import {
 import { run } from "../connector/main.js";
 import { service } from "./service.js";
 import { relayCommand, adminCommand } from "./relay.js";
-import { deploy } from "./deploy.js";
 import { pairingCommand } from "./pairing.js";
-import { clientCommand } from "./client.js";
 import { digest, Fault, asOutcome, VERSION } from "../protocol/index.js";
 
 const args = parseArgs({
@@ -45,16 +43,9 @@ const args = parseArgs({
       "mode",
       "socket",
       "origin",
-      "owner",
-      "issuer",
-      "aud",
       "config",
       "fingerprint",
-      "client-id",
-      "redirect-uri",
       "output",
-      "credentials",
-      "params-file",
       "data-dir",
       "host",
       "port",
@@ -141,15 +132,12 @@ async function main() {
   if (options.version) return output({ version: VERSION });
   if (options.help || !command)
     return console.log(
-      `Agenvo ${VERSION}\n\nagenvo deploy --origin https://WORKER.SUBDOMAIN.workers.dev [--name agenvo] [--owner EMAIL --issuer URL --aud AUD]\nagenvo relay init --origin https://RELAY --data-dir PATH --output CONFIG [--host 127.0.0.1 --port 8080 --trusted-proxy]\nagenvo relay serve --config CONFIG\nagenvo admin state --origin https://RELAY\nagenvo admin approve-instance --device-id ID --instance-id ID --fingerprint SHA256 --origin https://RELAY\nagenvo admin revoke device|instance|grant --id ID [--instance-id ID] --origin https://RELAY\nagenvo instance add herdr --id work --config-root PATH [--cwd PATH]\nagenvo instance add codex --id coding --home PATH [--mode managed-stdio|attach-unix] [--socket PATH]\nagenvo connect https://RELAY [--name DEVICE] [--approve | --no-wait --no-browser]\nagenvo connect --cancel\nagenvo pairing list --origin https://RELAY\nagenvo pairing approve CODE --fingerprint SHA256 --origin https://RELAY\nagenvo client login --origin https://RELAY --name CLIENT --output PRIVATE_FILE\nagenvo client call TOOL --credentials PRIVATE_FILE [--params-file JSON_FILE]\nagenvo client inspect AUTHORIZATION_URL --origin https://RELAY\nagenvo client approve AUTHORIZATION_URL --origin https://RELAY --client-id ID --redirect-uri URI --output PRIVATE_FILE\nagenvo run\nagenvo service install|uninstall\nagenvo status --json\nagenvo doctor [--recover-lock]\nagenvo disconnect\n\nConfig: ${dir}\nManaged Codex homes default to a separate local directory. attach-unix uses an existing server and uses full access without execution approval prompts; it never starts or stops that server. Log in there with CODEX_HOME=PATH codex login.\nAfter changing instances, explicitly restart the connector and approve new scopes with agenvo admin approve-instance.`,
+      `Agenvo ${VERSION}\n\nagenvo relay init --origin https://RELAY --data-dir PATH --output CONFIG [--host 127.0.0.1 --port 8080 --trusted-proxy]\nagenvo relay serve --config CONFIG\nagenvo admin state --origin https://RELAY\nagenvo admin approve-instance --device-id ID --instance-id ID --fingerprint SHA256 --origin https://RELAY\nagenvo admin revoke device|instance|grant --id ID [--instance-id ID] --origin https://RELAY\nagenvo instance add herdr --id work --config-root PATH [--cwd PATH]\nagenvo instance add codex --id coding --home PATH [--mode managed-stdio|attach-unix] [--socket PATH]\nagenvo connect https://RELAY [--name DEVICE] [--approve | --no-wait --no-browser]\nagenvo connect --cancel\nagenvo pairing list --origin https://RELAY\nagenvo pairing approve CODE --fingerprint SHA256 --origin https://RELAY\nagenvo run\nagenvo service install|uninstall\nagenvo status --json\nagenvo doctor [--recover-lock]\nagenvo disconnect\n\nConfig: ${dir}\nManaged Codex homes default to a separate local directory. attach-unix uses an existing server and uses full access without execution approval prompts; it never starts or stops that server. Log in there with CODEX_HOME=PATH codex login.\nAfter changing instances, explicitly restart the connector and approve new scopes with agenvo admin approve-instance.`,
     );
   if (command === "relay")
     return output(await relayCommand(subcommand, options));
   if (command === "admin")
     return output(await adminCommand(subcommand, kind, options));
-  if (command === "deploy") return output(await deploy(options));
-  if (command === "client")
-    return output(await clientCommand(subcommand, kind, options));
   if (command === "pairing")
     return output(await pairingCommand(subcommand, kind, options));
   if (command === "run") {

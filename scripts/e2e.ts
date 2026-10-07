@@ -262,8 +262,21 @@ if (!process.env.AGENVO_E2E_DIR) {
       code_challenge_method: "S256",
       resource: "https://agenvo.test/mcp",
     }).toString();
+    const login = await fetch(base + "/login", {
+      method: "POST",
+      redirect: "manual",
+      headers: { Origin: "https://agenvo.test" },
+      body: new URLSearchParams({
+        secret: "test-admin-secret-not-for-production-1234567890",
+      }),
+    });
+    assert.equal(login.status, 303);
+    const ownerCookie = login.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
     const consent = await fetch(auth, {
-      headers: { "x-test-owner": "local-owner" },
+      headers: { Cookie: ownerCookie },
     });
     const handle = /name="handle" value="([^"]+)"/.exec(
       await consent.text(),
@@ -272,12 +285,14 @@ if (!process.env.AGENVO_E2E_DIR) {
       method: "POST",
       redirect: "manual",
       headers: {
-        "x-test-owner": "local-owner",
         Origin: "https://agenvo.test",
-        Cookie: consent.headers
-          .getSetCookie()
-          .map((c) => c.split(";")[0])
-          .join("; "),
+        Cookie:
+          ownerCookie +
+          "; " +
+          consent.headers
+            .getSetCookie()
+            .map((c) => c.split(";")[0])
+            .join("; "),
       },
       body: new URLSearchParams({ handle, decision: "approve" }),
     });

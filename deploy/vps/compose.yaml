@@ -4,6 +4,8 @@ services:
       context: ../..
       dockerfile: deploy/vps/Dockerfile
     restart: unless-stopped
+    environment:
+      AGENVO_ADMIN_SECRET: ${AGENVO_ADMIN_SECRET:?Set the administrator key}
     init: true
     read_only: true
     cap_drop: [ALL]

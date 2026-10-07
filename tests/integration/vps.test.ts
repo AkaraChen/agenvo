@@ -1,3 +1,4 @@
+const ADMIN_SECRET = "test-admin-secret-not-for-production-1234567890";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -7,11 +8,9 @@ import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:net";
 import { once } from "node:events";
 import WebSocket from "ws";
-import { generateKeyPair, exportJWK } from "jose";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { startServer } from "../../src/server/server.js";
-import { signOwnerRequest } from "../../src/cli/owner-key.js";
 import { CodexAdapter } from "../../src/connector/adapters/codex.js";
 import { instanceConfigSchema } from "../../src/connector/config.js";
 import { describe, accepted } from "../../src/connector/adapters/adapter.js";
@@ -24,8 +23,6 @@ test(
   { timeout: 30000 },
   async (t) => {
     const dataDir = await mkdtemp(join(tmpdir(), "agenvo-vps-"));
-    const keys = await generateKeyPair("ES256", { extractable: true });
-    const privateKey = await exportJWK(keys.privateKey);
     const probe = createServer();
     probe.listen(0, "127.0.0.1");
     await once(probe, "listening");
@@ -34,12 +31,11 @@ test(
     const origin = "https://127.0.0.1:" + port;
     const config = {
       origin,
-      ownerPublicKey: JSON.stringify(await exportJWK(keys.publicKey)),
       dataDir,
       host: "127.0.0.1",
       port,
     };
-    let runtime = await startServer(config);
+    let runtime = await startServer(config, ADMIN_SECRET);
     let base = () =>
       "http://127.0.0.1:" + (runtime.server.address() as { port: number }).port;
     t.after(async () => {
@@ -48,6 +44,7 @@ test(
     });
     const request = async (path: string, init: RequestInit = {}) =>
       fetch(base() + path, {
+        redirect: "manual",
         ...init,
         headers: {
           host: new URL(origin).host,
@@ -66,14 +63,7 @@ test(
     ) => {
       const body = value === undefined ? "" : JSON.stringify(value),
         method = body ? "POST" : "GET";
-      const signature = await signOwnerRequest(
-        privateKey,
-        origin,
-        method,
-        path,
-        body,
-        purpose,
-      );
+      const signature = ADMIN_SECRET;
       const r = await request(path, {
         method,
         headers: {
@@ -95,13 +85,7 @@ test(
     ] as const) {
       const body = JSON.stringify(value),
         path = "/api/admin/revoke";
-      const token = await signOwnerRequest(
-        privateKey,
-        origin,
-        "POST",
-        path,
-        body,
-      );
+      const token = ADMIN_SECRET;
       const r = await request(path, {
         method: "POST",
         headers: {
@@ -141,24 +125,94 @@ test(
       resource: origin + "/mcp",
       state: "bound-state",
     }).toString();
-    assert.equal((await request(url.pathname + url.search)).status, 200);
-    const inspect = await admin(
-      "/api/admin/authorization/inspect",
-      { authorizationUrl: url.href },
-      "oauth",
+    assert.equal((await request(url.pathname + url.search)).status, 303);
+    const login = await request("/login", {
+      method: "POST",
+      headers: { Origin: origin },
+      body: new URLSearchParams({
+        secret: ADMIN_SECRET,
+        next: url.pathname + url.search,
+      }),
+    });
+    assert.equal(login.status, 303);
+    const ownerCookie = login.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    const consent = await request(login.headers.get("location")!, {
+      headers: { Cookie: ownerCookie },
+    });
+    assert.equal(consent.status, 200);
+    const handle = /name="handle" value="([^"]+)"/.exec(
+      await consent.text(),
+    )![1];
+    const consentPost = () =>
+      request("/authorize", {
+        method: "POST",
+        headers: { Cookie: ownerCookie, Origin: origin },
+        body: new URLSearchParams({ handle, decision: "approve" }),
+      });
+    const unrelated = await request("/login", {
+      method: "POST",
+      headers: { Origin: origin },
+      body: new URLSearchParams({ secret: ADMIN_SECRET }),
+    });
+    const unrelatedCookie = unrelated.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    assert.equal(
+      (
+        await request("/authorize", {
+          method: "POST",
+          headers: { Cookie: unrelatedCookie, Origin: origin },
+          body: new URLSearchParams({ handle, decision: "approve" }),
+        })
+      ).status,
+      403,
     );
-    assert.equal(inspect.clientId, client.client_id);
-    const approved = await admin(
-      "/api/admin/authorization/approve",
-      {
-        authorizationUrl: url.href,
-        clientId: client.client_id,
-        redirectUri: client.redirect_uris[0],
-      },
-      "oauth",
+    assert.equal(
+      (
+        await request("/authorize", {
+          method: "POST",
+          headers: { Cookie: ownerCookie, Origin: "https://evil.test" },
+          body: new URLSearchParams({ handle, decision: "approve" }),
+        })
+      ).status,
+      403,
     );
-    const redirect = new URL(approved.redirectTo);
+    const approved = await consentPost();
+    assert.equal(approved.status, 302);
+    assert.equal((await consentPost()).status, 403);
+    const redirect = new URL(approved.headers.get("location")!);
     assert.equal(redirect.searchParams.get("state"), "bound-state");
+    const denyPage = await request(url.pathname + url.search, {
+      headers: { Cookie: ownerCookie },
+    });
+    const denyHandle = /name="handle" value="([^"]+)"/.exec(
+      await denyPage.text(),
+    )![1];
+    const deniedConsent = await request("/authorize", {
+      method: "POST",
+      headers: { Cookie: ownerCookie, Origin: origin },
+      body: new URLSearchParams({ handle: denyHandle, decision: "deny" }),
+    });
+    assert.equal(deniedConsent.status, 302);
+    const deniedConsentUrl = new URL(deniedConsent.headers.get("location")!);
+    assert.equal(deniedConsentUrl.searchParams.get("error"), "access_denied");
+    assert.equal(deniedConsentUrl.searchParams.get("state"), "bound-state");
+    assert.equal(deniedConsentUrl.searchParams.get("iss"), metadata.issuer);
+    assert.equal(deniedConsentUrl.searchParams.has("code"), false);
+    const malicious = new URL(url);
+    malicious.searchParams.set("redirect_uri", "https://evil.test/callback");
+    assert.equal(
+      (
+        await request(malicious.pathname + malicious.search, {
+          headers: { Cookie: ownerCookie },
+        })
+      ).status,
+      400,
+    );
     const exchange = async (fields: Record<string, string>) =>
       request("/token", {
         method: "POST",
@@ -222,7 +276,7 @@ test(
     });
     assert.equal(((await poll.json()) as any).deviceId, device.deviceId);
     await runtime.close();
-    runtime = await startServer(config);
+    runtime = await startServer(config, ADMIN_SECRET);
     const state = await admin("/api/admin/state");
     assert.equal(state.devices[0].id, device.deviceId);
     const ws = new WebSocket(base().replace("http:", "ws:") + "/connect", {
@@ -419,19 +473,20 @@ test(
 test("forwarded client addresses are trusted only with an explicit single-proxy configuration", async () => {
   for (const trustedProxy of [false, true]) {
     const dataDir = await mkdtemp(join(tmpdir(), "agenvo-proxy-"));
-    const keys = await generateKeyPair("ES256", { extractable: true });
     const probe = createServer().listen(0, "127.0.0.1");
     await once(probe, "listening");
     const port = (probe.address() as { port: number }).port;
     await new Promise<void>((resolve) => probe.close(() => resolve()));
-    const runtime = await startServer({
-      origin: "https://127.0.0.1:" + port,
-      ownerPublicKey: JSON.stringify(await exportJWK(keys.publicKey)),
-      dataDir,
-      host: "127.0.0.1",
-      port,
-      trustedProxy,
-    });
+    const runtime = await startServer(
+      {
+        origin: "https://127.0.0.1:" + port,
+        dataDir,
+        host: "127.0.0.1",
+        port,
+        trustedProxy,
+      },
+      ADMIN_SECRET,
+    );
     try {
       const pair = (address: string) =>
         fetch("http://127.0.0.1:" + port + "/pairings", {

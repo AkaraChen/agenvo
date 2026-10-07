@@ -7,7 +7,7 @@ Agenvo grants remote access to local coding runtimes. Deploy it only for an owne
 ## Trust boundaries
 
 - One owner per deployment. Every authorized MCP client can access every approved instance, including later approvals. Multi-tenant hosting and mutually untrusted clients are unsupported.
-- Owner signing keys stay on the owner's machine. Relay hosts receive only the public key. Protect private keys, Connector credentials, deployment configuration and backups with filesystem permissions and encrypted storage where appropriate.
+- Inject the administrator key through platform secrets or a protected process environment; use at least 32 random bytes. It is separate from OAuth tokens and device credentials. Ordinary Connectors never store it. Browser login creates a seven-day Secure, HttpOnly, SameSite=Lax session; writes require the exact Origin. Logout revokes that session and key rotation invalidates all browser sessions. Revoke device credentials and client grants separately. Protect configuration, credentials and backups.
 - Public endpoints require HTTPS/WSS. VPS HTTP listeners belong behind a trusted HTTPS proxy and must not be directly exposed. Host checks do not replace TLS.
 - Device approval requires comparison with the device's own fingerprint. Changing an instance scope requires a fresh approval.
 - A compromised Relay operator can observe traffic and alter authorization. This is not end-to-end encryption against the Relay host.

@@ -9,7 +9,13 @@ import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { Relay, type RelaySocket } from "../relay/core.js";
 import { mcp } from "../relay/mcp.js";
 import { admin } from "../relay/admin.js";
-import { signedOwner } from "../relay/admin-auth.js";
+import {
+  OwnerAuth,
+  validateAdminSecret,
+  loginRedirect,
+  sameOrigin,
+} from "../admin/auth.js";
+import { managementPage } from "../admin/management.js";
 import {
   LIMITS,
   PROTOCOL,
@@ -28,12 +34,6 @@ export const serverConfig = z.strictObject({
       const u = new URL(s);
       return u.protocol === "https:" && u.origin === s;
     }),
-  ownerPublicKey: z.string().transform((s) => {
-    const k = JSON.parse(s);
-    if (k.kty !== "EC" || k.crv !== "P-256" || k.d || !k.x || !k.y)
-      throw new Error("Invalid owner public key");
-    return s;
-  }),
   dataDir: z.string().startsWith("/"),
   host: z.string().default("127.0.0.1"),
   port: z.number().int().min(0).max(65535).default(8080),
@@ -60,8 +60,12 @@ class Socket implements RelaySocket {
     return this.attachment;
   }
 }
-export async function startServer(input: ServerConfig) {
+export async function startServer(
+  input: ServerConfig,
+  adminSecret = process.env.AGENVO_ADMIN_SECRET ?? "",
+) {
   const config = serverConfig.parse(input);
+  validateAdminSecret(adminSecret);
   await mkdir(config.dataDir, { recursive: true, mode: 0o700 });
   const info = await lstat(config.dataDir);
   if (
@@ -107,10 +111,15 @@ export async function startServer(input: ServerConfig) {
     },
     scheduleCleanup: async () => {},
   });
+  const owner = new OwnerAuth(store, {
+    ORIGIN: config.origin,
+    ADMIN_SECRET: adminSecret,
+  });
   const oauth = new VpsOAuth(store, relay, config.origin);
   const cleanup = setInterval(() => {
     relay.alarm();
     oauth.cleanup();
+    owner.cleanup();
   }, 60000);
   cleanup.unref();
   const app = express();
@@ -125,15 +134,18 @@ export async function startServer(input: ServerConfig) {
     res.setHeader("X-Content-Type-Options", "nosniff");
     next();
   });
-  app.use(
-    mcpAuthRouter({
-      provider: oauth,
-      issuerUrl: new URL(config.origin),
-      resourceServerUrl: new URL(config.origin + "/mcp"),
-      scopesSupported: ["runtime:approved"],
-    }),
+  const oauthRouter = mcpAuthRouter({
+    provider: oauth,
+    issuerUrl: new URL(config.origin),
+    resourceServerUrl: new URL(config.origin + "/mcp"),
+    scopesSupported: ["runtime:approved"],
+  });
+  // Browser consent is shared with the owner session, rather than the SDK's
+  // authorization handler, which does not carry the original Request.
+  app.use((req, res, next) =>
+    req.path === "/authorize" ? next() : oauthRouter(req, res, next),
   );
-  // Keep bytes intact for signed administrator requests; never reconstruct JSON.
+  // Bound request bodies before constructing the shared Fetch API request.
   app.use(express.raw({ type: () => true, limit: LIMITS.parse }));
   app.use(async (req, res) => {
     const body: Buffer = req.body ?? Buffer.alloc(0);
@@ -150,12 +162,37 @@ export async function startServer(input: ServerConfig) {
     const json = () => JSON.parse(body.toString("utf8"));
     let response: Response;
     try {
-      const managed = await admin(request, relay, {
-        ORIGIN: config.origin,
-        OWNER_PUBLIC_KEY: config.ownerPublicKey,
-      });
+      const managed = await admin(request, relay, (request) =>
+        owner.requireApi(request),
+      );
       if (managed) response = managed;
-      else if (path === "/health" && req.method === "GET")
+      else if (path === "/login" || path === "/logout")
+        response = await owner.fetch(
+          request,
+          req.ip ?? req.socket.remoteAddress ?? "unknown",
+        );
+      else if (path === "/")
+        response = new Response(null, {
+          status: 303,
+          headers: { Location: "/admin" },
+        });
+      else if (
+        path === "/authorize" ||
+        path === "/admin" ||
+        path.startsWith("/admin/")
+      ) {
+        if (!(await owner.authenticated(request))) {
+          if (request.method !== "GET") throw new Fault("permission_denied");
+          response = loginRedirect(request);
+        } else {
+          if (request.method !== "GET")
+            sameOrigin(request, { ORIGIN: config.origin });
+          response =
+            path === "/authorize"
+              ? await oauth.consent(request)
+              : await managementPage(request, relay, config.origin);
+        }
+      } else if (path === "/health" && req.method === "GET")
         response = Response.json({
           service: "agenvo",
           version: VERSION,
@@ -211,48 +248,11 @@ export async function startServer(input: ServerConfig) {
         )
           throw new Fault("permission_denied");
         response = Response.json(relay.revoke("device", id));
-      } else if (path.startsWith("/api/admin/")) {
-        await signedOwner(
-          request,
-          { ORIGIN: config.origin, OWNER_PUBLIC_KEY: config.ownerPublicKey },
-          path.startsWith("/api/admin/authorization/") ? "oauth" : "pairing",
-        );
-        if (req.method !== "POST")
-          response = new Response(null, { status: 405 });
-        else if (
-          [
-            "/api/admin/authorization/inspect",
-            "/api/admin/authorization/approve",
-          ].includes(path)
-        ) {
-          const p = z
-            .strictObject({
-              authorizationUrl: z.string().max(16384),
-              clientId: z.string().optional(),
-              redirectUri: z.string().optional(),
-            })
-            .parse(json());
-          const { params: _, ...details } = oauth.inspect(p.authorizationUrl);
-          response = Response.json(
-            path.endsWith("inspect")
-              ? { ...details, accessTokenSeconds: 900, grantSeconds: 2592000 }
-              : oauth.approve(
-                  p.authorizationUrl,
-                  p.clientId ?? "",
-                  p.redirectUri ?? "",
-                ),
-          );
-        } else response = new Response(null, { status: 404 });
-      } else if (path === "/admin" || path === "/admin/pair")
-        response = new Response(
-          "Use the owner's signed CLI for pairing, consent and revocation. / 请使用所有者签名 CLI 管理配对、授权和撤销。",
-          { headers: { "Content-Type": "text/plain; charset=utf-8" } },
-        );
-      else response = new Response(null, { status: 404 });
+      } else response = new Response(null, { status: 404 });
     } catch (error) {
       const status =
         error instanceof Fault
-          ? error.code === "permission_denied"
+          ? ["permission_denied", "csrf_rejected"].includes(error.code)
             ? 403
             : error.code === "not_found"
               ? 404

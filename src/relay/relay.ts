@@ -1,3 +1,4 @@
+import { OwnerAuth } from "../admin/auth.js";
 import { DurableObject } from "cloudflare:workers";
 import { Relay, type RecordStore } from "./core.js";
 import { PROTOCOL, type Call } from "../protocol/index.js";
@@ -7,6 +8,7 @@ import { PROTOCOL, type Call } from "../protocol/index.js";
  */
 export class SiyinRelay extends DurableObject<Env> {
   private relay: Relay;
+  private owner: OwnerAuth;
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     const sql = ctx.storage.sql;
@@ -48,6 +50,7 @@ export class SiyinRelay extends DurableObject<Env> {
         );
       },
     };
+    this.owner = new OwnerAuth(store, env);
     this.relay = new Relay({
       origin: env.ORIGIN,
       store,
@@ -58,6 +61,19 @@ export class SiyinRelay extends DurableObject<Env> {
     ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair("siyin:ping", "siyin:pong"),
     );
+  }
+  async ownerPage(request: Request) {
+    await this.ctx.storage.setAlarm(Date.now() + 600000);
+    return this.owner.fetch(
+      request,
+      request.headers.get("CF-Connecting-IP") ?? "unknown",
+    );
+  }
+  isOwner(request: Request) {
+    return this.owner.authenticated(request);
+  }
+  requireOwnerApi(request: Request) {
+    return this.owner.requireApi(request);
   }
   async fetch(request: Request) {
     const id = request.headers.get("siyin-device-id") ?? "";
@@ -135,5 +151,6 @@ export class SiyinRelay extends DurableObject<Env> {
   }
   alarm() {
     this.relay.alarm();
+    this.owner.cleanup();
   }
 }

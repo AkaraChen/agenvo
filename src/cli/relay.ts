@@ -1,12 +1,6 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import {
-  ownerOrigin,
-  provisionOwnerKey,
-  ownerKeyPath,
-  loadOwnerKey,
-  signOwnerRequest,
-} from "./owner-key.js";
+import { ownerOrigin, adminRequest } from "./admin-client.js";
 import { Fault } from "../protocol/index.js";
 import { serverConfig, startServer } from "../server/server.js";
 
@@ -18,7 +12,6 @@ export async function relayCommand(action: string, options: Options) {
       throw new Fault("invalid_arguments", "Pass --output and --data-dir");
     const config = serverConfig.parse({
       origin,
-      ownerPublicKey: await provisionOwnerKey(origin),
       dataDir: resolve(String(options["data-dir"])),
       host: String(options.host ?? "127.0.0.1"),
       port: Number(options.port ?? 8080),
@@ -32,7 +25,6 @@ export async function relayCommand(action: string, options: Options) {
     });
     return {
       config: path,
-      ownerKey: await ownerKeyPath(origin),
       next: "agenvo relay serve --config " + path,
     };
   }
@@ -100,27 +92,5 @@ export async function adminCommand(
       ...(options["instance-id"] ? { instanceId: options["instance-id"] } : {}),
     });
   } else throw new Fault("invalid_arguments");
-  const token = await signOwnerRequest(
-    await loadOwnerKey(origin),
-    origin,
-    method,
-    path,
-    body,
-  );
-  const response = await fetch(origin + path, {
-    method,
-    redirect: "error",
-    headers: {
-      Authorization: "Bearer " + token,
-      "Content-Type": "application/json",
-    },
-    ...(body ? { body } : {}),
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!response.ok)
-    throw new Fault(
-      "admin_api_rejected",
-      "Admin API returned HTTP " + response.status,
-    );
-  return response.json();
+  return adminRequest(origin, method, path, body);
 }

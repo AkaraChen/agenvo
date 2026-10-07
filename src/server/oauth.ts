@@ -19,7 +19,8 @@ import {
 import { redirectUriMatches } from "@modelcontextprotocol/sdk/server/auth/handlers/authorize.js";
 import { type AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { type Relay, type RecordStore } from "../relay/core.js";
-import { authorizationInstructions } from "../admin/page.js";
+import { html, form, escapeHtml as e, scopeWarning } from "../admin/page.js";
+import { ownerSessionToken } from "../admin/auth.js";
 import { Fault } from "../protocol/index.js";
 
 const scope = "runtime:approved";
@@ -114,14 +115,67 @@ export class VpsOAuth implements OAuthServerProvider {
     params: AuthorizationParams,
     response: Response,
   ) {
-    this.validate(params);
-    // No browser credential is created. Consent is bound to the owner's signed
-    // CLI request, the registered client, the exact redirect and the PKCE challenge.
-    response
-      .status(200)
-      .type("html")
-      .send(await authorizationInstructions().text());
+    throw new InvalidRequestError("Use the browser authorization endpoint");
   }
+  async consent(request: Request) {
+    if (request.method === "GET") {
+      const details = this.inspect(request.url);
+      this.cleanup();
+      if (this.store.list("oauth:consent:").length >= 256)
+        throw new Fault("resource_exhausted");
+      const handle = secret();
+      this.store.put("oauth:consent:" + hash(handle), {
+        authorizationUrl: request.url,
+        session: hash(ownerSessionToken(request)),
+        expires: Date.now() + 600000,
+      });
+      return html(
+        "Authorize client / 授权客户端",
+        `<article><p>Client / 客户端：<strong>${e(details.clientName)}</strong></p><p>Callback / 回调：${e(details.redirectHost)}</p>${scopeWarning}${form("/authorize", { handle, decision: "approve" }, "Allow / 允许访问")}${form("/authorize", { handle, decision: "deny" }, "Deny / 拒绝")}</article>`,
+        new Headers(),
+        new URL(details.redirectUri).origin,
+      );
+    }
+    if (request.method !== "POST") return new Response(null, { status: 405 });
+    const data = await request.formData();
+    const key = "oauth:consent:" + hash(String(data.get("handle") ?? ""));
+    const consent = this.store.transaction(() => {
+      const value = this.store.get<{
+        authorizationUrl: string;
+        session: string;
+        expires: number;
+      }>(key);
+      if (
+        !value ||
+        value.expires <= Date.now() ||
+        value.session !== hash(ownerSessionToken(request))
+      )
+        throw new Fault("permission_denied");
+      this.store.remove(key);
+      return value;
+    });
+    const details = this.inspect(consent.authorizationUrl);
+    let redirectTo: string;
+    if (data.get("decision") === "approve")
+      redirectTo = this.approve(
+        consent.authorizationUrl,
+        details.clientId,
+        details.redirectUri,
+      ).redirectTo;
+    else {
+      const target = new URL(details.redirectUri);
+      target.searchParams.set("error", "access_denied");
+      target.searchParams.set("iss", this.origin + "/");
+      if (details.params.state !== undefined)
+        target.searchParams.set("state", details.params.state);
+      redirectTo = target.href;
+    }
+    return new Response(null, {
+      status: 302,
+      headers: { Location: redirectTo, "Cache-Control": "no-store" },
+    });
+  }
+
   inspect(authorizationUrl: string) {
     const url = new URL(authorizationUrl);
     if (
@@ -323,7 +377,7 @@ export class VpsOAuth implements OAuthServerProvider {
       )
         this.store.remove("oauth:client:" + client.client_id);
     }
-    for (const kind of ["client", "code", "access", "refresh"])
+    for (const kind of ["client", "code", "access", "refresh", "consent"])
       this.store.expire("oauth:" + kind + ":", Date.now());
   }
 }

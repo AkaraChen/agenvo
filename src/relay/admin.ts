@@ -1,11 +1,10 @@
 import { z } from "zod";
-import { signedOwner } from "./admin-auth.js";
 import { readBody, transportedFault, asOutcome } from "../protocol/index.js";
 import { type Relay } from "./core.js";
 
 type Result<K extends "approvePairing" | "approveInstance" | "revoke"> =
   ReturnType<Relay[K]>;
-interface AdminRelay {
+export interface AdminRelay {
   adminStateJson(): string | Promise<string>;
   approvePairing(
     code: string,
@@ -27,7 +26,7 @@ interface AdminRelay {
 export async function admin(
   request: Request,
   relay: AdminRelay,
-  identity: { ORIGIN: string; OWNER_PUBLIC_KEY: string },
+  authorize: (request: Request) => Promise<void>,
 ): Promise<Response | undefined> {
   const path = new URL(request.url).pathname;
   if (
@@ -40,7 +39,7 @@ export async function admin(
     ].includes(path)
   )
     return;
-  await signedOwner(request, identity);
+  await authorize(request);
   const headers = { "Cache-Control": "no-store" };
   const read = path === "/api/admin/state" || path === "/api/admin/pairings";
   if (request.method !== (read ? "GET" : "POST"))

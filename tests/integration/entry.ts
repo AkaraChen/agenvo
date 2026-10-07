@@ -1,11 +1,6 @@
 // This fixture is built only by the local Workers integration suite.
-import worker, { SiyinRelay, createWorker } from "../../src/relay/worker.js";
+import worker, { SiyinRelay } from "../../src/relay/worker.js";
 export { SiyinRelay };
-const authorizedWorker = createWorker(async (request) => {
-  if (request.headers.get("x-test-owner") !== "local-owner")
-    throw new Error("test_owner_required");
-  return "test-owner";
-});
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     if (new URL(request.url).pathname === "/fixture") {
@@ -18,8 +13,6 @@ export default {
     url.protocol = "https:";
     url.host = "agenvo.test";
     url.port = "";
-    return (
-      request.headers.has("x-test-owner") ? authorizedWorker : worker
-    ).fetch(new Request(url, request), env, ctx);
+    return worker.fetch(new Request(url, request), env, ctx);
   },
 };

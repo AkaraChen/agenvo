@@ -30,13 +30,14 @@
     }
   ],
   "vars": {
-    "ORIGIN": "https://configure.example",
-    "ACCESS_ISSUER": "",
-    "ACCESS_AUD": "",
-    "OWNER_EMAIL": "",
-    "OWNER_PUBLIC_KEY": ""
+    "ORIGIN": "https://configure.example"
   },
   "observability": {
     "enabled": false
+  },
+  "secrets": {
+    "required": [
+      "ADMIN_SECRET"
+    ]
   }
 }

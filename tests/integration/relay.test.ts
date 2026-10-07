@@ -1,3 +1,4 @@
+const ADMIN_SECRET = "test-admin-secret-not-for-production-1234567890";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -6,8 +7,6 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
-import { generateKeyPair, exportJWK } from "jose";
-import { signOwnerRequest } from "../../src/cli/owner-key.ts";
 import { digest } from "../../src/protocol/index.ts";
 
 test(
@@ -15,8 +14,6 @@ test(
   { timeout: 60000 },
   async (t) => {
     const dir = await mkdtemp(join(tmpdir(), "agenvo-worker-test-"));
-    const ownerKeys = await generateKeyPair("ES256", { extractable: true });
-    const ownerPrivate = await exportJWK(ownerKeys.privateKey);
     const child = spawn(
       process.execPath,
       [
@@ -24,9 +21,6 @@ test(
         "dev",
         "--config",
         "tests/wrangler.jsonc",
-        "--var",
-        "OWNER_PUBLIC_KEY:" +
-          JSON.stringify(await exportJWK(ownerKeys.publicKey)),
         "--ip",
         "127.0.0.1",
         "--port",
@@ -36,11 +30,13 @@ test(
       ],
       { stdio: ["ignore", "pipe", "pipe"] },
     );
+    let workerOutput = "";
     const base = await new Promise<string>((resolve, reject) => {
       let output = "";
       const timer = setTimeout(() => reject(new Error(output)), 20000);
       const read = (chunk: Buffer) => {
         output += chunk.toString();
+        workerOutput += chunk.toString();
         const match = output.match(/Ready on (http:\/\/[^\s]+)/);
         if (match) {
           clearTimeout(timer);
@@ -87,23 +83,37 @@ test(
     ] as const) {
       const body = JSON.stringify(value),
         path = "/api/admin/revoke";
-      const token = await signOwnerRequest(
-        ownerPrivate,
-        "https://agenvo.test",
-        "POST",
-        path,
-        body,
-      );
+      const token = ADMIN_SECRET;
       const response = await mf.dispatchFetch("https://agenvo.test" + path, {
         method: "POST",
         headers: { Authorization: "Bearer " + token },
         body,
       });
-      assert.equal(response.status, status, await response.text());
+      assert.equal(
+        response.status,
+        status,
+        (await response.text()) + workerOutput,
+      );
     }
-    const cliConsent = await mf.dispatchFetch("https://agenvo.test/authorize");
-    assert.equal(cliConsent.status, 200);
-    assert.match(await cliConsent.text(), /agenvo client inspect/);
+    const login = await fetch(base + "/login", {
+      method: "POST",
+      redirect: "manual",
+      headers: { Origin: "https://agenvo.test" },
+      body: new URLSearchParams({ secret: ADMIN_SECRET, next: "/admin" }),
+    });
+    assert.equal(login.status, 303, await login.clone().text());
+    const ownerCookie = login.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    assert.equal(
+      (await fetch(base + "/admin", { headers: { Cookie: ownerCookie } }))
+        .status,
+      200,
+    );
+    const anonymous = await fetch(base + "/authorize", { redirect: "manual" });
+    assert.equal(anonymous.status, 303);
+    assert.match(anonymous.headers.get("location")!, /^\/login/);
     const registration = await mf.dispatchFetch(
       "https://agenvo.test/oauth/register",
       {
@@ -134,7 +144,7 @@ test(
       resource: "https://agenvo.test/mcp",
     }).toString();
     const consent = await fetch(authorization, {
-      headers: { "x-test-owner": "local-owner" },
+      headers: { Cookie: ownerCookie },
     });
     assert.equal(consent.status, 200);
     const consentHtml = await consent.text();
@@ -147,80 +157,25 @@ test(
       method: "POST",
       redirect: "manual",
       headers: {
-        "x-test-owner": "local-owner",
         Origin: "https://agenvo.test",
-        Cookie: cookie,
+        Cookie: ownerCookie + "; " + cookie,
       },
       body: new URLSearchParams({ handle, decision: "approve" }),
     });
     assert.equal(approved.status, 302, await approved.clone().text());
-    const authUrl = new URL(authorization);
-    authUrl.protocol = "https:";
-    authUrl.host = "agenvo.test";
-    authUrl.port = "";
-    const cliAuthorization = async (
-      action: string,
-      patch: Record<string, unknown> = {},
-      purpose: "pairing" | "oauth" = "oauth",
-    ) => {
-      const path = "/api/admin/authorization/" + action;
-      const body = JSON.stringify({
-        authorizationUrl: authUrl.href,
-        ...(action === "approve"
-          ? {
-              clientId: client.client_id,
-              redirectUri: "http://127.0.0.1:8899/callback",
-            }
-          : {}),
-        ...patch,
-      });
-      const signed = await signOwnerRequest(
-        ownerPrivate,
-        "https://agenvo.test",
-        "POST",
-        path,
-        body,
-        purpose,
-      );
-      return mf.dispatchFetch("https://agenvo.test" + path, {
-        method: "POST",
-        body,
-        headers: { Authorization: "Bearer " + signed },
-      });
-    };
-    const inspected = await cliAuthorization("inspect");
-    assert.equal(inspected.status, 200);
-    assert.equal(((await inspected.json()) as any).clientId, client.client_id);
-    assert.equal(
-      (await cliAuthorization("approve", {}, "pairing")).status,
-      403,
-    );
-    assert.equal(
-      (await cliAuthorization("approve", { clientId: "other" })).status,
-      403,
-    );
-    assert.equal(
-      (
-        await cliAuthorization("approve", {
-          redirectUri: "https://evil.test/callback",
-        })
-      ).status,
-      403,
-    );
-    assert.equal(
-      (
-        await cliAuthorization("approve", {
-          authorizationUrl: authUrl.href.replace("agenvo.test", "evil.test"),
-        })
-      ).status,
-      400,
-    );
-    const cliApproved = await cliAuthorization("approve");
-    assert.equal(cliApproved.status, 200, await cliApproved.clone().text());
-    assert.equal(cliApproved.headers.get("cache-control"), "no-store");
-    const code = new URL(
-      ((await cliApproved.json()) as any).redirectTo,
-    ).searchParams.get("code")!;
+    const replay = await fetch(base + "/authorize", {
+      method: "POST",
+      redirect: "manual",
+      headers: {
+        Cookie: ownerCookie + "; " + cookie,
+        Origin: "https://agenvo.test",
+      },
+      body: new URLSearchParams({ handle, decision: "approve" }),
+    });
+    assert.equal(replay.status, 400);
+    const code = new URL(approved.headers.get("location")!).searchParams.get(
+      "code",
+    )!;
     const exchange = () =>
       fetch(base + "/oauth/token", {
         method: "POST",
@@ -282,7 +237,7 @@ test(
     // CSRF is rejected even when the identity verifier has accepted the owner.
     const csrf = await fetch(base + "/admin/revoke", {
       method: "POST",
-      headers: { "x-test-owner": "local-owner", Origin: "https://other.test" },
+      headers: { Cookie: ownerCookie, Origin: "https://other.test" },
       body: new URLSearchParams({ kind: "grant", id: grants[0].id }),
     });
     assert.equal(csrf.status, 403);
@@ -330,13 +285,7 @@ test(
       code: pairing.code,
       digest: await digest(secret),
     });
-    const approvalToken = await signOwnerRequest(
-      ownerPrivate,
-      "https://agenvo.test",
-      "POST",
-      apiPath,
-      approvalBody,
-    );
+    const approvalToken = ADMIN_SECRET;
     for (const unauthorized of [
       "",
       secret,
@@ -354,14 +303,7 @@ test(
       "https://agenvo.test/api/admin/pairings",
       {
         headers: {
-          Authorization:
-            "Bearer " +
-            (await signOwnerRequest(
-              ownerPrivate,
-              "https://agenvo.test",
-              "GET",
-              "/api/admin/pairings",
-            )),
+          Authorization: "Bearer " + ADMIN_SECRET,
         },
       },
     );
@@ -378,15 +320,7 @@ test(
       method: "POST",
       body: mismatchedBody,
       headers: {
-        Authorization:
-          "Bearer " +
-          (await signOwnerRequest(
-            ownerPrivate,
-            "https://agenvo.test",
-            "POST",
-            apiPath,
-            mismatchedBody,
-          )),
+        Authorization: "Bearer " + ADMIN_SECRET,
       },
     });
     assert.equal(mismatch.status, 400);
@@ -427,8 +361,12 @@ test(
     assert.equal(((await (await poll()).json()) as any).deviceId, deviceId);
     assert.equal((await poll()).status, 400);
     assert.equal(
-      (await mf.dispatchFetch("https://agenvo.test/admin")).status,
-      503,
+      (
+        await mf.dispatchFetch("https://agenvo.test/admin", {
+          redirect: "manual",
+        })
+      ).status,
+      303,
     );
     assert.equal(
       (

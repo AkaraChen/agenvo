@@ -31,7 +31,7 @@ Source responsibilities:
 - `src/relay`: portable routing core, MCP and Cloudflare host.
 - `src/server`: single-process VPS host, SQLite and OAuth.
 - `src/connector`: device lifecycle and native runtime adapters.
-- `src/cli`: configuration, owner commands and service/deployment integration.
+- `src/cli`: runtime configuration, optional administrator commands and Connector service integration.
 
 New deployment hosts must reuse the routing core and preserve authorization, epoch and uncertain-execution semantics. Native adapter additions require discoverable schemas and explicit capability and interaction semantics. Do not add retry mechanisms that can duplicate writes.
 
