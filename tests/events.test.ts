@@ -223,6 +223,10 @@ test("webhooks use the supplied URL and return redirects without following them"
 });
 
 test("MCP 2 discovery and events use the authenticated production handler", async (t) => {
+  const logs: string[] = [];
+  t.mock.method(console, "info", (line: string) => {
+    logs.push(line);
+  });
   const store = new SqliteStore(":memory:");
   t.after(() => store.close());
   const relay = new Relay({
@@ -258,7 +262,7 @@ test("MCP 2 discovery and events use the authenticated production handler", asyn
   );
   const device = relay.approvePairing(pair.code, await digest("secret"));
   let id = 0;
-  const call = async (method: string, params = {}) => {
+  const call = async (method: string, params: Record<string, unknown> = {}) => {
     const r = await mcp(
       new Request("https://relay.test/mcp", {
         method: "POST",
@@ -267,6 +271,9 @@ test("MCP 2 discovery and events use the authenticated production handler", asyn
           Accept: "application/json, text/event-stream",
           "MCP-Protocol-Version": "2026-07-28",
           "Mcp-Method": method,
+          ...(typeof params.name === "string"
+            ? { "Mcp-Name": params.name }
+            : {}),
         },
         body: JSON.stringify({
           jsonrpc: "2.0",
@@ -295,6 +302,45 @@ test("MCP 2 discovery and events use the authenticated production handler", asyn
   };
   const discover = await call("server/discover");
   assert.deepEqual(discover.capabilities.events, {});
+  const tools = (await call("tools/list")).tools;
+  for (const name of ["instances_list", "instance_describe"]) {
+    assert.equal(
+      tools.find((tool: any) => tool.name === name).annotations?.readOnlyHint,
+      true,
+    );
+  }
+  assert.notEqual(
+    tools.find((tool: any) => tool.name === "runtime_call").annotations
+      ?.readOnlyHint,
+    true,
+  );
+  const offline = await call("tools/call", {
+    name: "instance_describe",
+    arguments: { deviceId: device.deviceId, instanceId: "runtime" },
+  });
+  assert.equal(offline.isError, true);
+  const outcome = JSON.parse(offline.content[0].text);
+  assert.equal(outcome.error.code, "device_offline");
+  assert.match(outcome.requestId, /^[0-9a-f-]{36}$/);
+  const log = logs
+    .map((line) => JSON.parse(line))
+    .find((entry) => entry.requestId === outcome.requestId);
+  assert.equal(log.errorCode, "device_offline");
+  assert.deepEqual(Object.keys(log).sort(), [
+    "durationMs",
+    "errorCode",
+    "event",
+    "execution",
+    "requestId",
+    "tool",
+  ]);
+  const invalid = await call("tools/call", {
+    name: "instances_list",
+    arguments: { cursor: "invalid" },
+  });
+  const invalidOutcome = JSON.parse(invalid.content[0].text);
+  assert.equal(invalidOutcome.error.code, "invalid_cursor");
+  assert.match(invalidOutcome.requestId, /^[0-9a-f-]{36}$/);
   const catalog = await call("events/list");
   assert.equal(catalog.events[0].name, "runtime.changed");
   const input = {

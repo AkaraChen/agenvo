@@ -210,7 +210,6 @@ test("Herdr identity checks stop replaced occupants and never promote done to su
     pane_id: "w1:p1",
     agent: "codex",
     agent_status: "done",
-    interactive_ready: true,
     agent_session: { value: "first" },
   };
   let prompts = 0;
@@ -251,6 +250,7 @@ test("Herdr identity checks stop replaced occupants and never promote done to su
   ).result;
   const a = agents.items[0];
   assert.equal(a.activity, "idle");
+  assert.equal(a.operations.send.available, true);
   assert.equal(a.success, undefined);
   await manager.call("management.threads.send", {
     threadRef: a.threadRef,
@@ -269,6 +269,7 @@ test("Herdr identity checks stop replaced occupants and never promote done to su
     })
   ).result;
   assert.equal(next.thread.activity, "working");
+  assert.equal(next.thread.operations.send.available, true);
   assert.equal(reads, 2);
   assert.equal(
     next.items.find((i: any) => i.type === "terminal.observed").data.native
@@ -276,6 +277,17 @@ test("Herdr identity checks stop replaced occupants and never promote done to su
     "Snapshot 2",
   );
   assert.equal(next.coverage.intermediateTransitions, "may_be_missed");
+  for (const status of [
+    { agent_status: "blocked", launch_pending: false },
+    { agent_status: "idle", launch_pending: true },
+  ]) {
+    Object.assign(info, status);
+    const state: any = (
+      await manager.call("management.threads.get", { threadRef: a.threadRef })
+    ).result;
+    assert.equal(state.thread.operations.send.available, false);
+  }
+  Object.assign(info, { agent_status: "idle", launch_pending: false });
   info = { ...info, agent_session: { value: "replacement" } };
   await assert.rejects(
     manager.call("management.threads.send", {
@@ -336,7 +348,7 @@ test("large completion events retain native turn identity and outcome", () => {
   assert.equal((entry.data as any).native.status, "completed");
 });
 
-test("Herdr startup references cannot adopt another pane or hide a failed start", async () => {
+test("Herdr startup polling preserves failures but recovers live agents after uncertain startup", async () => {
   const config = {
     kind: "herdr" as const,
     id: "test",
@@ -347,6 +359,8 @@ test("Herdr startup references cannot adopt another pane or hide a failed start"
   };
   const schemas = new HerdrAdapter(config).methods();
   let failed = false;
+  let startupCode = "already_exists";
+  let live = true;
   const manager = new HerdrManagement(
     async (method) => {
       if (method === "session.list")
@@ -363,12 +377,15 @@ test("Herdr startup references cannot adopt another pane or hide a failed start"
       if (method === "agent.get")
         return accepted({
           result: {
-            agent: {
-              name: "new",
-              agent: "codex",
-              terminal_id: "terminal",
-              pane_id: failed ? "w1:p1" : "w2:p1",
-            },
+            agent: live
+              ? {
+                  name: "new",
+                  agent: "codex",
+                  terminal_id: "terminal",
+                  pane_id: failed ? "w1:p1" : "w2:p1",
+                  agent_status: "idle",
+                }
+              : undefined,
           },
           ...(failed
             ? {
@@ -376,7 +393,10 @@ test("Herdr startup references cannot adopt another pane or hide a failed start"
                   state: "settled",
                   outcome: {
                     execution: "rejected",
-                    error: { code: "already_exists" },
+                    error: {
+                      code: "native_error",
+                      native: { code: startupCode },
+                    },
                   },
                 },
               }
@@ -403,7 +423,27 @@ test("Herdr startup references cannot adopt another pane or hide a failed start"
     await manager.call(started.query.method, started.query.params)
   ).result;
   assert.equal(state.thread, undefined);
-  assert.equal(state.nativeError.error.code, "already_exists");
+  assert.equal(state.nativeError.error.native.code, "already_exists");
+  startupCode = "timeout";
+  const recovered: any = (
+    await manager.call(started.query.method, started.query.params)
+  ).result;
+  assert.equal(recovered.thread.activity, "idle");
+  assert.equal(recovered.thread.operations.send.available, true);
+  assert.equal(recovered.startup.outcome.error.native.code, "timeout");
+  failed = false;
+  await assert.rejects(
+    manager.call(started.query.method, started.query.params),
+    { code: "stale_reference" },
+  );
+  failed = true;
+  live = false;
+  const lost: any = (
+    await manager.call(started.query.method, started.query.params)
+  ).result;
+  assert.equal(lost.thread, undefined);
+  assert.equal(lost.expectedPaneId, "w1:p1");
+  assert.equal(lost.serviceRef, services.items[0].serviceRef);
 });
 
 test("thread observation cursors filter interleaved events and cannot cross threads", () => {

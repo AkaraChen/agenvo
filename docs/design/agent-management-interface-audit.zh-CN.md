@@ -17,6 +17,10 @@
 | `agent.send-keys`、`pane.send-keys` | 效果取决于终端程序，不能保证 Thread 中断 |
 | `workspace.close` | 关闭资源，不等于归档会话 |
 
+`interactive_ready` 表示 Herdr 受管启动已进入 Active 阶段；它不是所有原生 Agent 的发送能力开关。外部启动、或启动确认超时后仍存活的 Codex、Claude、Devin 可以通过 `agent.prompt` 接收输入。Agenvo 对这些已支持的 Agent 不以该字段为前提，仍在发送前检查身份，并保留 Herdr 对前台进程、启动中状态和交互阻塞的检查。
+
+原生启动确认超时会清除名称和受管启动记录，不保证进程退出。查询应保留原始启动错误；若同一目标已返回有效的活跃身份，超时或等待交互的记录不能掩盖该身份。名称失效时，返回所属 service 与预期 pane，供调用方重新发现并检查现有 Agent；不能盲目再次创建。
+
 Herdr 的 [Agent 恢复逻辑](https://github.com/herdrdev/herdr/blob/7b116c05bfda646af39d2524c54e70c751f57ee8/src/agent_resume.rs)依赖具体 Agent 类型。增加统一恢复接口前，需验证其会话标识、恢复参数和失败语义。
 
 ## Codex app-server 0.160.1

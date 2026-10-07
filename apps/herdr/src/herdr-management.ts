@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { canonical, Fault, page } from "@agenvo/protocol";
+import { canonical, Fault, page, asOutcome } from "@agenvo/protocol";
 import { accepted, type Method } from "@agenvo/connector/adapters/adapter";
+import { managedAgentKinds } from "./herdr-execution.js";
 import {
   AgentManagement,
   mapped,
@@ -109,15 +110,27 @@ export class HerdrManagement extends AgentManagement {
       "threads.get",
       z.strictObject({ threadRef: reference }),
       true,
-      "Read live agent state or an asynchronous startup. Done is not task success.",
+      "Read live agent state or an asynchronous startup. Done is not task success. After a startup timeout, rediscover threads in the same service and inspect the expected pane; the process may still be running. Do not repeat creation.",
       async (p) => {
         const target = this.refs.read<Thread>(p.threadRef, "thread");
         const outcome = await native("agent.get", this.target(target));
         return mapped(outcome, (r) => {
           const info = unwrap(r).agent;
-          if (target.pending && (!info || r.startup?.outcome?.error))
+          const startupError = r.startup?.outcome?.error;
+          const uncertainStartup =
+            startupError?.code === "execution_unknown" ||
+            (startupError?.code === "native_error" &&
+              ["timeout", "agent_not_ready"].includes(
+                startupError.native?.code,
+              ));
+          if (target.pending && (!info || (startupError && !uncertainStartup)))
             return {
               threadRef: p.threadRef,
+              serviceRef: this.refs.issue("service", {
+                session: target.session,
+                backendGeneration: target.backendGeneration,
+              }),
+              expectedPaneId: target.expectedPaneId,
               activity:
                 r.startup?.state === "starting" ? "starting" : "unknown",
               startup: r.startup,
@@ -159,25 +172,46 @@ export class HerdrManagement extends AgentManagement {
         lines: z.number().int().min(1).max(500).default(80),
       }),
       true,
-      "Read a bounded terminal snapshot. It is not a durable conversation log.",
+      "Read a bounded terminal snapshot. If native history reading is blocked while the agent works, return the visible viewport and report the reduced coverage. It is not a durable conversation log.",
       async (p) => {
         const target = await this.live(p.threadRef);
-        return mapped(
-          await native("agent.read", {
+        let source = "recent-unwrapped";
+        let output;
+        try {
+          output = await native("agent.read", {
             ...this.target(target),
             lines: p.lines,
-          }),
-          (r) => ({
-            kind: "terminal_snapshot",
-            source: "native_terminal",
-            observedAt: Date.now(),
-            coverage: {
-              requestedLines: p.lines,
-              completeness: "bounded_snapshot",
-            },
-            native: r,
-          }),
-        );
+            source,
+          });
+        } catch (error) {
+          if (!(error instanceof Fault)) throw error;
+          output = asOutcome(error);
+        }
+        if (
+          output.error?.code === "native_error" &&
+          (output.error.native as any)?.code === "agent_not_idle"
+        ) {
+          source = "visible";
+          output = await native("agent.read", {
+            ...this.target(target),
+            lines: p.lines,
+            source,
+          });
+        }
+        return mapped(output, (r) => ({
+          kind: "terminal_snapshot",
+          source: "native_terminal",
+          observedAt: Date.now(),
+          coverage: {
+            requestedLines: p.lines,
+            completeness: "bounded_snapshot",
+            source,
+            ...(source === "visible"
+              ? { fallbackReason: "agent_not_idle" }
+              : {}),
+          },
+          native: r,
+        }));
       },
     );
     this.define(
@@ -331,8 +365,12 @@ export class HerdrManagement extends AgentManagement {
       evidence: "native_terminal_detection",
       operations: {
         send: {
+          // Herdr's interactive_ready tracks managed launches only. External
+          // agents and surviving timed-out launches still accept native prompts.
+          // The native call verifies the foreground process before sending.
           available:
-            Boolean(a.interactive_ready) &&
+            (Boolean(a.interactive_ready) ||
+              managedAgentKinds.some((kind) => kind === a.agent)) &&
             activity !== "blocked" &&
             activity !== "starting",
           reason: "native_state_checked_again_on_call",

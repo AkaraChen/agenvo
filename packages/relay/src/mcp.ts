@@ -25,13 +25,28 @@ export interface McpRelay {
 export async function mcp(request: Request, relay: McpRelay, grantId: string) {
   if (request.method !== "POST")
     return new Response(null, { status: 405, headers: { Allow: "POST" } });
-  const wrap = async (action: () => Outcome | Promise<Outcome>) => {
+  const wrap = async (
+    tool: string,
+    action: () => Outcome | Promise<Outcome>,
+  ) => {
+    const started = Date.now();
     let outcome: Outcome;
     try {
       outcome = await action();
     } catch (e) {
       outcome = asOutcome(e);
     }
+    outcome.requestId ??= crypto.randomUUID();
+    console.info(
+      JSON.stringify({
+        event: "mcp.tool.completed",
+        tool,
+        requestId: outcome.requestId,
+        execution: outcome.execution,
+        errorCode: outcome.error?.code,
+        durationMs: Date.now() - started,
+      }),
+    );
     return {
       content: [{ type: "text" as const, text: JSON.stringify(outcome) }],
       isError: Boolean(outcome.error),
@@ -43,6 +58,7 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
       server.registerTool(
         "instances_list",
         {
+          annotations: { readOnlyHint: true },
           description:
             "List approved runtime instances, including offline Connectors. deviceId identifies one Connector, not a physical computer; use it with instanceId for subsequent calls.",
           inputSchema: z.strictObject({
@@ -51,11 +67,13 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
             limit: z.number().int().min(1).max(50).optional(),
           }),
         },
-        (input) => wrap(() => relay.instances(grantId, input)),
+        (input) =>
+          wrap("instances_list", () => relay.instances(grantId, input)),
       );
       server.registerTool(
         "instance_describe",
         {
+          annotations: { readOnlyHint: true },
           description:
             "Read management capabilities, method schemas and execution behavior before calling an instance. Paginate using cursor or select method.",
           inputSchema: z.strictObject({
@@ -66,7 +84,7 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
           }),
         },
         ({ deviceId, instanceId, ...params }) =>
-          wrap(() =>
+          wrap("instance_describe", () =>
             relay.call(grantId, {
               deviceId,
               instanceId,
@@ -82,7 +100,7 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
             "Call an advertised management.* or native method on one approved instance. accepted means backend confirmation, not task completion. starting has a native query key. After unknown or transport failure, inspect native state; never blindly repeat a write. Use instance_describe to discover capabilities. Prefer management.services.list, then management.threads.*. Subscribe to runtime.changed for native changes, then read management.threads.observe with threadRef for current state, output and pending interactions. Poll when events are unavailable; inspect gaps. Permission approvals are automatic; user questions remain explicit interactions.",
           inputSchema: callSchema,
         },
-        (input) => wrap(() => relay.call(grantId, input)),
+        (input) => wrap("runtime_call", () => relay.call(grantId, input)),
       );
       const capabilities = { tools: {}, events: {} };
       server.server.registerCapabilities(capabilities);

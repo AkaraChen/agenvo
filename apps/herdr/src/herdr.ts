@@ -31,6 +31,12 @@ const target = {
 };
 const pane = { ...ref, paneId: id };
 const lines = z.number().int().min(1).max(500).default(80);
+const readSource = z.enum([
+  "visible",
+  "recent",
+  "recent-unwrapped",
+  "detection",
+]);
 const keys = z
   .array(z.string().min(1).max(64))
   .min(1)
@@ -127,9 +133,7 @@ const methods: Record<string, NativeMethod> = {
     schema: z.strictObject({
       ...pane,
       lines,
-      source: z
-        .enum(["visible", "recent", "recent-unwrapped", "detection"])
-        .default("recent-unwrapped"),
+      source: readSource.default("recent-unwrapped"),
     }),
     readOnly: true,
     description: snapshot,
@@ -175,7 +179,7 @@ const methods: Record<string, NativeMethod> = {
     }),
     readOnly: false,
     description:
-      "Start asynchronously. Poll agent.get using the returned session, name and backendGeneration. Do not repeat after lost confirmation. Startup tracking is connector-local; rediscover native agents after reconnect.",
+      "Start asynchronously. Poll agent.get using the returned session, name and backendGeneration. A startup timeout does not stop the process; rediscover agents by pane ID if the launch name is gone. Do not repeat after lost confirmation. Startup tracking is connector-local; rediscover native agents after reconnect.",
     argv: (p) => [
       "agent",
       "start",
@@ -205,7 +209,11 @@ const methods: Record<string, NativeMethod> = {
     argv: (p) => ["agent", "get", p.name],
   },
   "agent.read": {
-    schema: z.strictObject({ ...target, lines }),
+    schema: z.strictObject({
+      ...target,
+      lines,
+      source: readSource.default("recent-unwrapped"),
+    }),
     readOnly: true,
     description: snapshot,
     argv: (p) => [
@@ -215,7 +223,7 @@ const methods: Record<string, NativeMethod> = {
       "--lines",
       String(p.lines),
       "--source",
-      "recent-unwrapped",
+      p.source,
     ],
   },
   "agent.explain": {

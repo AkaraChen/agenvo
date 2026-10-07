@@ -5,6 +5,7 @@ export async function modelServer() {
   const requests: unknown[] = [];
   const active = new Set<ServerResponse>();
   let hold = false;
+  const releases = new Set<() => void>();
   const server = createServer(async (req, res) => {
     let body = "";
     for await (const chunk of req) body += chunk;
@@ -19,7 +20,14 @@ export async function modelServer() {
     if (hold) {
       active.add(res);
       res.on("close", () => active.delete(res));
-      return;
+      await new Promise<void>((resolve) => {
+        releases.add(resolve);
+        res.once("close", () => {
+          releases.delete(resolve);
+          resolve();
+        });
+      });
+      if (res.destroyed) return;
     }
     const item = {
       id: "fixture-message",
@@ -80,6 +88,11 @@ export async function modelServer() {
     },
     hold() {
       hold = true;
+    },
+    release() {
+      hold = false;
+      for (const release of releases) release();
+      releases.clear();
     },
     async close() {
       for (const res of active) res.destroy();

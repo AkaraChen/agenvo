@@ -29,6 +29,8 @@ Agenvo 以 Thread 管理 Agent 服务。Thread 是可寻址、可持续交互的
 
 创建不包含初始提示词。Codex 返回 `thread.threadRef`。Herdr 返回 `execution: starting` 和 `result.query`；轮询这个查询，成功后使用活跃对象的 `thread.threadRef`。启动失败后清理工作区前，先检查其归属与内容。
 
+Herdr 启动确认超时不证明进程已退出。若启动名称失效，使用返回的 `serviceRef` 重新列出 Thread，检查 `expectedPaneId`，再用新发现的引用发送输入，不要重复创建。保留的启动错误描述过去的启动尝试，当前活跃 Thread 描述 Agent 现在的状态。
+
 ```json
 {
   "deviceId": "DEVICE_ID",
@@ -66,7 +68,7 @@ Agenvo 以 Thread 管理 Agent 服务。Thread 是可寻址、可持续交互的
 
 Codex 首次观察未订阅的会话时，通过原生 resume 加载并订阅。它不发送提示词，但会以全权限设置加载上下文，因此方法标记为**非只读**。订阅失败显式返回错误；之后每次轮询读取元数据、待回应请求和已收到的原生通知。订阅不补发过去事件。若原生 resume 拒绝归档会话，需要先显式 unarchive。
 
-Herdr 每次观察都会主动查询 Agent 状态并读取有界终端快照，无需先调用 `get` 或 `read`。`lines` 默认 80，最多 500。事件是状态和输出的采样，不是终端增量流；两次轮询之间的变化可能遗漏。启动中的引用可以观察，但活跃后才有输出。结果提供活跃引用后，后续操作使用新引用，并重新开始观察游标。
+Herdr 每次观察都会主动查询 Agent 状态并读取有界终端快照，无需先调用 `get` 或 `read`。`lines` 默认 80，最多 500。工作中原生历史读取返回 `agent_not_idle` 时，自动改读可见终端，并在 `coverage.source: visible` 与 `fallbackReason: agent_not_idle` 中明确标注范围缩小；这不保证返回所请求的历史行数。事件是状态和输出的采样，不是终端增量流；两次轮询之间的变化可能遗漏。启动中的引用可以观察，但活跃后才有输出。结果提供活跃引用后，后续操作使用新引用，并重新开始观察游标。
 
 观察记录使用有界内存缓冲。过大事件标记 `truncated`；淘汰或连接重建可能返回 `gap: true`，即使淘汰由其他 Thread 引起。此时结合当前状态和原生历史恢复上下文，游标不能重建丢失事件。
 

@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { isolatedEnvironment } from "../support/environment.js";
 import { once } from "node:events";
-import { digest } from "../../src/protocol/index.ts";
+import { digest } from "@agenvo/protocol";
 
 test(
   "actual Worker routes enforce pairing, epochs, byte bounds and revocation",
@@ -442,6 +442,45 @@ test(
       return ws;
     };
     await fixture("registerGrant", "grant1", "client1");
+    await fixture("registerGrant", "fixture-grant", "fixture-client");
+    let rpcId = 0;
+    const mcpCall = async (name: string, args: unknown) => {
+      const response = await fetch(base + "/fixture-mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json, text/event-stream",
+          "MCP-Protocol-Version": "2026-07-28",
+          "Mcp-Method": "tools/call",
+          "Mcp-Name": name,
+        },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: ++rpcId,
+          method: "tools/call",
+          params: {
+            name,
+            arguments: args,
+            _meta: {
+              "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+              "io.modelcontextprotocol/clientInfo": {
+                name: "isolated-consumer",
+                version: "1",
+              },
+              "io.modelcontextprotocol/clientCapabilities": {},
+            },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+      const body: any = await response.json();
+      assert.equal(body.error, undefined, JSON.stringify(body));
+      const outcome = JSON.parse(body.result.content[0].text);
+      assert.equal(body.result.isError, Boolean(outcome.error));
+      assert.match(outcome.requestId, /^[0-9a-f-]{36}$/);
+      assert.ok(!JSON.stringify(body).includes("user cancelled MCP tool call"));
+      return outcome;
+    };
     const ws = await connect();
     const nextCall = () =>
       new Promise<any>((resolve) => {
@@ -480,6 +519,50 @@ test(
       }),
     );
     assert.equal((await result).result, "correct");
+    for (const args of [{}, { cursor: "20" }]) {
+      const received = nextCall();
+      const described = mcpCall("instance_describe", {
+        deviceId,
+        instanceId: "work",
+        ...args,
+      });
+      const packet = await received;
+      assert.equal(packet.method, "siyin.describe");
+      assert.deepEqual(packet.params, args);
+      ws.send(
+        JSON.stringify({
+          v: 1,
+          type: "result",
+          requestId: packet.requestId,
+          outcome: { execution: "accepted", result: { items: [] } },
+        }),
+      );
+      assert.equal((await described).requestId, packet.requestId);
+    }
+    const nativePacket = nextCall();
+    const nativeFailure = mcpCall("runtime_call", {
+      ...input,
+      method: "agent.read",
+    });
+    const nativeRequest = await nativePacket;
+    ws.send(
+      JSON.stringify({
+        v: 1,
+        type: "result",
+        requestId: nativeRequest.requestId,
+        outcome: {
+          execution: "rejected",
+          error: {
+            code: "native_error",
+            message: "Herdr rejected the request",
+            native: { code: "agent_not_idle" },
+          },
+        },
+      }),
+    );
+    const nativeOutcome = await nativeFailure;
+    assert.equal(nativeOutcome.error.native.code, "agent_not_idle");
+    assert.equal(nativeOutcome.requestId, nativeRequest.requestId);
     const bigPacket = nextCall();
     const big = fixture("call", "grant1", input);
     const bp = await bigPacket;
@@ -536,9 +619,12 @@ test(
     await fixture("approveInstance", deviceId, "work", fingerprint);
     // A timed-out write is unknown, and its late result cannot settle another call.
     const timeoutPacket = nextCall();
-    const timedOut = fixture("call", "grant2", input);
+    const timedOut = mcpCall("runtime_call", input);
     const timed = await timeoutPacket;
-    assert.equal((await timedOut).execution, "unknown");
+    const timeoutOutcome = await timedOut;
+    assert.equal(timeoutOutcome.execution, "unknown");
+    assert.equal(timeoutOutcome.error.code, "execution_unknown");
+    assert.equal(timeoutOutcome.requestId, timed.requestId);
     ws.send(
       JSON.stringify({
         v: 1,
@@ -548,10 +634,13 @@ test(
       }),
     );
     const oldPacket = nextCall();
-    const oldCall = fixture("call", "grant2", input);
-    await oldPacket;
+    const oldCall = mcpCall("runtime_call", input);
+    const oldRequest = await oldPacket;
     const replacement = await connect();
-    assert.equal((await oldCall).execution, "unknown");
+    const disconnected = await oldCall;
+    assert.equal(disconnected.execution, "unknown");
+    assert.equal(disconnected.error.code, "execution_unknown");
+    assert.equal(disconnected.requestId, oldRequest.requestId);
     await fixture("revoke", "device", deviceId);
     assert.equal(
       (

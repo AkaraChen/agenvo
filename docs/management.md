@@ -29,6 +29,8 @@ References are opaque and bound to a Connector adapter incarnation. Copy them ve
 
 Creation does not send a prompt. Codex returns `thread.threadRef`. Herdr returns `execution: starting` with `result.query`; poll that query and use the live `thread.threadRef` when available. Check workspace ownership and contents before cleanup after a failed start.
 
+A Herdr startup timeout does not prove the process stopped. If its launch name is gone, use the returned `serviceRef` to list threads and inspect `expectedPaneId` before sending with a newly discovered reference. Do not repeat creation. A retained startup error describes the earlier attempt; the current live thread describes the agent now.
+
 ```json
 {
   "deviceId": "DEVICE_ID",
@@ -66,7 +68,7 @@ Poll with the returned `nextCursor`, including after `caughtUp: true`. Cursors a
 
 For Codex, the first observation resumes and subscribes to the Thread if this connection is not already subscribed. This sends no prompt, but reloads the context with full-access settings; the method is advertised as **not read-only**. Subscription failure is returned explicitly. Subsequent polls read metadata, pending requests and received native notifications. Subscription does not replay earlier events. Archived threads require explicit unarchive before observation if native resume rejects them.
 
-For Herdr, each observation actively queries current Agent state and reads a bounded terminal snapshot, without needing earlier `get` or `read` calls. `lines` defaults to 80, up to 500. The events describe sampled state and output, not a terminal delta stream; transitions between polls can be missed. A pending startup can be observed, but output is unavailable until it becomes live. When the response supplies a live reference, use it for subsequent operations and start a new observation cursor.
+For Herdr, each observation actively queries current Agent state and reads a bounded terminal snapshot, without needing earlier `get` or `read` calls. `lines` defaults to 80, up to 500. When native history reading returns `agent_not_idle` during work, Agenvo reads the visible viewport instead and reports `coverage.source: visible` and `fallbackReason: agent_not_idle`; it does not promise the requested number of history lines. The events describe sampled state and output, not a terminal delta stream; transitions between polls can be missed. A pending startup can be observed, but output is unavailable until it becomes live. When the response supplies a live reference, use it for subsequent operations and start a new observation cursor.
 
 Observations use a bounded in-memory buffer. Oversized events are marked `truncated`; eviction or connection reset can return `gap: true`, even if other Threads caused the eviction. Use current state and native history to recover context: a cursor cannot reconstruct lost events.
 
