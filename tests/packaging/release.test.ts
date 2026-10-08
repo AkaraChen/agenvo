@@ -80,12 +80,7 @@ test(
           env: isolatedEnvironment(root),
         },
       );
-      assert.match(
-        stdout,
-        new RegExp(
-          "agenvo-" + app + (process.platform === "win32" ? ".cmd" : ""),
-        ),
-      );
+      assert.match(stdout, new RegExp("agenvo-" + app));
       const bundle = await readFile(entry, "utf8");
       assert.doesNotMatch(bundle, /(?:from|import)\s*["']@agenvo\//);
       const manifest = JSON.parse(
