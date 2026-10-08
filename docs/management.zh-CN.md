@@ -68,3 +68,5 @@ agent.prompt 和 agent.send-keys 使用原生 name 寻址，pane 输入使用 pa
 使用 agent.read 或 pane.read 读取。Agent 忙碌导致历史不可读时，显式选择 source: visible。输出是有界终端快照；检查当前界面后，可用原生文本和按键回答问题。不要把终端输出当成结构化请求标识或持久历史。
 
 按变化触发观察时使用已有的[事件协议](events.zh-CN.md)，再通过 execute 读取当前状态和输出。
+
+Lody 通过 `lody.*` 方法暴露原生 Session、历史、精确轮次取消和交互。云端与本地连接边界见 [Lody 指南](lody.zh-CN.md)。

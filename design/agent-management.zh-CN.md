@@ -77,3 +77,5 @@ MCP 的 isError 表示脚本或目录执行失败。原生拒绝保留在 call �
 远端 CPU 对照使用每个 HTTP 请求执行一个脚本、一次相同的原生调用 mock 和相同返回值。前后版本交替执行，预热 4 对后测量 10 对，请求之间间隔 1 秒；28 个请求均在同一 PDX isolate 完成。使用 [Cloudflare trace 的 cpuTime](https://developers.cloudflare.com/changelog/post/2025-04-09-workers-timing/) 按请求标识关联结果，单位为毫秒。每次创建引擎的 CPU 中位数为 12.5 ms（2–26 ms），复用为 2 ms（1–3 ms），本次样本降低约 84%。客户端往返耗时中位数仅从 220.4 ms 降至 214.1 ms，说明 CPU 收益不能等同于网络延迟收益。该探针不包含 OAuth、Durable Object、真实 Connector 或生产冷启动比例，不能直接换算整个服务的账单降幅。
 
 此前每请求连续执行 10 个脚本的探针，两次在每次创建引擎的对照组遇到 HTTP 503；第二次响应为 Error 1102，trace 明确标记 exceededCpu，第一次未保留响应体，原因未确认。单脚本测试通过不代表长期稳定性已经验证。复用只在仍存活的同一 isolate 内成立，新 isolate 仍需初始化；模块的 Wasm 内存容量会保留至 isolate 回收。实验结束后关闭远端预览，未更新生产部署。
+
+Lody 通过 `lody.*` 方法暴露原生 Session、历史、精确轮次取消和交互。云端与本地连接边界见 [Lody 接入设计](lody-connector.zh-CN.md)。

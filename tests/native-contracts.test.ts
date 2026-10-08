@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { AmpAdapter } from "../apps/amp/src/amp.js";
+import { LodyAdapter } from "../apps/lody/src/lody.js";
 import { PaseoAdapter } from "../apps/paseo/src/paseo.js";
 import type { Adapter } from "@agenvo/connector/adapters/adapter";
 import { CodexAdapter } from "../apps/codex-app-server/src/codex.js";
@@ -281,7 +282,18 @@ test("connectors use shared discovery terms while preserving native method names
     endpoint: "ws://localhost:1/ws",
     serverId: "fixture",
   });
-  for (const adapter of [codex, herdr, amp, paseo])
+  const lody = new LodyAdapter({
+    kind: "lody",
+    id: "l",
+    label: "Lody",
+    mode: "local",
+    platform: "local",
+    dataDir: "/unused",
+    workspaceId: "lw_fixture",
+    machineId: "machine1",
+    userId: "local:fixture",
+  });
+  for (const adapter of [codex, herdr, amp, paseo, lody])
     assert.ok(
       adapter.methods().every((m) => !m.name.startsWith("management.")),
     );
@@ -295,13 +307,14 @@ test("connectors use shared discovery terms while preserving native method names
     } while (cursor);
     return found;
   };
-  for (const [query, c, h, a, p] of [
+  for (const [query, c, h, a, p, l] of [
     [
       "Create work context",
       "thread/start",
       "agent.start",
       "amp.threads.create",
       "paseo.agents.create",
+      "lody.sessions.create",
     ],
     [
       "SUBMIT INPUT",
@@ -309,6 +322,7 @@ test("connectors use shared discovery terms while preserving native method names
       "agent.prompt",
       "amp.threads.send",
       "paseo.agents.send",
+      "lody.sessions.send",
     ],
     [
       "read output",
@@ -316,6 +330,7 @@ test("connectors use shared discovery terms while preserving native method names
       "agent.read",
       "amp.threads.read",
       "paseo.agents.history",
+      "lody.sessions.history",
     ],
     [
       "interrupt",
@@ -323,6 +338,7 @@ test("connectors use shared discovery terms while preserving native method names
       "agent.send-keys",
       "amp.threads.cancel",
       "paseo.agents.cancel",
+      "lody.sessions.cancel",
     ],
   ]) {
     assert.ok(
@@ -339,6 +355,10 @@ test("connectors use shared discovery terms while preserving native method names
     );
     assert.ok(
       all(paseo, query).some((m) => m.name === p),
+      query,
+    );
+    assert.ok(
+      all(lody, query).some((m) => m.name === l),
       query,
     );
   }

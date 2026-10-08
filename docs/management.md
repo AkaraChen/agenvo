@@ -68,3 +68,5 @@ Use `session.list` to obtain session and backendGeneration, then native workspac
 Read `agent.read` or `pane.read`. If history is unavailable while the Agent is busy, select source `visible` explicitly. Output is a bounded terminal snapshot. Questions can be answered with native text and keys after inspecting the current UI. Do not infer structured request IDs or durable history from terminal output.
 
 For change-triggered observation, use the existing [events protocol](events.md), then read current state and output through execute.
+
+Lody exposes native Sessions, history, exact-turn cancellation and interactions through `lody.*` methods. See the [Lody guide](lody.md) for cloud and local connection boundaries.
