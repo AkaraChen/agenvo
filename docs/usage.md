@@ -39,9 +39,23 @@ agenvo-codex-app-server instance add --id coding --home $env:CODEX_HOME --cwd "$
 
 Windows uses `managed-stdio`; `attach-unix` requires a Unix socket. Keep configuration in your user profile, protected by Windows directory ACLs. POSIX permission-bit checks do not apply on Windows.
 
+## Attach Paseo
+
+Run the Paseo daemon and configure its providers independently, then attach its direct WebSocket endpoint:
+
+```sh
+agenvo-paseo instance add --id paseo --endpoint ws://127.0.0.1:6767/ws
+agenvo-paseo connect https://relay.example.com --name laptop-paseo
+agenvo-paseo run
+```
+
+The default configuration directory is `~/.config/agenvo/paseo`. Instance setup records the native server ID; a replacement daemon requires rediscovery and scope approval. For a password-protected daemon, add `--password-file /absolute/path/to/password` and protect that file with mode 0600 on Unix or user-only ACLs on Windows. Store only the password in the file. Prefer loopback on the daemon machine, or `wss://` for a remote connection. Paseo relay/E2EE addresses are not supported by this connector.
+
+Discovery includes agents created by other clients. Creating an agent sends no prompt. Sends request Codex `full-access` or Claude `bypassPermissions`; existing native provider options can take precedence over these modes. Default input interrupts active work; `steer` can also replace or start a turn. Question/decision responses are explicit. Native cancel, archive and resume are available through `paseo.agents.*`; archive stops execution, and resume can return a new Agent ID. Keep that ID: resumed agents without a workspace may not appear in the native directory. Closing the Connector leaves Paseo and its agents running.
+
 ## Pair and run
 
-The examples use Herdr. For Codex, use `agenvo-codex-app-server` and pair it separately. Both can run on the same computer, with separate configuration, credentials, and services. Do not copy pairing credentials between them. The wire field `deviceId` identifies a Connector, not a physical computer.
+The examples use Herdr. For Codex or Paseo, use `agenvo-codex-app-server` or `agenvo-paseo` and pair each separately. All can run on the same computer, with separate configuration, credentials, and services. Do not copy pairing credentials between them. The wire field `deviceId` identifies a Connector, not a physical computer.
 
 ```sh
 agenvo-herdr connect https://relay.example.com --name laptop

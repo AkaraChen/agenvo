@@ -26,6 +26,7 @@ test("workspace boundaries keep shared libraries independent of applications", a
     "packages/relay",
     "apps/herdr",
     "apps/codex-app-server",
+    "apps/paseo",
     "apps/server",
     "apps/cloudflare",
   ];
@@ -36,6 +37,7 @@ test("workspace boundaries keep shared libraries independent of applications", a
     relay: ["protocol", "logging"],
     herdr: ["protocol", "connector"],
     "codex-app-server": ["protocol", "connector"],
+    paseo: ["protocol", "connector"],
     server: ["protocol", "relay", "logging"],
     cloudflare: ["protocol", "relay", "logging"],
   };

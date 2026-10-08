@@ -1,0 +1,44 @@
+{
+  "name": "@agenvo/paseo",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Xuanwo/agenvo.git",
+    "directory": "apps/paseo"
+  },
+  "engines": {
+    "node": ">=24.13.0"
+  },
+  "devDependencies": {
+    "@agenvo/connector": "0.1.0",
+    "@agenvo/protocol": "0.1.0",
+    "zod": "4.6.5"
+  },
+  "description": "Paseo daemon connector for Agenvo",
+  "bin": {
+    "agenvo-paseo": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build.mjs paseo",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "execa": "9.6.0",
+    "pino": "10.4.0",
+    "ws": "8.22.0",
+    "@getpaseo/client": "0.11.1",
+    "@getpaseo/protocol": "0.11.1"
+  }
+}

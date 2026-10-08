@@ -27,8 +27,6 @@ export const absolutePath = z
 export const commonInstanceFields = {
   id: identifier,
   label: z.string().min(1).max(128),
-  binary: absolutePath,
-  cwd: absolutePath,
 };
 export type InstanceConfig = z.infer<
   z.ZodObject<typeof commonInstanceFields>

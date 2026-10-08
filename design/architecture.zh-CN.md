@@ -1,6 +1,6 @@
 # Agenvo 架构与协议
 
-Agenvo 将远程 MCP 请求送到用户批准的本地运行时。Relay 持有连接与访问授权，Connector 持有原生运行时连接，任务生命周期归 Herdr 或 Codex。首版支持单所有者、多个设备、Cloudflare 和单 VPS 两种部署。
+Agenvo 将远程 MCP 请求送到用户批准的本地运行时。Relay 持有连接与访问授权，Connector 持有原生运行时连接，任务生命周期归 Herdr、Codex 或 Paseo。首版支持单所有者、多个设备、Cloudflare 和单 VPS 两种部署。
 
 共同管理契约见[Agent 管理设计](agent-management.zh-CN.md)，原生版本约束见[接口依据](agent-management-interface-audit.zh-CN.md)。
 
@@ -17,6 +17,7 @@ flowchart TB
   CORE <--> CON["Connector · 配置、重连、协议校验"]
   CON --> HERDR["Herdr 适配器 · 原生 JSON-RPC"]
   CON --> CODEX["Codex 适配器 · app-server"]
+  CON --> PASEO["Paseo 适配器 · daemon WebSocket"]
 ```
 
 `packages/relay/src/core.ts` 维护设备配对、实例指纹批准、授权、连接 epoch、并发限制、请求关联和结果交付。核心不依赖 Cloudflare 或 Node API。`packages/relay/src/admin.ts` 共用管理端点的校验、撤销与错误语义；未知撤销目标返回 404，不报告成功。存储事务必须同步执行，不在事务内等待网络。
@@ -69,10 +70,12 @@ Herdr 适配器连接独立的原生服务，不提供 session.start/stop。原�
 
 ## 包与发行边界
 
-仓库使用 npm workspaces。计划公开发行三个程序：`@agenvo/herdr`、`@agenvo/codex-app-server`、`@agenvo/server`。`@agenvo/protocol`、`@agenvo/connector`、`@agenvo/relay` 是私有 workspace 包，构建时进入对应发行产物，不要求使用者安装私有包。Cloudflare 是部署入口，不发布 npm 包。各包统一版本，线协议版本独立维护。
+仓库使用 npm workspaces。计划公开发行四个程序：`@agenvo/herdr`、`@agenvo/codex-app-server`、`@agenvo/paseo`、`@agenvo/server`。`@agenvo/protocol`、`@agenvo/connector`、`@agenvo/relay` 是私有 workspace 包，构建时进入对应发行产物，不要求使用者安装私有包。Cloudflare 是部署入口，不发布 npm 包。各包统一版本，线协议版本独立维护。
 
 共享 Connector 不导入后端实现。每个后端拥有配置 schema、配置生成、能力版本、诊断、原生连接及生命周期行为，通过静态 Backend 接口接入共同 CLI 和连接循环。不存在动态插件注册或加载。
 
 每个 Connector 独立配对。Herdr 与 Codex 默认目录分别是 `~/.config/agenvo/herdr` 与 `~/.config/agenvo/codex-app-server`，各有凭据、锁和系统服务。线协议中的 deviceId 表示 Connector 身份；同一物理电脑可以有多个身份。连接器之间不能复制配对凭据。
 
 包的源码通过显式 exports 导入。共享包不依赖应用，应用之间不互相导入。构建检查防止跨应用打包；发行测试从 npm tarball 在仓库外安装，验证没有对私有包或源码路径的运行依赖。
+
+Paseo Connector 附着已有 daemon，默认配置目录为 `~/.config/agenvo/paseo`。完整契约、原生控制动作与隔离验证见 [Paseo 接入设计](paseo-connector.zh-CN.md)。

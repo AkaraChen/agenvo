@@ -57,6 +57,7 @@ await execa(
     "--no-fund",
     "--save-exact",
     "@openai/codex@0.160.1",
+    "@getpaseo/cli@0.11.1",
   ],
   { maxBuffer: 1024 * 1024 },
 );

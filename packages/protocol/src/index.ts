@@ -25,7 +25,7 @@ export const callSchema = z.strictObject({
 export type Call = z.infer<typeof callSchema>;
 export const instanceSchema = z.strictObject({
   instanceId: identifier,
-  kind: z.enum(["herdr", "codex"]),
+  kind: z.enum(["herdr", "codex", "paseo"]),
   label: z.string().max(128),
   fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
   scope: paramsSchema,
