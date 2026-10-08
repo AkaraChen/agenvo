@@ -83,19 +83,13 @@ export class CodexAdapter implements Adapter {
       { timeout: 8000 },
     );
     this.version = stdout.trim();
-    if (!/\b0\.160\.1\b/.test(this.version))
-      throw new Fault("unsupported_backend_version");
     if (this.config.mode === "attach-unix") {
       try {
         await this.attach();
       } catch (error) {
         if (
           error instanceof Fault &&
-          [
-            "unsupported_backend_version",
-            "backend_home_mismatch",
-            "insecure_socket",
-          ].includes(error.code)
+          ["backend_home_mismatch", "insecure_socket"].includes(error.code)
         )
           throw error;
         this.fail();
@@ -192,8 +186,6 @@ export class CodexAdapter implements Adapter {
       clientInfo: { name: "agenvo", version: "0.1.0" },
       capabilities: { experimentalApi: true },
     });
-    if (!/\/0\.160\.1(?: |$)/.test(init.userAgent ?? ""))
-      throw new Fault("unsupported_backend_version");
     if ((await realpath(init.codexHome)) !== this.config.home)
       throw new Fault("backend_home_mismatch");
     this.write({ jsonrpc: "2.0", method: "initialized" });
@@ -537,11 +529,9 @@ export class CodexAdapter implements Adapter {
             void this.attach().catch((error) => {
               if (
                 error instanceof Fault &&
-                [
-                  "unsupported_backend_version",
-                  "backend_home_mismatch",
-                  "insecure_socket",
-                ].includes(error.code)
+                ["backend_home_mismatch", "insecure_socket"].includes(
+                  error.code,
+                )
               )
                 this.closed = true;
               this.fail();
@@ -566,7 +556,7 @@ export class CodexAdapter implements Adapter {
         name,
         readOnly: /(?:\/list|\/read)$/.test(name),
         description:
-          "Codex 0.160.1 native method. Agent work uses full access and never requests execution approval." +
+          "Codex native method. Agent work uses full access and never requests execution approval." +
           (["thread/read", "thread/turns/list"].includes(name)
             ? " Native history can be unavailable; use observations for received events."
             : ""),

@@ -26,7 +26,7 @@ npm run test:system
 npm run test:adapters
 ```
 
-安装器下载固定的 Herdr 0.9.3 和 Codex CLI 0.160.1，校验 Herdr 发布资产摘要。Linux/macOS CI 使用相同命令。`npm run test:ci` 将开头的检查（audit 除外）与系统测试合并。
+安装器下载固定的 Herdr 0.9.3 和 Codex CLI 0.160.1，校验 Herdr 发布资产摘要。固定版本用于复现测试，不是运行时版本白名单。Linux/macOS CI 使用相同命令。`npm run test:ci` 将开头的检查（audit 除外）与系统测试合并。
 
 系统测试覆盖 OAuth 登录 → 设备配对 → MCP 发现与订阅 → 输入任务 → 原生通知 → 读取输出 → 继续或中断 → 取消订阅。真实 Connector 和独立 Herdr/Codex 进程使用本地模型 mock。测试入口清除继承凭证，提供临时 HOME、CODEX_HOME 和 Herdr 配置，fixture 负责清理进程。不要将测试指向个人部署。Linux 用户服务测试需要 systemd 用户管理器；检查跳过输出以确认实际覆盖。
 

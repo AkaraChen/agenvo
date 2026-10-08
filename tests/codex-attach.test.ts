@@ -29,9 +29,10 @@ test("attach applies full access, tracks peer resolution and reconnects without 
       }
       calls.push(p);
       if (p.id == null || p.method === "turn/start") return;
+      // The attached server may differ from both the CLI and schema baseline.
       const result =
         p.method === "initialize"
-          ? { userAgent: "Codex Desktop/0.160.1 (test)", codexHome: root }
+          ? { userAgent: "Codex Desktop/0.162.0 (test)", codexHome: root }
           : ["thread/resume", "thread/read"].includes(p.method)
             ? { thread: { id: "t" } }
             : {};

@@ -57,7 +57,7 @@ export const backend: Backend<HerdrConfig> = {
       return [
         {
           check: config.id + ":version",
-          ok: /0\.9\.3\b/.test(stdout),
+          ok: true,
           detail: stdout.trim(),
         },
       ];

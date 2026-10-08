@@ -2,7 +2,8 @@
 // Protocol fixture for control-plane edge cases. Not a real Codex runtime.
 import readline from "node:readline";
 if (process.argv.includes("--version")) {
-  console.log("codex-cli 0.160.1");
+  // Keep this outside the schema baseline so protocol tests catch version gates.
+  console.log("codex-cli 0.161.0");
   process.exit(0);
 }
 const requests = [

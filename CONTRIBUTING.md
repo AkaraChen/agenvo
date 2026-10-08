@@ -26,7 +26,7 @@ npm run test:system
 npm run test:adapters
 ```
 
-The installer downloads pinned Herdr 0.9.3 and Codex CLI 0.160.1 releases and checks the Herdr asset digest. Linux/macOS CI uses the same commands. `npm run test:ci` combines the initial checks (except audit) with system tests.
+The installer downloads pinned Herdr 0.9.3 and Codex CLI 0.160.1 releases and checks the Herdr asset digest. These pins make tests reproducible; they are not a runtime version allowlist. Linux/macOS CI uses the same commands. `npm run test:ci` combines the initial checks (except audit) with system tests.
 
 System tests follow OAuth login → device pairing → MCP discovery/subscription → Agent input → native notification → reading output → follow-up/interruption → unsubscribe. Real Connector and independent Herdr/Codex processes use a local model mock. The launcher clears inherited credentials and provides temporary HOME, CODEX_HOME and Herdr configuration; fixtures clean up their processes. Never point tests at a personal deployment. Linux user-service tests require a systemd user manager; check skipped-test output for actual coverage.
 

@@ -268,7 +268,7 @@ export class HerdrAdapter implements Adapter {
       timeout: 8000,
     });
     this.version = stdout.trim();
-    this.available = /\b0\.9\.3\b/.test(stdout);
+    this.available = true;
   }
   methods(): Method[] {
     return [...this.management.methods(), ...this.nativeMethods()];

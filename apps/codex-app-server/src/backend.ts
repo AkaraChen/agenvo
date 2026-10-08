@@ -75,7 +75,7 @@ export const backend: Backend<CodexConfig> = {
       });
       checks.push({
         check: config.id + ":version",
-        ok: /0\.160\.1\b/.test(stdout),
+        ok: true,
         detail: stdout.trim(),
       });
     } catch {

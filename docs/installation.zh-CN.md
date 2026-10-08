@@ -10,7 +10,9 @@ Agenvo 尚未正式对外发布，当前使用仓库源码安装。需要准备�
 
 - Node.js 24.13+ 和 npm。
 - 连接器使用 macOS 或 Linux；VPS 中继使用 Linux。
-- 在运行 Agent 的电脑上安装 Herdr 0.9.3 或 Codex CLI 0.160.1，并单独配置 Agent 所需的模型服务凭据。这些是原生测试覆盖的版本。
+- 在运行 Agent 的电脑上安装 Herdr 或 Codex CLI，并单独配置 Agent 所需的模型服务凭据。
+
+CI 固定使用 Herdr 0.9.3 和 Codex CLI 0.160.1，以便复现测试。这些是测试基线，不是安装时必须匹配的版本；Agenvo 不会仅因版本号不同而拒绝连接。兼容性取决于连接器使用的原生接口。
 
 ```sh
 git clone https://github.com/Xuanwo/agenvo.git

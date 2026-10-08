@@ -10,7 +10,9 @@ Agenvo has no public releases yet; use the repository source. Requirements:
 
 - Node.js 24.13+ and npm.
 - macOS or Linux for connectors; Linux for a VPS relay.
-- Herdr 0.9.3 or Codex CLI 0.160.1 on the computers that will run agents, with the agents' provider credentials configured separately. These are the versions covered by the native tests.
+- Herdr or Codex CLI on the computers that will run agents, with the agents' provider credentials configured separately.
+
+CI pins Herdr 0.9.3 and Codex CLI 0.160.1 for reproducible tests. These are test baselines, not required exact versions; Agenvo does not reject a runtime just because its version differs. Compatibility depends on the native interfaces used by the connector.
 
 ```sh
 git clone https://github.com/Xuanwo/agenvo.git
