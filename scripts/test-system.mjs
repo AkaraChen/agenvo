@@ -24,6 +24,19 @@ try {
       stdio: "inherit",
       env: {
         PATH: process.env.PATH,
+        ...(process.platform === "win32"
+          ? {
+              SystemRoot: process.env.SystemRoot,
+              WINDIR: process.env.WINDIR,
+              COMSPEC: process.env.COMSPEC,
+              PATHEXT: process.env.PATHEXT,
+              USERPROFILE: root,
+              APPDATA: join(root, "AppData", "Roaming"),
+              LOCALAPPDATA: join(root, "AppData", "Local"),
+              TEMP: root,
+              TMP: root,
+            }
+          : {}),
         HOME: root,
         TMPDIR: root,
         XDG_CONFIG_HOME: join(root, "config"),
@@ -32,7 +45,7 @@ try {
         CODEX_HOME: join(root, "codex"),
         TERM: "xterm-256color",
         LANG: "en_US.UTF-8",
-        SHELL: "/bin/sh",
+        ...(process.platform !== "win32" ? { SHELL: "/bin/sh" } : {}),
       },
     },
   );

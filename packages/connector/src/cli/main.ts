@@ -304,7 +304,13 @@ export async function connectorCli<T extends InstanceConfig>(
           const s = await stat(path);
           checks.push({
             check: "permissions:" + path,
-            ok: (s.mode & 0o077) === 0,
+            ok: process.platform === "win32" || (s.mode & 0o077) === 0,
+            ...(process.platform === "win32"
+              ? {
+                  detail:
+                    "Windows access is controlled by the directory ACL, not POSIX modes.",
+                }
+              : {}),
           });
         } catch {
           checks.push({ check: "permissions:" + path, ok: false });

@@ -1,3 +1,4 @@
+import { binary as executable } from "@agenvo/connector/cli/binary";
 import { once } from "node:events";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -12,16 +13,20 @@ import { until, isolatedEnvironment } from "../support/environment.js";
 for (const mode of ["managed-stdio", "attach-unix"] as const)
   test(
     `native Codex ${mode} executes a local mock-model turn, notifies completion, reads output and accepts follow-up interruption`,
-    { timeout: 45000 },
+    {
+      timeout: 45000,
+      skip:
+        process.platform === "win32" && mode === "attach-unix"
+          ? "Codex Unix socket attachment is Unix-only"
+          : false,
+    },
     async (t) => {
       const lab = await eventsLab(t);
       const model = await modelServer();
       lab.cleanup(() => model.close());
       const home = join(lab.root, "codex");
       await mkdir(home);
-      const binary = (
-        await promisify(execFile)("/bin/sh", ["-c", "command -v codex"])
-      ).stdout.trim();
+      const binary = await executable("codex", {});
       const socketPath = join(home, "native.sock");
       if (mode === "attach-unix") {
         const child = spawn(

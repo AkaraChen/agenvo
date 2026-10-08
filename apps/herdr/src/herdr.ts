@@ -1,9 +1,8 @@
 import { HerdrEvents } from "./herdr-events.js";
 import type { RuntimeEvent } from "@agenvo/protocol/events";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-import { readdir, stat, realpath } from "node:fs/promises";
-import { join, dirname, basename } from "node:path";
+import { execa as exec } from "execa";
+import { readdir, stat, realpath, readFile } from "node:fs/promises";
+import { join, dirname, basename, relative, isAbsolute } from "node:path";
 import { z } from "zod";
 import { type HerdrConfig } from "./config.js";
 import {
@@ -14,7 +13,6 @@ import {
 import { Fault, digest, page, type Outcome } from "@agenvo/protocol";
 
 import { fullAccessArgs, managedAgentKinds } from "./herdr-execution.js";
-const exec = promisify(execFile);
 const session = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 const ref = { session, backendGeneration: z.string().regex(/^[a-f0-9]{64}$/) };
 const id = z
@@ -288,6 +286,7 @@ export class HerdrAdapter implements Adapter {
         ? join(this.config.configRoot, "herdr.sock")
         : join(this.config.configRoot, "sessions", name, "herdr.sock");
     if (
+      process.platform !== "win32" &&
       Buffer.byteLength(path.replace("herdr.sock", "herdr-client.sock")) >= 104
     )
       throw new Fault(
@@ -311,14 +310,22 @@ export class HerdrAdapter implements Adapter {
   async generation(name: string) {
     const path = this.socket(name);
     if (
+      process.platform !== "win32" &&
       Buffer.byteLength(path.replace("herdr.sock", "herdr-client.sock")) >= 104
     )
       throw new Fault("socket_path_too_long");
     const root = await realpath(this.config.configRoot);
     const resolved = await realpath(path);
-    if (!resolved.startsWith(root + "/"))
+    const within = relative(root, resolved);
+    if (within.startsWith("..") || isAbsolute(within))
       throw new Fault("permission_denied", "Socket escapes the approved root");
     const info = await stat(path, { bigint: true });
+    if (process.platform === "win32") {
+      if (!info.isFile()) throw new Fault("runtime_unavailable");
+      const marker = await readFile(path, "utf8");
+      if (!/^\d+:\d+$/.test(marker)) throw new Fault("runtime_unavailable");
+      return digest(resolved + ":" + marker);
+    }
     if (!info.isSocket()) throw new Fault("runtime_unavailable");
     // Socket inode and creation/change timestamps survive connector restarts, but
     // change when Herdr replaces its endpoint. Access time is deliberately omitted.
@@ -344,7 +351,7 @@ export class HerdrAdapter implements Adapter {
         return { output: stdout };
       }
     } catch (error: any) {
-      if (!error.killed && typeof error.stderr === "string") {
+      if (!error.isTerminated && typeof error.stderr === "string") {
         try {
           const native = JSON.parse(error.stderr);
           if (native.error)
@@ -521,7 +528,8 @@ export class HerdrAdapter implements Adapter {
           if (watchers.get(name)?.generation === generation) continue;
           watchers.get(name)?.watch.close();
           const watch = new HerdrEvents(
-            this.socket(name),
+            (process.platform === "win32" ? "\\\\.\\pipe\\" : "") +
+              this.socket(name),
             name,
             generation,
             emit,

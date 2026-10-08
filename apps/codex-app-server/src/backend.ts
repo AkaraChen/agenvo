@@ -1,8 +1,7 @@
 import { mkdir, realpath } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { homedir } from "node:os";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execa as exec } from "execa";
 import { Fault } from "@agenvo/protocol";
 import { validatePaths } from "@agenvo/connector/config";
 import { binary } from "@agenvo/connector/cli/binary";
@@ -68,7 +67,6 @@ export const backend: Backend<CodexConfig> = {
   },
   async doctor(config) {
     const checks: Check[] = [];
-    const exec = promisify(execFile);
     try {
       const { stdout } = await exec(config.binary, ["--version"], {
         timeout: 8000,

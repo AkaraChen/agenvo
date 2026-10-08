@@ -70,8 +70,8 @@ export async function startServer(
   const info = await lstat(config.dataDir);
   if (
     !info.isDirectory() ||
-    (info.mode & 0o077) !== 0 ||
-    info.uid !== process.getuid?.()
+    (process.platform !== "win32" &&
+      ((info.mode & 0o077) !== 0 || info.uid !== process.getuid?.()))
   )
     throw new Fault(
       "insecure_data_directory",
@@ -87,8 +87,8 @@ export async function startServer(
   const dbInfo = await lstat(dbPath);
   if (
     !dbInfo.isFile() ||
-    dbInfo.uid !== process.getuid?.() ||
-    (dbInfo.mode & 0o077) !== 0
+    (process.platform !== "win32" &&
+      (dbInfo.uid !== process.getuid?.() || (dbInfo.mode & 0o077) !== 0))
   )
     throw new Fault("insecure_database");
   const tls = config.tls

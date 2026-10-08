@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, writeFile, unlink, readFile } from "node:fs/promises";
-import { join, dirname } from "node:path";
+import { join, dirname, basename } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,7 @@ export function serviceDefinition(
 ) {
   const name = serviceName(dir);
   const cli = fileURLToPath(entry);
-  if (!cli.endsWith("/dist/cli.js"))
+  if (!(basename(cli) === "cli.js" && basename(dirname(cli)) === "dist"))
     throw new Fault(
       "build_required",
       "Install services from the built dist/cli.js",

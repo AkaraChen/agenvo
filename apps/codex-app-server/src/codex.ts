@@ -1,10 +1,5 @@
 import type { RuntimeEvent } from "@agenvo/protocol/events";
-import {
-  spawn,
-  execFile,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
-import { promisify } from "node:util";
+import { execa, type Subprocess } from "execa";
 import WebSocket from "ws";
 import { connect as connectUnix } from "node:net";
 import { realpath, stat } from "node:fs/promises";
@@ -55,7 +50,7 @@ export class CodexAdapter implements Adapter {
   version = "unknown";
   available = false;
   onAvailabilityChange?: () => void;
-  private child?: ChildProcessWithoutNullStreams;
+  private child?: Subprocess<{ stdio: "pipe"; buffer: false; reject: false }>;
   private socket?: WebSocket;
   private reconnect?: NodeJS.Timeout;
   private reconnectAttempt = 0;
@@ -77,13 +72,16 @@ export class CodexAdapter implements Adapter {
     );
   }
   async init() {
-    const { stdout } = await promisify(execFile)(
-      this.config.binary,
-      ["--version"],
-      { timeout: 8000 },
-    );
+    const { stdout } = await execa(this.config.binary, ["--version"], {
+      timeout: 8000,
+    });
     this.version = stdout.trim();
     if (this.config.mode === "attach-unix") {
+      if (process.platform === "win32")
+        throw new Fault(
+          "unsupported_platform",
+          "Use managed-stdio on Windows; attach-unix requires a Unix socket.",
+        );
       try {
         await this.attach();
       } catch (error) {
@@ -96,7 +94,7 @@ export class CodexAdapter implements Adapter {
       }
       return;
     }
-    this.child = spawn(
+    this.child = execa(
       this.config.binary,
       [
         "-c",
@@ -109,7 +107,9 @@ export class CodexAdapter implements Adapter {
       {
         cwd: this.config.cwd,
         env: { ...process.env, CODEX_HOME: this.config.home },
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: "pipe",
+        buffer: false,
+        reject: false,
       },
     );
     this.child.stderr.resume(); // Native logs may contain private prompts; never relay them.

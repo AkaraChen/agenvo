@@ -1,3 +1,4 @@
+import { binary as executable } from "@agenvo/connector/cli/binary";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
@@ -8,7 +9,8 @@ import { herdrFixture } from "../fixtures/herdr-runtime.js";
 import { eventsLab } from "../support/events-lab.js";
 import { until } from "../support/environment.js";
 
-const quote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
+const quote = (s: string) =>
+  "'" + s.replaceAll("'", process.platform === "win32" ? "''" : "'\\''") + "'";
 test(
   "external Herdr agent is discovered, prompts produce events, blocked input is readable and restart invalidates state",
   { timeout: 45000 },
@@ -16,9 +18,7 @@ test(
     const lab = await eventsLab(t);
     const root = join(lab.root, "herdr");
     await mkdir(root);
-    const binary = (
-      await promisify(execFile)("/bin/sh", ["-c", "command -v herdr"])
-    ).stdout.trim();
+    const binary = await executable("herdr", {});
     const config = {
       kind: "herdr" as const,
       id: "herdr",
@@ -71,7 +71,7 @@ test(
     await call("pane.run", {
       ...ref,
       paneId,
-      command: `${quote(process.execPath)} ${quote(resolve("tests/fixtures/herdr-agent.mjs"))}`,
+      command: `${process.platform === "win32" ? "& " : ""}${quote(process.execPath)} ${quote(resolve("tests/fixtures/herdr-agent.mjs"))}`,
     });
     const threads = await until(
       () => call("management.threads.list", { serviceRef: service.serviceRef }),

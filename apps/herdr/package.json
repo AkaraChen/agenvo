@@ -12,8 +12,8 @@
     "node": ">=24.13.0"
   },
   "devDependencies": {
-    "@agenvo/protocol": "0.1.0",
     "@agenvo/connector": "0.1.0",
+    "@agenvo/protocol": "0.1.0",
     "zod": "4.6.5"
   },
   "description": "Herdr connector for Agenvo",
@@ -35,7 +35,8 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "ws": "8.22.0",
-    "pino": "10.4.0"
+    "execa": "9.6.0",
+    "pino": "10.4.0",
+    "ws": "8.22.0"
   }
 }

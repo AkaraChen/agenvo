@@ -1,9 +1,10 @@
+import { binary as executable } from "@agenvo/connector/cli/binary";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, delimiter } from "node:path";
 import { eventsLab } from "../support/events-lab.js";
 import { modelServer } from "../support/model-server.js";
 import { until } from "../support/environment.js";
@@ -20,12 +21,8 @@ test(
     lab.cleanup(() => model.close());
     model.hold();
     const exec = promisify(execFile);
-    const herdr = (
-      await exec("/bin/sh", ["-c", "command -v herdr"])
-    ).stdout.trim();
-    const codex = (
-      await exec("/bin/sh", ["-c", "command -v codex"])
-    ).stdout.trim();
+    const herdr = await executable("herdr", {});
+    const codex = await executable("codex", {});
     const bin = join(lab.root, "bin"),
       gate = join(lab.root, "release-startup"),
       launches = join(lab.root, "launches");
@@ -33,12 +30,22 @@ test(
     // Hold the actual Codex launch until Herdr's startup deadline has expired.
     // The gate, not a guessed machine-speed-dependent sleep, controls readiness.
     await writeFile(
-      join(bin, "codex"),
-      `#!/bin/sh\nprintf 'started\\n' >> ${quote(launches)}\nwhile [ ! -f ${quote(gate)} ]; do sleep 0.05; done\nexec ${quote(codex)} "$@"\n`,
+      join(bin, process.platform === "win32" ? "codex.cmd" : "codex"),
+      process.platform === "win32"
+        ? `@echo off
+echo started>>"${launches}"
+:wait
+if exist "${gate}" goto run
+powershell -NoProfile -Command "Start-Sleep -Milliseconds 50"
+goto wait
+:run
+call "${codex}" %*
+`
+        : `#!/bin/sh\nprintf 'started\\n' >> ${quote(launches)}\nwhile [ ! -f ${quote(gate)} ]; do sleep 0.05; done\nexec ${quote(codex)} "$@"\n`,
       { mode: 0o700 },
     );
     const originalPath = process.env.PATH;
-    process.env.PATH = bin + ":" + originalPath;
+    process.env.PATH = bin + delimiter + originalPath;
     t.after(() => {
       process.env.PATH = originalPath;
     });

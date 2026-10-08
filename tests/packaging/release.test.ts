@@ -1,8 +1,8 @@
 import { VERSION } from "@agenvo/protocol";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFile, spawn } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
+import { execa as exec } from "execa";
 import { once } from "node:events";
 import {
   mkdtemp,
@@ -20,7 +20,6 @@ import { eventsLab } from "../support/events-lab.js";
 import { serviceDefinition } from "@agenvo/connector/cli/service";
 import { pathToFileURL } from "node:url";
 
-const exec = promisify(execFile);
 const repository = resolve(".");
 
 test(
@@ -109,7 +108,7 @@ test(
         pathToFileURL(entry).href,
         "linux",
       );
-      assert.ok(def.content.includes(entry));
+      assert.ok(def.content.includes(entry.replaceAll("\\", "\\\\")));
     }
     assert.notEqual(
       serviceDefinition(

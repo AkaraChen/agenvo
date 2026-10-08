@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm } from "node:fs/promises";
@@ -29,7 +30,7 @@ test(
       );
       return;
     }
-    const base = await mkdtemp("/tmp/agenvo-sd-");
+    const base = await mkdtemp(join(tmpdir(), "agenvo-sd-"));
     const root = join(base, "herdr");
     await mkdir(root);
     const binary = (await exec("sh", ["-c", "command -v herdr"])).stdout.trim();

@@ -1,9 +1,8 @@
 // Install pinned public binaries into an explicit test directory. No login or
-// user configuration is copied. Versions must match the native adapter contract.
-import { mkdir, writeFile, chmod } from "node:fs/promises";
-import { resolve, join } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+// user configuration is copied. Pins are reproducible test baselines.
+import { mkdir, writeFile, chmod, appendFile } from "node:fs/promises";
+import { resolve, join, delimiter } from "node:path";
+import { execa } from "execa";
 import { createHash } from "node:crypto";
 const directory = process.argv[2];
 if (!directory)
@@ -11,11 +10,13 @@ if (!directory)
 const root = resolve(directory),
   bin = join(root, "bin");
 await mkdir(bin, { recursive: true });
-const os = { linux: "linux", darwin: "macos" }[process.platform];
+const os = { linux: "linux", darwin: "macos", win32: "windows" }[
+  process.platform
+];
 const arch = { x64: "x86_64", arm64: "aarch64" }[process.arch];
 if (!os || !arch)
-  throw new Error("Native test runtimes require Linux or macOS on x64/arm64");
-const name = `herdr-${os}-${arch}`;
+  throw new Error("No native test runtime for this platform/architecture");
+const name = `herdr-${os}-${arch}${process.platform === "win32" ? ".zip" : ""}`;
 const release = await fetch(
   "https://api.github.com/repos/herdrdev/herdr/releases/tags/v0.9.3",
 ).then((r) => {
@@ -33,9 +34,15 @@ if (
   asset.digest
 )
   throw new Error("Herdr asset digest mismatch");
-await writeFile(join(bin, "herdr"), bytes);
-await chmod(join(bin, "herdr"), 0o755);
-await promisify(execFile)(
+if (process.platform === "win32") {
+  const archive = join(root, name);
+  await writeFile(archive, bytes);
+  await execa("tar", ["-xf", archive, "-C", bin]);
+} else {
+  await writeFile(join(bin, "herdr"), bytes);
+  await chmod(join(bin, "herdr"), 0o755);
+}
+await execa(
   "npm",
   [
     "install",
@@ -48,4 +55,7 @@ await promisify(execFile)(
   ],
   { maxBuffer: 1024 * 1024 },
 );
-console.log(`Add to PATH: ${bin}:${join(root, "node_modules", ".bin")}`);
+const paths = [bin, join(root, "node_modules", ".bin")];
+if (process.env.GITHUB_PATH)
+  await appendFile(process.env.GITHUB_PATH, paths.join("\n") + "\n");
+console.log(`Add to PATH: ${paths.join(delimiter)}`);

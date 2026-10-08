@@ -1,3 +1,5 @@
+import { binary as executable } from "@agenvo/connector/cli/binary";
+import { tmpdir } from "node:os";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
@@ -9,21 +11,20 @@ import { herdrFixture } from "../fixtures/herdr-runtime.js";
 import { modelServer } from "../support/model-server.js";
 import { until } from "../support/environment.js";
 
-const quote = (s: string) => "'" + s.replaceAll("'", "'\\''") + "'";
+const quote = (s: string) =>
+  "'" + s.replaceAll("'", process.platform === "win32" ? "''" : "'\\''") + "'";
 
 test(
   "an unmanaged Codex in Herdr advertises sending and reaches an isolated model",
   { timeout: 40000 },
   async (t) => {
-    const root = await realpath(await mkdtemp("/tmp/agenvo-external-"));
+    const root = await realpath(
+      await mkdtemp(join(tmpdir(), "agenvo-external-")),
+    );
     const model = await modelServer();
     const exec = promisify(execFile);
-    const binary = (
-      await exec("/bin/sh", ["-c", "command -v herdr"])
-    ).stdout.trim();
-    const codex = (
-      await exec("/bin/sh", ["-c", "command -v codex"])
-    ).stdout.trim();
+    const binary = await executable("herdr", {});
+    const codex = await executable("codex", {});
     const adapter = new HerdrAdapter({
       kind: "herdr",
       id: "test",
@@ -69,7 +70,8 @@ test(
     await call("pane.run", {
       ...ref,
       paneId,
-      command: args.map(quote).join(" "),
+      command:
+        (process.platform === "win32" ? "& " : "") + args.map(quote).join(" "),
     });
     const list = await until(
       () => call("management.threads.list", { serviceRef: service.serviceRef }),

@@ -1,7 +1,7 @@
 import { isolatedEnvironment } from "../support/environment.js";
 // Test-owned native service. Runtime provisioning deliberately bypasses Agenvo.
 import { execFile, spawn } from "node:child_process";
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { type HerdrConfig } from "../support/config.js";
@@ -33,6 +33,11 @@ export function herdrFixture(
       if (await exists()) throw new Error("Test endpoint already exists");
       await mkdir(dirname(socket), { recursive: true });
       await mkdir(env.CODEX_HOME!, { recursive: true });
+      if (process.platform === "win32")
+        await writeFile(
+          env.HERDR_CONFIG_PATH,
+          '[terminal]\ndefault_shell = "pwsh.exe"\n',
+        );
       const child = spawn(config.binary, ["server"], {
         cwd: config.cwd,
         env,

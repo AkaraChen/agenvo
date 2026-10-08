@@ -1,3 +1,6 @@
+import { binary as executable } from "@agenvo/connector/cli/binary";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
@@ -13,9 +16,17 @@ import { instanceConfigSchema } from "../support/config.js";
 for (const mode of ["managed-stdio", "attach-unix"] as const)
   test(
     `native Codex ${mode} accepts steering and reports interruption through management`,
-    { timeout: 30000 },
+    {
+      timeout: 30000,
+      skip:
+        process.platform === "win32" && mode === "attach-unix"
+          ? "Codex Unix socket attachment is Unix-only"
+          : false,
+    },
     async (t) => {
-      const home = await realpath(await mkdtemp("/tmp/agenvo-native-turn-"));
+      const home = await realpath(
+        await mkdtemp(join(tmpdir(), "agenvo-native-turn-")),
+      );
       let connected!: () => void;
       const requestStarted = new Promise<void>((resolve) => {
         connected = resolve;
@@ -33,9 +44,7 @@ for (const mode of ["managed-stdio", "attach-unix"] as const)
       server.listen(0, "127.0.0.1");
       await once(server, "listening");
       const address = server.address() as { port: number };
-      const binary = (
-        await promisify(execFile)("/bin/sh", ["-c", "command -v codex"])
-      ).stdout.trim();
+      const binary = await executable("codex", {});
       const config = instanceConfigSchema.parse({
         id: "local",
         label: "Local",

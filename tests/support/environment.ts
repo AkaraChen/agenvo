@@ -5,6 +5,19 @@ import { join } from "node:path";
 export function isolatedEnvironment(root: string): NodeJS.ProcessEnv {
   return {
     PATH: process.env.PATH,
+    ...(process.platform === "win32"
+      ? {
+          SystemRoot: process.env.SystemRoot,
+          WINDIR: process.env.WINDIR,
+          COMSPEC: process.env.COMSPEC,
+          PATHEXT: process.env.PATHEXT,
+          USERPROFILE: root,
+          APPDATA: join(root, "AppData", "Roaming"),
+          LOCALAPPDATA: join(root, "AppData", "Local"),
+          TEMP: root,
+          TMP: root,
+        }
+      : {}),
     ORIGIN: "",
     ADMIN_SECRET: "",
     HOME: root,
@@ -15,7 +28,7 @@ export function isolatedEnvironment(root: string): NodeJS.ProcessEnv {
     CODEX_HOME: join(root, "codex"),
     TERM: "xterm-256color",
     LANG: "en_US.UTF-8",
-    SHELL: "/bin/sh",
+    ...(process.platform !== "win32" ? { SHELL: "/bin/sh" } : {}),
   };
 }
 export async function until<T>(

@@ -4,7 +4,10 @@ import { connect } from "node:net";
 import readline from "node:readline";
 function report(state) {
   return new Promise((resolve, reject) => {
-    const socket = connect(process.env.HERDR_SOCKET_PATH);
+    const socket = connect(
+      (process.platform === "win32" ? "\\\\.\\pipe\\" : "") +
+        process.env.HERDR_SOCKET_PATH,
+    );
     socket.on("connect", () =>
       socket.write(
         JSON.stringify({

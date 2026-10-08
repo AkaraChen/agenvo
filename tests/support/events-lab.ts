@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import {
@@ -27,7 +28,7 @@ export async function eventsLab(t: TestContext) {
   t.after(async () => {
     for (const cleanup of cleanups.reverse()) await cleanup();
   });
-  const root = await realpath(await mkdtemp("/tmp/agenvo-lab-"));
+  const root = await realpath(await mkdtemp(join(tmpdir(), "agenvo-lab-")));
   cleanups.push(() => rm(root, { recursive: true, force: true }));
   const ca = join(root, "cert.pem"),
     key = join(root, "key.pem");

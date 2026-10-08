@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
@@ -61,7 +63,9 @@ test("observations paginate with explicit eviction, truncation and reconnect gap
 });
 
 test("management transport discovers external threads and preserves turns, interactions and native errors", async (t) => {
-  const root = await realpath(await mkdtemp("/tmp/agenvo-management-"));
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "agenvo-management-")),
+  );
   const config = instanceConfigSchema.parse({
     id: "test",
     label: "Test",

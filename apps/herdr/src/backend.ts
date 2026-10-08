@@ -1,7 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { resolve, basename } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { execa as exec } from "execa";
 import { Fault } from "@agenvo/protocol";
 import { validatePaths } from "@agenvo/connector/config";
 import { binary } from "@agenvo/connector/cli/binary";
@@ -49,11 +48,9 @@ export const backend: Backend<HerdrConfig> = {
   },
   async doctor(config) {
     try {
-      const { stdout } = await promisify(execFile)(
-        config.binary,
-        ["--version"],
-        { timeout: 8000 },
-      );
+      const { stdout } = await exec(config.binary, ["--version"], {
+        timeout: 8000,
+      });
       return [
         {
           check: config.id + ":version",

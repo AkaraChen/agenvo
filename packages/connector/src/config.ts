@@ -99,7 +99,7 @@ export async function saveConfig<T extends InstanceConfig>(
 export async function credentials(dir: string): Promise<{ secret: string }> {
   const path = join(dir, "credentials.json");
   const info = await stat(path);
-  if ((info.mode & 0o077) !== 0)
+  if (process.platform !== "win32" && (info.mode & 0o077) !== 0)
     throw new Fault("insecure_credentials", "Credentials must have mode 0600");
   return z
     .strictObject({ secret: z.string().min(64).max(128) })

@@ -13,7 +13,7 @@ test("runtime diagnostics report versions without requiring the CI baseline", as
   const binary = join(root, "runtime");
   await writeFile(
     binary,
-    `#!${process.execPath}
+    `#!/usr/bin/env node
 console.log(process.argv.includes('--version') ? 'fixture 9.0.0' : 'Logged in');
 `,
     { mode: 0o755 },

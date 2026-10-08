@@ -1,3 +1,4 @@
+import { binary } from "@agenvo/connector/cli/binary";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
@@ -10,12 +11,10 @@ import { CodexAdapter } from "../../apps/codex-app-server/src/codex.js";
 import { instanceConfigSchema } from "../support/config.js";
 import { herdrFixture } from "../fixtures/herdr-runtime.ts";
 const exec = promisify(execFile);
-async function executable(name: string) {
-  return (await exec("/bin/sh", ["-c", "command -v " + name])).stdout.trim();
-}
+const executable = (name: string) => binary(name, {});
 
 test("Herdr isolated sessions preserve references across connector reconstruction", async (t) => {
-  const base = await realpath(await mkdtemp("/tmp/agenvo-h-"));
+  const base = await realpath(await mkdtemp(join(tmpdir(), "agenvo-h-")));
   const root = join(base, "herdr");
   await mkdir(root);
   const binary = await executable("herdr");
@@ -67,7 +66,10 @@ test("Herdr isolated sessions preserve references across connector reconstructio
   await a.call("pane.run", {
     ...ref,
     paneId: nativePane,
-    command: "printf 'AGENVO_NATIVE_HERDR_OK\\n'",
+    command:
+      process.platform === "win32"
+        ? "Write-Output ('AGENVO_NATIVE_' + 'HERDR_OK')"
+        : "printf 'AGENVO_NATIVE_HERDR_OK\\n'",
   });
   const b = new HerdrAdapter(cfg);
   await b.init();
@@ -109,14 +111,23 @@ test("Herdr isolated sessions preserve references across connector reconstructio
     }),
     { code: "native_error" },
   );
-  await b.call("pane.run", { ...ref, paneId: nativePane, command: "sleep 60" });
+  await b.call("pane.run", {
+    ...ref,
+    paneId: nativePane,
+    command:
+      process.platform === "win32" ? "ping.exe -n 60 127.0.0.1" : "sleep 60",
+  });
   let running = false;
   for (let i = 0; i < 40; i++) {
     const info = await b.call("pane.process-info", {
       ...ref,
       paneId: nativePane,
     });
-    if (JSON.stringify(info).includes("sleep")) {
+    if (
+      JSON.stringify(info).includes(
+        process.platform === "win32" ? "ping" : "sleep",
+      )
+    ) {
       running = true;
       break;
     }
@@ -134,7 +145,11 @@ test("Herdr isolated sessions preserve references across connector reconstructio
       ...ref,
       paneId: nativePane,
     });
-    if (!JSON.stringify(info).includes("sleep")) {
+    if (
+      !JSON.stringify(info).includes(
+        process.platform === "win32" ? "ping" : "sleep",
+      )
+    ) {
       stopped = true;
       break;
     }
@@ -147,7 +162,10 @@ test("Herdr isolated sessions preserve references across connector reconstructio
   await b.call("pane.send-text", {
     ...ref,
     paneId: nativePane,
-    text: "printf 'AGENVO_INPUT_%s\\n' 'RECOVERED'",
+    text:
+      process.platform === "win32"
+        ? "Write-Output ('AGENVO_INPUT_' + 'RECOVERED')"
+        : "printf 'AGENVO_INPUT_%s\\n' 'RECOVERED'",
   });
   await b.call("pane.send-keys", {
     ...ref,

@@ -6,9 +6,11 @@ permissions:
   contents: read
 jobs:
   test:
+    timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -25,9 +27,11 @@ jobs:
       - run: npm run test:packages
       - run: npm audit --audit-level=high
   native:
+    timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -36,9 +40,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: node scripts/install-test-runtimes.mjs "$RUNNER_TEMP/agenvo-runtimes"
-      - run: echo "$RUNNER_TEMP/agenvo-runtimes/bin" >> "$GITHUB_PATH"
-      - run: echo "$RUNNER_TEMP/agenvo-runtimes/node_modules/.bin" >> "$GITHUB_PATH"
+      - run: node scripts/install-test-runtimes.mjs "${{ runner.temp }}/agenvo-runtimes"
       - run: npm run build
       - run: npm run test:system
       - run: npm run test:adapters

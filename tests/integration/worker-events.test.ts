@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -13,7 +15,7 @@ test(
   "workerd MCP events persist in a Durable Object and alarms deliver signed callbacks",
   { timeout: 45000 },
   async (t) => {
-    const dir = await mkdtemp("/tmp/agenvo-workerd-events-");
+    const dir = await mkdtemp(join(tmpdir(), "agenvo-workerd-events-"));
     const child = spawn(
       process.execPath,
       [
