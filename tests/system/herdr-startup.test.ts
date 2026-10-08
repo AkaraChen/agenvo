@@ -87,6 +87,19 @@ exit $LASTEXITCODE
     };
     const paneId = (await call("workspace.create", ref)).result.result.root_pane
       .pane_id;
+    if (process.platform === "win32") {
+      // Herdr's Windows PTY rebuilds PATH from the registry. Configure this
+      // test-owned pane explicitly instead of changing the runner's registry.
+      await call("pane.run", {
+        ...ref,
+        paneId,
+        command: `$env:PATH = '${process.env.PATH!.replaceAll("'", "''")}'; Write-Output ('AGENVO_PATH_' + 'READY')`,
+      });
+      await until(
+        () => call("pane.read", { ...ref, paneId, source: "visible" }),
+        (r) => JSON.stringify(r).includes("AGENVO_PATH_READY"),
+      );
+    }
     const created = await call("management.threads.create", {
       serviceRef: service.serviceRef,
       providerOptions: {

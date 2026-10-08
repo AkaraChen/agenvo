@@ -1,4 +1,5 @@
 import { socketTempDir } from "../support/environment.js";
+import { until } from "../support/environment.js";
 import { binary } from "@agenvo/connector/cli/binary";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -130,6 +131,8 @@ test("Herdr isolated sessions preserve references across connector reconstructio
     script,
     `import { writeFileSync } from 'node:fs';
 writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+if (process.stdin.isTTY) process.stdin.setRawMode(true);
+process.stdin.on('data', (chunk) => { if (chunk.includes(3)) process.exit(0); });
 setInterval(() => {}, 1000);
 `,
   );
@@ -198,6 +201,19 @@ setInterval(() => {}, 1000);
   const creationServiceRef = creationServices.items.find(
     (s: any) => s.native.session === "test",
   ).serviceRef;
+  if (process.platform === "win32") {
+    // Herdr's Windows PTY uses the registry PATH, not the fixture server's PATH.
+    await b.call("pane.run", {
+      ...ref,
+      paneId: nativePane,
+      command: `$env:PATH = '${process.env.PATH!.replaceAll("'", "''")}'; Write-Output ('AGENVO_PATH_' + 'READY')`,
+    });
+    await until(
+      () =>
+        b.call("pane.read", { ...ref, paneId: nativePane, source: "visible" }),
+      (r) => JSON.stringify(r).includes("AGENVO_PATH_READY"),
+    );
+  }
   const started = await a.call("management.threads.create", {
     serviceRef: creationServiceRef,
     providerOptions: {

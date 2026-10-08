@@ -8,12 +8,15 @@ export async function stopProcess(child: ChildProcess) {
   if (child.exitCode !== null || child.signalCode !== null) return;
   const exited = once(child, "exit");
   if (process.platform === "win32") {
-    await promisify(execFile)("taskkill", [
-      "/PID",
-      String(child.pid),
-      "/T",
-      "/F",
-    ]);
+    try {
+      await promisify(execFile)(
+        "taskkill",
+        ["/PID", String(child.pid), "/T", "/F"],
+        { timeout: 5000 },
+      );
+    } catch (error) {
+      if (child.exitCode === null && child.signalCode === null) throw error;
+    }
     await exited;
     return;
   }

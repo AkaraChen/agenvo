@@ -27,7 +27,16 @@ import { isolatedEnvironment, until } from "./environment.js";
 export async function eventsLab(t: TestContext) {
   const cleanups: Array<() => unknown | Promise<unknown>> = [];
   t.after(async () => {
-    for (const cleanup of cleanups.reverse()) await cleanup();
+    const errors: unknown[] = [];
+    for (const cleanup of cleanups.reverse()) {
+      try {
+        await cleanup();
+      } catch (error) {
+        errors.push(error);
+      }
+    }
+    if (errors.length)
+      throw new AggregateError(errors, "Test lab cleanup failed");
   });
   const root = await realpath(
     await mkdtemp(join(socketTempDir(), "agenvo-lab-")),
