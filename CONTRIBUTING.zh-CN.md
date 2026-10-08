@@ -26,9 +26,9 @@ npm run test:system
 npm run test:adapters
 ```
 
-安装器下载固定的 Herdr 0.9.3 和 Codex CLI 0.160.1，校验 Herdr 发布资产摘要。固定版本用于复现测试，不是运行时版本白名单。Linux、macOS 和 Windows CI 使用相同命令。Windows 直接在 GitHub 托管的 Windows runner 上运行，使用 Herdr 命名管道和 Codex 托管 stdio，不使用 WSL。`npm run test:ci` 将开头的检查（audit 除外）与系统测试合并。
+安装器下载固定的 Herdr 0.9.3、Codex CLI 0.160.1 和 Paseo CLI 0.11.1，校验 Herdr 发布资产摘要。固定版本用于复现测试，不是运行时版本白名单。Linux、macOS 和 Windows CI 使用相同命令。Windows 直接在 GitHub 托管的 Windows runner 上运行，使用 Herdr 命名管道和 Codex 托管 stdio，不使用 WSL。`npm run test:ci` 将开头的检查（audit 除外）与系统测试合并。
 
-系统测试覆盖 OAuth 登录 → 设备配对 → MCP 发现与订阅 → 输入任务 → 原生通知 → 读取输出 → 继续或中断 → 取消订阅。真实 Connector 和独立 Herdr/Codex 进程使用本地模型 mock。测试入口清除继承凭证，提供临时 HOME、CODEX_HOME 和 Herdr 配置，fixture 负责清理进程。不要将测试指向个人部署。Codex `attach-unix` 测试仅在 macOS/Linux 运行，systemd 用户服务测试仅在 Linux 运行。Windows 额外验证 npm 命令包装器后的原生进程能随托管 connector 关闭。检查跳过输出以确认平台专属覆盖。
+系统测试覆盖 OAuth 登录 → 设备配对 → MCP 发现与订阅 → 输入任务 → 原生通知 → 读取输出 → 继续或中断 → 取消订阅。真实 Connector 和独立 Herdr/Codex/Paseo 进程使用本地模型 mock。测试入口清除继承凭证，提供临时 HOME、CODEX_HOME 和 Herdr 配置，fixture 负责清理进程。不要将测试指向个人部署。Codex `attach-unix` 测试仅在 macOS/Linux 运行，systemd 用户服务测试仅在 Linux 运行。Windows 额外验证 npm 命令包装器后的原生进程能随托管 connector 关闭。检查跳过输出以确认平台专属覆盖。
 
 本地 webhook 接收端用测试密钥验证签名，测试专用地址映射让请求通过生产 HTTP 传输到达接收端。workerd 测试覆盖 Durable Object 存储和 alarm。这些测试不证明 ChatGPT UI 发现或实际 dot 唤醒；两者仍是独立的发布验收范围。
 
@@ -41,7 +41,7 @@ npm run test:adapters
 - `packages/protocol`：通信 schema、限制与执行结果。
 - `packages/relay`：共享 Relay、MCP、事件投递与管理网页。
 - `packages/connector`：共享连接、配置存储、观察与 CLI 机制。
-- `apps/herdr`、`apps/codex-app-server`：独立 Connector，拥有各自的配置 schema 与适配器。
+- `apps/herdr`、`apps/codex-app-server`、`apps/paseo`：独立 Connector，拥有各自的配置 schema 与适配器。
 - `apps/server`、`apps/cloudflare`：VPS 与 Cloudflare 宿主。
 
 新增部署宿主应复用路由核心，保留授权、epoch 和执行结果不确定的语义。新增适配器需要可发现的 schema 和明确的能力与交互语义，不添加可能重复写入的自动重试。
@@ -50,6 +50,6 @@ npm run test:adapters
 
 兼容性只针对已正式对外发布的 Agenvo 版本，内部开发版本不作为兼容目标。详见 [AGENTS.md](AGENTS.md)。
 
-三个发行包统一版本，内部 workspace 包保持 private 并在构建时打包。`npm run test:packages` 在临时目录安装真实 npm tarball，验证入口与后端隔离。测试不会发布 npm 包。
+四个发行包统一版本，内部 workspace 包保持 private 并在构建时打包。`npm run test:packages` 在临时目录安装真实 npm tarball，验证入口与后端隔离。测试不会发布 npm 包。
 
 回归测试覆盖启动确认先于真实 Agent 就绪而超时、重新发现但不重复启动、没有受管启动元数据的 Agent 仍可发送、工作中备用屏幕历史读取回退到可见终端，以及原生错误、Relay 超时和 Connector 断线保留 requestId。测试身份、状态和凭据全部在本地生成；不要把事件截图、真实提示词或生产标识复制到测试中。客户端尚未发出 HTTP 请求时的取消，不属于服务端测试可证明的范围。

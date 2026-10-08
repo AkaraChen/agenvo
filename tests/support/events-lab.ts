@@ -269,16 +269,21 @@ export async function eventsLab(t: TestContext) {
     assert.equal(result.error, undefined, JSON.stringify(result));
     return result.result;
   };
+  const connectors = new Map<string, () => Promise<void>>();
   const connect = async (instances: InstanceConfig[]) => {
     instances = await Promise.all(
-      instances.map(async (c) => ({
-        ...c,
-        binary: await realpath(c.binary),
-        cwd: await realpath(c.cwd),
-        ...(c.kind === "herdr"
-          ? { configRoot: await realpath(c.configRoot) }
-          : { home: await realpath(c.home) }),
-      })),
+      instances.map(async (c) =>
+        c.kind === "paseo"
+          ? c
+          : {
+              ...c,
+              binary: await realpath(c.binary),
+              cwd: await realpath(c.cwd),
+              ...(c.kind === "herdr"
+                ? { configRoot: await realpath(c.configRoot) }
+                : { home: await realpath(c.home) }),
+            },
+      ),
     );
     const dir = await mkdtemp(join(root, "connector-"));
     const deviceSecret = randomBytes(32).toString("hex");
@@ -320,7 +325,7 @@ export async function eventsLab(t: TestContext) {
       process.execPath,
       [
         resolve(
-          `apps/${instances[0].kind === "herdr" ? "herdr" : "codex-app-server"}/dist/cli.js`,
+          `apps/${instances[0].kind === "codex" ? "codex-app-server" : instances[0].kind}/dist/cli.js`,
         ),
         "run",
       ],
@@ -340,7 +345,7 @@ export async function eventsLab(t: TestContext) {
     child.stderr.on("data", (c) => {
       logs += c;
     });
-    cleanups.push(async () => {
+    const stopConnector = async () => {
       // Credential removal uses the connector's normal shutdown path on every
       // platform, allowing managed runtimes to close before their parent exits.
       await rm(join(dir, "credentials.json"), { force: true });
@@ -353,7 +358,9 @@ export async function eventsLab(t: TestContext) {
       } finally {
         await stopProcess(child);
       }
-    });
+    };
+    cleanups.push(stopConnector);
+    connectors.set(deviceId, stopConnector);
     await until(
       async () => {
         if (child.exitCode !== null) throw new Error(logs);
@@ -392,6 +399,7 @@ export async function eventsLab(t: TestContext) {
     request,
     rpc,
     connect,
+    disconnect: (deviceId: string) => connectors.get(deviceId)!(),
     call,
     admin,
     setDeliveryStatus(status: number) {

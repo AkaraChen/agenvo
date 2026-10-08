@@ -3,6 +3,8 @@ import { absolutePath, commonInstanceFields } from "@agenvo/connector/config";
 export const instanceConfigSchema = z
   .strictObject({
     ...commonInstanceFields,
+    binary: absolutePath,
+    cwd: absolutePath,
     kind: z.literal("codex"),
     mode: z.enum(["managed-stdio", "attach-unix"]),
     socketPath: absolutePath.optional(),

@@ -16,6 +16,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { request } from "node:http";
 import { isolatedEnvironment, until } from "../support/environment.js";
+import { paseoFixture } from "../fixtures/paseo-daemon.js";
 import { eventsLab } from "../support/events-lab.js";
 import { serviceDefinition } from "@agenvo/connector/cli/service";
 import { pathToFileURL } from "node:url";
@@ -51,7 +52,7 @@ test(
       }),
     );
     const installed = new Map<string, string>();
-    for (const app of ["herdr", "codex-app-server", "server"]) {
+    for (const app of ["herdr", "codex-app-server", "paseo", "server"]) {
       await exec(
         "npm",
         ["pack", "--workspace", "@agenvo/" + app, "--pack-destination", root],
@@ -147,6 +148,31 @@ test(
         "linux",
       ).name,
     );
+
+    const paseo = await paseoFixture();
+    cleanups.push(() => paseo.close());
+    await exec(
+      process.execPath,
+      [
+        installed.get("paseo")!,
+        "instance",
+        "add",
+        "--id",
+        "paseo",
+        "--endpoint",
+        paseo.endpoint,
+      ],
+      { cwd: root, env: isolatedEnvironment(root) },
+    );
+    const paseoConfig = JSON.parse(
+      await readFile(
+        join(root, ".config", "agenvo", "paseo", "config.json"),
+        "utf8",
+      ),
+    );
+    assert.equal(paseoConfig.instances[0].serverId, paseo.serverId);
+    assert.equal(paseoConfig.instances[0].endpoint, paseo.endpoint);
+    assert.equal(paseoConfig.instances[0].binary, undefined);
 
     // Exercise CLI configuration and pairing against an isolated HTTPS Relay.
     const lab = await eventsLab(t);

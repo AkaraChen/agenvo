@@ -39,9 +39,23 @@ agenvo-codex-app-server instance add --id coding --home $env:CODEX_HOME --cwd "$
 
 Windows 使用 `managed-stdio`；`attach-unix` 需要 Unix socket。配置目录应保留在用户目录中，由 Windows 目录 ACL 保护。POSIX 权限位检查不适用于 Windows。
 
+## 附着 Paseo
+
+独立运行 Paseo daemon 并配置 provider，再附着其直接 WebSocket 端点：
+
+```sh
+agenvo-paseo instance add --id paseo --endpoint ws://127.0.0.1:6767/ws
+agenvo-paseo connect https://relay.example.com --name laptop-paseo
+agenvo-paseo run
+```
+
+默认配置目录为 `~/.config/agenvo/paseo`。添加实例时记录原生 server ID；替换 daemon 后需要重新发现并批准 scope。daemon 使用密码认证时，增加 `--password-file /absolute/path/to/password`，文件只保存密码；Unix 使用 0600 权限，Windows 使用仅当前用户可访问的 ACL。优先在 daemon 同机使用 loopback，远程连接使用 `wss://`。本连接器不接入 Paseo relay/E2EE 地址。
+
+发现范围包括其他客户端创建的 Agent。创建不发送提示词。输入请求 Codex `full-access` 或 Claude `bypassPermissions`，已有原生 provider options 可能优先于 mode。默认输入会中断活跃执行；`steer` 也可能替换执行或启动新轮。问题和决定通过显式交互回答。原生 cancel、archive 和 resume 使用 `paseo.agents.*`：archive 会停止执行，resume 可能返回新 Agent ID。保留该 ID；没有 workspace 的恢复 Agent 可能不出现在原生目录中。关闭 Connector 后 Paseo 和 Agent 继续运行。
+
 ## 配对与运行
 
-下例使用 Herdr；Codex 将命令替换成 `agenvo-codex-app-server`，单独完成相同步骤。两个 Connector 可以在同一台电脑同时运行。管理页分别显示它们，协议中的 `deviceId` 标识 Connector，不代表物理电脑。
+下例使用 Herdr；Codex 或 Paseo 将命令替换成 `agenvo-codex-app-server` 或 `agenvo-paseo`，分别完成相同步骤。各 Connector 可以在同一台电脑同时运行。管理页分别显示它们，协议中的 `deviceId` 标识 Connector，不代表物理电脑。
 
 ```sh
 agenvo-herdr connect https://relay.example.com --name laptop
