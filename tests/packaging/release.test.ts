@@ -52,7 +52,7 @@ test(
       }),
     );
     const installed = new Map<string, string>();
-    for (const app of ["herdr", "codex-app-server", "paseo", "server"]) {
+    for (const app of ["herdr", "codex-app-server", "paseo", "amp", "server"]) {
       await exec(
         "npm",
         ["pack", "--workspace", "@agenvo/" + app, "--pack-destination", root],
@@ -173,6 +173,74 @@ test(
     assert.equal(paseoConfig.instances[0].serverId, paseo.serverId);
     assert.equal(paseoConfig.instances[0].endpoint, paseo.endpoint);
     assert.equal(paseoConfig.instances[0].binary, undefined);
+
+    // Install Amp's standalone plugin from the tarball, without source imports.
+    const ampCli = installed.get("amp")!;
+    const ampEnv = isolatedEnvironment(root);
+    const ampArgs = [
+      ampCli,
+      "instance",
+      "add",
+      "--id",
+      "work",
+      "--binary",
+      resolve("tests/fixtures/amp-cli.mjs"),
+      "--cwd",
+      root,
+    ];
+    await exec(process.execPath, ampArgs, { cwd: root, env: ampEnv });
+    const ampConfig = JSON.parse(
+      await readFile(
+        join(root, ".config", "agenvo", "amp", "config.json"),
+        "utf8",
+      ),
+    ).instances[0];
+    assert.equal(ampConfig.kind, "amp");
+    assert.equal(
+      ampConfig.pluginPath,
+      join(root, "config", "amp", "plugins", "agenvo-work.ts"),
+    );
+    const wrapper = await readFile(ampConfig.pluginPath, "utf8");
+    const pluginPath = join(ampConfig.bridgeDir, "plugin.mjs");
+    assert.ok(wrapper.includes(pathToFileURL(pluginPath).href));
+    const plugin = await readFile(pluginPath, "utf8");
+    assert.doesNotMatch(
+      plugin,
+      /(?:from|import)\s*["'](?:@agenvo\/|@ampcode\/|zod|execa)/,
+    );
+    assert.equal(
+      typeof (await import(pathToFileURL(pluginPath).href)).default,
+      "function",
+    );
+    await assert.rejects(
+      exec(process.execPath, ampArgs, { cwd: root, env: ampEnv }),
+    );
+    assert.equal(await readFile(ampConfig.pluginPath, "utf8"), wrapper);
+
+    // A conflicting native entry must survive; the partial copied bundle is removed.
+    const conflict = join(
+      root,
+      "config",
+      "amp",
+      "plugins",
+      "agenvo-conflict.ts",
+    );
+    await writeFile(conflict, "// Owned by the native host\n");
+    await assert.rejects(
+      exec(
+        process.execPath,
+        ampArgs.map((arg) => (arg === "work" ? "conflict" : arg)),
+        { cwd: root, env: ampEnv },
+      ),
+    );
+    assert.equal(
+      await readFile(conflict, "utf8"),
+      "// Owned by the native host\n",
+    );
+    await assert.rejects(
+      readFile(join(ampConfig.bridgeDir, "..", "conflict", "plugin.mjs")),
+      { code: "ENOENT" },
+    );
 
     // Exercise CLI configuration and pairing against an isolated HTTPS Relay.
     const lab = await eventsLab(t);

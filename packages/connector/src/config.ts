@@ -108,9 +108,10 @@ export async function descriptor(
   available: boolean,
   backendVersion: string,
   capabilityRevision: string,
+  execution = "full-access",
 ): Promise<Instance> {
   const { label, ...settings } = config;
-  const scope = { ...settings, execution: "full-access" };
+  const scope = { ...settings, execution };
   return {
     instanceId: config.id,
     label,

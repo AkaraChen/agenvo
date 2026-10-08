@@ -61,6 +61,7 @@ export async function run<T extends InstanceConfig>(
         adapter.available,
         adapter.version,
         backend.revision(c),
+        backend.executionPolicy?.execution,
       ),
     );
   }

@@ -26,7 +26,7 @@ npm run test:system
 npm run test:adapters
 ```
 
-The installer downloads pinned Herdr 0.9.3, Codex CLI 0.160.1 and Paseo CLI 0.11.1 releases and checks the Herdr asset digest. These pins make tests reproducible; they are not a runtime version allowlist. Linux, macOS and Windows CI use the same commands. Windows runs directly on a GitHub-hosted Windows runner with Herdr named pipes and Codex managed stdio, without WSL. `npm run test:ci` combines the initial checks (except audit) with system tests.
+The installer downloads pinned Herdr 0.9.3, Codex CLI 0.160.1, Paseo CLI 0.11.1, and Amp CLI releases and checks the Herdr asset digest. These pins make tests reproducible; they are not a runtime version allowlist. Linux, macOS and Windows CI use the same commands. Windows runs directly on a GitHub-hosted Windows runner with Herdr named pipes and Codex managed stdio, without WSL. `npm run test:ci` combines the initial checks (except audit) with system tests.
 
 System tests follow OAuth login → device pairing → MCP discovery/subscription → Agent input → native notification → reading output → follow-up/interruption → unsubscribe. Real Connector and independent Herdr/Codex/Paseo processes use a local model mock. The launcher clears inherited credentials and provides temporary HOME, CODEX_HOME and Herdr configuration; fixtures clean up their processes. Never point tests at a personal deployment. Codex `attach-unix` tests run only on macOS/Linux; systemd user-service tests run only on Linux. Windows additionally checks that closing the managed connector stops the native process behind an npm command shim. Check skipped-test output for platform-specific coverage.
 
@@ -41,7 +41,7 @@ Source responsibilities:
 - `packages/protocol`: wire schemas, limits and execution outcomes.
 - `packages/relay`: shared Relay, MCP, event delivery and administration UI.
 - `packages/connector`: shared connection, configuration storage, observation and CLI mechanisms.
-- `apps/herdr`, `apps/codex-app-server`, `apps/paseo`: independently installed Connectors owning their configuration schemas and adapters.
+- `apps/herdr`, `apps/codex-app-server`, `apps/paseo`, `apps/amp`: independently installed Connectors owning their configuration schemas and adapters.
 - `apps/server`, `apps/cloudflare`: VPS and Cloudflare hosts.
 
 New deployment hosts must reuse the routing core and preserve authorization, epoch and uncertain-execution semantics. Native adapter additions require discoverable schemas and explicit capability and interaction semantics. Do not add retry mechanisms that can duplicate writes.
@@ -50,6 +50,8 @@ Before sending a change, review the diff for private paths and credentials, run 
 
 Compatibility commitments apply only to formally published Agenvo releases; internal development versions are not compatibility targets. See [AGENTS.md](AGENTS.md).
 
-The four release packages share a version; internal workspace packages remain private and are bundled at build time. `npm run test:packages` installs real npm tarballs into temporary directories and verifies their entry points and backend isolation. Tests never publish packages.
+The five release packages share a version; internal workspace packages remain private and are bundled at build time. `npm run test:packages` installs real npm tarballs into temporary directories and verifies their entry points and backend isolation. Tests never publish packages.
 
 Regression coverage includes startup confirmation expiring before the real agent is ready, rediscovery without duplicate launch, sending to an agent without managed startup metadata, busy alternate-screen history falling back to the visible viewport, and preserving request IDs for native errors, Relay timeouts and Connector disconnects. Fixtures generate all identities, state and credentials locally; never copy incident screenshots, prompts or production identifiers into tests. Client cancellation before an HTTP request is dispatched remains outside server-side test coverage.
+
+Amp integration tests use a deterministic Plugin API fixture through the real MCP and webhook paths. The native installer also pins Amp CLI `0.0.1791446565-g95411c`; `tests/adapters/amp-native.test.ts` verifies release-plugin loading and discovery with isolated credentials. It skips explicitly when Amp is absent. This is not a cloud model execution test; see [Amp](docs/amp.md).

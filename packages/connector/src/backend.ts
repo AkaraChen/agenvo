@@ -9,6 +9,7 @@ export interface Backend<T extends InstanceConfig> {
   schema: z.ZodType<T>;
   help: string;
   options: string[];
+  executionPolicy?: Adapter["executionPolicy"];
   configure(options: Options, dir: string): Promise<T>;
   create(config: T): Promise<Adapter>;
   revision(config: T): string;

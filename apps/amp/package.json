@@ -1,0 +1,43 @@
+{
+  "name": "@agenvo/amp",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "description": "Amp plugin connector for Agenvo",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Xuanwo/agenvo.git",
+    "directory": "apps/amp"
+  },
+  "engines": {
+    "node": ">=24.13.0"
+  },
+  "bin": {
+    "agenvo-amp": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build.mjs amp",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "@agenvo/connector": "0.1.0",
+    "@agenvo/protocol": "0.1.0",
+    "@ampcode/plugin": "0.0.0-20261008001818-g5d841b4",
+    "zod": "4.6.5"
+  },
+  "dependencies": {
+    "execa": "9.6.0",
+    "pino": "10.4.0",
+    "ws": "8.22.0"
+  }
+}
