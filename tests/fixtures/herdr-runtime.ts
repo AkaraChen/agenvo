@@ -1,6 +1,6 @@
-import { isolatedEnvironment } from "../support/environment.js";
+import { isolatedEnvironment, until } from "../support/environment.js";
 // Test-owned native service. Runtime provisioning deliberately bypasses Agenvo.
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -28,6 +28,7 @@ export function herdrFixture(
       },
     );
   let owned = false;
+  let server: ChildProcess | undefined;
   return {
     async start() {
       if (await exists()) throw new Error("Test endpoint already exists");
@@ -44,6 +45,7 @@ export function herdrFixture(
         stdio: "ignore",
         detached: true,
       });
+      server = child;
       owned = true;
       let error: Error | undefined;
       child.on("error", (e) => {
@@ -66,6 +68,13 @@ export function herdrFixture(
       });
       for (let i = 0; i < 80; i++) {
         if (!(await exists())) {
+          // The endpoint disappears before Herdr finishes closing its panes.
+          // Windows keeps their working directory locked until process exit.
+          await until(
+            () => server!.exitCode !== null || server!.signalCode !== null,
+            (exited) => exited,
+            8000,
+          );
           owned = false;
           return;
         }

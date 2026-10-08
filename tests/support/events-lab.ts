@@ -341,7 +341,18 @@ export async function eventsLab(t: TestContext) {
       logs += c;
     });
     cleanups.push(async () => {
-      await stopProcess(child);
+      // Credential removal uses the connector's normal shutdown path on every
+      // platform, allowing managed runtimes to close before their parent exits.
+      await rm(join(dir, "credentials.json"), { force: true });
+      try {
+        await until(
+          () => child.exitCode !== null || child.signalCode !== null,
+          (exited) => exited,
+          5000,
+        );
+      } finally {
+        await stopProcess(child);
+      }
     });
     await until(
       async () => {
