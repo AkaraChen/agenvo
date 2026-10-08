@@ -70,7 +70,7 @@ Herdr 适配器连接独立的原生服务，不提供 session.start/stop。原�
 
 ## 包与发行边界
 
-仓库使用 npm workspaces。计划公开发行四个程序：`@agenvo/herdr`、`@agenvo/codex-app-server`、`@agenvo/paseo`、`@agenvo/server`。`@agenvo/protocol`、`@agenvo/connector`、`@agenvo/relay` 是私有 workspace 包，构建时进入对应发行产物，不要求使用者安装私有包。Cloudflare 是部署入口，不发布 npm 包。各包统一版本，线协议版本独立维护。
+仓库使用 npm workspaces。计划公开发行五个程序：`@agenvo/herdr`、`@agenvo/codex-app-server`、`@agenvo/paseo`、`@agenvo/amp`、`@agenvo/server`。`@agenvo/protocol`、`@agenvo/connector`、`@agenvo/relay` 是私有 workspace 包，构建时进入对应发行产物，不要求使用者安装私有包。Cloudflare 是部署入口，不发布 npm 包。各包统一版本，线协议版本独立维护。
 
 共享 Connector 不导入后端实现。每个后端拥有配置 schema、配置生成、能力版本、诊断、原生连接及生命周期行为，通过静态 Backend 接口接入共同 CLI 和连接循环。不存在动态插件注册或加载。
 
@@ -79,3 +79,5 @@ Herdr 适配器连接独立的原生服务，不提供 session.start/stop。原�
 包的源码通过显式 exports 导入。共享包不依赖应用，应用之间不互相导入。构建检查防止跨应用打包；发行测试从 npm tarball 在仓库外安装，验证没有对私有包或源码路径的运行依赖。
 
 Paseo Connector 附着已有 daemon，默认配置目录为 `~/.config/agenvo/paseo`。完整契约、原生控制动作与隔离验证见 [Paseo 接入设计](paseo-connector.zh-CN.md)。
+
+Amp 实验性连接器通过本地鉴权 WebSocket 接收原生插件连接。每个插件宿主是独立 service，任务和历史由 Amp 持有。实现边界和证据见 [Amp 原生接口依据](amp-interface-audit.zh-CN.md)。

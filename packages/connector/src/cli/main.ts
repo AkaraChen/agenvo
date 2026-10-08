@@ -214,7 +214,13 @@ export async function connectorCli<T extends InstanceConfig>(
         await atomicJson(join(dir, "credentials.json"), { secret });
         const instances = await Promise.all(
           c.instances.map((i) =>
-            descriptor(i, false, "pending", backend.revision(i)),
+            descriptor(
+              i,
+              false,
+              "pending",
+              backend.revision(i),
+              backend.executionPolicy?.execution,
+            ),
           ),
         );
         p = await post(new URL("/pairings", relay).href, {

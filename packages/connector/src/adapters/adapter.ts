@@ -14,6 +14,7 @@ export interface Adapter {
   version: string;
   available: boolean;
   onAvailabilityChange?: () => void;
+  executionPolicy?: { execution: string; approvalPolicy: string };
   watchEvents?(emit: (event: RuntimeEvent) => void): () => void;
   methods(): Method[];
   call(method: string, params: Record<string, unknown>): Promise<Outcome>;
@@ -32,6 +33,7 @@ export function describe(adapter: Adapter, params: Record<string, unknown>) {
     policy: {
       execution: "full-access",
       approvalPolicy: "never",
+      ...adapter.executionPolicy,
       authentication: "paired_devices_and_authorized_mcp_clients",
     },
     ...page(methods, params.cursor as string | undefined, 5),

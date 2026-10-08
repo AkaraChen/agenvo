@@ -58,6 +58,7 @@ await execa(
     "--save-exact",
     "@openai/codex@0.160.1",
     "@getpaseo/cli@0.11.1",
+    "@ampcode/cli@0.0.1791446565-g95411c",
   ],
   { maxBuffer: 1024 * 1024 },
 );

@@ -45,7 +45,7 @@ Herdr 的名称和 pane 会复用。引用保留 terminal_id、Agent kind、可�
 | `management.threads.send` | 提交文本，保留原生确认和忙碌输入语义，不承诺新轮或排队 |
 | `management.threads.observe` | 查询该 Thread 当前状态、分页观察事件及待回应请求摘要 |
 | `management.threads.read` | 按需读取原生历史或终端快照，与观察游标独立 |
-| `management.threads.interrupt` | 请求中断当前原生执行，不重选目标或重试；仅 Codex 支持 |
+| `management.threads.interrupt` | 请求中断当前原生执行，不重选目标或重试；Codex 保留轮次身份，Amp 使用无轮次前置条件的原生 cancel |
 | `management.threads.resume` | 加载并订阅已有上下文，不发送提示词；仅 Codex 支持 |
 | `management.threads.archive/unarchive` | 改变可见性，不等同取消或销毁；仅 Codex 支持 |
 | `management.interactions.list/read/respond` | 按 Thread 列出待回应请求，按交互引用读取或回答；仅 Codex 支持 |
@@ -91,3 +91,5 @@ Codex observe 返回该 Thread 的待回应请求摘要和 interactionRef；完�
 共同方法注册、输入校验和引用由 `management.ts` 维护；有界观察记录由 `observations.ts` 维护。`HerdrManagement` 与 `CodexManagement` 负责原生映射、观察及控制，统一方法和原生方法复用适配器传输与执行配置。Relay 只路由调用，不保存另一套任务状态。
 
 回归测试需要保护引用归属、游标缺口、自动订阅的副作用、中断竞争和原生错误传播。测试入口与隔离要求见[贡献指南](../CONTRIBUTING.zh-CN.md)。
+
+Amp 的共同接口映射、取消竞争和观察范围见 [Amp 原生接口依据](amp-interface-audit.zh-CN.md)。

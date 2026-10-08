@@ -281,7 +281,9 @@ export async function eventsLab(t: TestContext) {
               cwd: await realpath(c.cwd),
               ...(c.kind === "herdr"
                 ? { configRoot: await realpath(c.configRoot) }
-                : { home: await realpath(c.home) }),
+                : c.kind === "codex"
+                  ? { home: await realpath(c.home) }
+                  : {}),
             },
       ),
     );
