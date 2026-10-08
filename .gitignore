@@ -11,3 +11,5 @@ deploy/vps/.env
 
 apps/*/LICENSE
 apps/*/NOTICE
+
+.test-runtimes/

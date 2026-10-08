@@ -26,7 +26,18 @@ agenvo-codex-app-server instance add --id coding --home "$HOME/.config/agenvo/co
 
 Codex work always uses `danger-full-access` and `approvalPolicy: never`, including thread creation, resume and new input through attach mode. Execution permission requests are answered automatically. User questions and dynamic tool calls remain explicit interactions.
 
-Experimental `--mode attach-unix --socket /absolute/control.sock` requires an independently provisioned, compatible Codex control endpoint. A desktop App's stdio process does not provide one automatically. Attach mode never starts or stops that server; managed mode above is the default.
+On macOS/Linux, experimental `--mode attach-unix --socket /absolute/control.sock` requires an independently provisioned, compatible Codex control endpoint. A desktop App's stdio process does not provide one automatically. Attach mode never starts or stops that server; managed mode above is the default.
+
+On Windows, use PowerShell and the installed native Herdr/Codex commands (including npm command shims). Herdr normally stores its configuration in `$env:APPDATA/herdr`; pass the actual directory to `--config-root`. For an isolated Codex home:
+
+```powershell
+$env:CODEX_HOME = "$HOME/.config/agenvo/codex-app-server/codex/coding"
+New-Item -ItemType Directory -Force $env:CODEX_HOME | Out-Null
+codex login
+agenvo-codex-app-server instance add --id coding --home $env:CODEX_HOME --cwd "$HOME/code"
+```
+
+Windows uses `managed-stdio`; `attach-unix` requires a Unix socket. Keep configuration in your user profile, protected by Windows directory ACLs. POSIX permission-bit checks do not apply on Windows.
 
 ## Pair and run
 
@@ -36,7 +47,7 @@ The examples use Herdr. For Codex, use `agenvo-codex-app-server` and pair it sep
 agenvo-herdr connect https://relay.example.com --name laptop
 ```
 
-The command opens the management page and waits. Sign in with the administrator key, compare the device fingerprint and instances with the terminal, and approve. After pairing, run `agenvo-herdr run` in the foreground or `agenvo-herdr service install` for a background service.
+The command opens the management page and waits. Sign in with the administrator key, compare the device fingerprint and instances with the terminal, and approve. After pairing, run `agenvo-herdr run` in the foreground or, on macOS/Linux, `agenvo-herdr service install` for a background service. Windows currently uses the foreground `run` command; the CLI does not install a Windows service.
 
 On a headless device, use `--no-browser` and open the printed approval URL on another computer. The device does not need the administrator key. With `--no-wait`, run connect again after approval. Linux user services require linger to survive logout.
 

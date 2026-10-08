@@ -20,15 +20,15 @@ Integration tests start local workerd and Node servers with temporary state and 
 For changes to adapters, event delivery or the full user workflow, install the supported native binaries and run the system suites:
 
 ```sh
-node scripts/install-test-runtimes.mjs /tmp/agenvo-runtimes
+node scripts/install-test-runtimes.mjs ./.test-runtimes
 # Set PATH as printed by the installer.
 npm run test:system
 npm run test:adapters
 ```
 
-The installer downloads pinned Herdr 0.9.3 and Codex CLI 0.160.1 releases and checks the Herdr asset digest. These pins make tests reproducible; they are not a runtime version allowlist. Linux/macOS CI uses the same commands. `npm run test:ci` combines the initial checks (except audit) with system tests.
+The installer downloads pinned Herdr 0.9.3 and Codex CLI 0.160.1 releases and checks the Herdr asset digest. These pins make tests reproducible; they are not a runtime version allowlist. Linux, macOS and Windows CI use the same commands. Windows runs on a native runner with Herdr named pipes and Codex managed stdio, without WSL or a VM. `npm run test:ci` combines the initial checks (except audit) with system tests.
 
-System tests follow OAuth login → device pairing → MCP discovery/subscription → Agent input → native notification → reading output → follow-up/interruption → unsubscribe. Real Connector and independent Herdr/Codex processes use a local model mock. The launcher clears inherited credentials and provides temporary HOME, CODEX_HOME and Herdr configuration; fixtures clean up their processes. Never point tests at a personal deployment. Linux user-service tests require a systemd user manager; check skipped-test output for actual coverage.
+System tests follow OAuth login → device pairing → MCP discovery/subscription → Agent input → native notification → reading output → follow-up/interruption → unsubscribe. Real Connector and independent Herdr/Codex processes use a local model mock. The launcher clears inherited credentials and provides temporary HOME, CODEX_HOME and Herdr configuration; fixtures clean up their processes. Never point tests at a personal deployment. Codex `attach-unix` tests run only on macOS/Linux; systemd user-service tests run only on Linux. Windows additionally checks that closing the managed connector stops the native process behind an npm command shim. Check skipped-test output for platform-specific coverage.
 
 The local webhook receiver verifies signatures with test keys. A test-only callback mapping sends requests through the production HTTP transport to this receiver. Workerd tests exercise Durable Object storage and alarms. These tests do not prove ChatGPT UI discovery or actual dot wake-up; those remain separate release acceptance checks.
 

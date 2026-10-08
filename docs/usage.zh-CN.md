@@ -26,7 +26,18 @@ agenvo-codex-app-server instance add --id coding --home "$HOME/.config/agenvo/co
 
 Codex 工作固定使用 `danger-full-access` 和 `approvalPolicy: never`，包括 attach 模式中的 thread 创建、恢复和新输入。执行权限请求自动回答。需要内容的用户问题和动态工具调用继续作为显式交互。
 
-实验性的 `--mode attach-unix --socket /absolute/control.sock` 要求你已独立配置兼容的 Codex 控制端点。桌面 App 的 stdio 进程不会自动提供这个端点。attach 模式不启停该服务；默认使用上面的托管模式。
+macOS/Linux 上实验性的 `--mode attach-unix --socket /absolute/control.sock` 要求你已独立配置兼容的 Codex 控制端点。桌面 App 的 stdio 进程不会自动提供这个端点。attach 模式不启停该服务；默认使用上面的托管模式。
+
+Windows 使用 PowerShell 和原生 Herdr/Codex 命令，也支持 npm 生成的命令包装器。Herdr 默认配置目录通常是 `$env:APPDATA/herdr`，将实际目录传给 `--config-root`。独立 Codex home 的配置示例：
+
+```powershell
+$env:CODEX_HOME = "$HOME/.config/agenvo/codex-app-server/codex/coding"
+New-Item -ItemType Directory -Force $env:CODEX_HOME | Out-Null
+codex login
+agenvo-codex-app-server instance add --id coding --home $env:CODEX_HOME --cwd "$HOME/code"
+```
+
+Windows 使用 `managed-stdio`；`attach-unix` 需要 Unix socket。配置目录应保留在用户目录中，由 Windows 目录 ACL 保护。POSIX 权限位检查不适用于 Windows。
 
 ## 配对与运行
 
@@ -36,7 +47,7 @@ Codex 工作固定使用 `danger-full-access` 和 `approvalPolicy: never`，包�
 agenvo-herdr connect https://relay.example.com --name laptop
 ```
 
-命令打开管理页并等待。用管理员密钥登录，核对终端与页面的设备指纹及实例，点击批准。配对完成后，用 `agenvo-herdr run` 在前台运行，或用 `agenvo-herdr service install` 安装后台服务。
+命令打开管理页并等待。用管理员密钥登录，核对终端与页面的设备指纹及实例，点击批准。配对完成后，用 `agenvo-herdr run` 在前台运行，或在 macOS/Linux 上用 `agenvo-herdr service install` 安装后台服务。Windows 当前使用前台 `run` 命令，CLI 尚不安装 Windows 服务。
 
 无浏览器设备使用 `--no-browser`，在另一台电脑打开输出的批准链接；设备无需持有管理员密钥。`--no-wait` 可先返回，批准后再次运行 connect。Linux 用户服务需要开启 linger 才能在注销后继续运行。
 

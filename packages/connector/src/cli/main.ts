@@ -309,7 +309,9 @@ export async function connectorCli<T extends InstanceConfig>(
         try {
           const s = await stat(path);
           checks.push({
-            check: "permissions:" + path,
+            check:
+              (process.platform === "win32" ? "exists:" : "permissions:") +
+              path,
             ok: process.platform === "win32" || (s.mode & 0o077) === 0,
             ...(process.platform === "win32"
               ? {
@@ -319,7 +321,12 @@ export async function connectorCli<T extends InstanceConfig>(
               : {}),
           });
         } catch {
-          checks.push({ check: "permissions:" + path, ok: false });
+          checks.push({
+            check:
+              (process.platform === "win32" ? "exists:" : "permissions:") +
+              path,
+            ok: false,
+          });
         }
       }
       try {
