@@ -3,8 +3,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { herdrFixture } from "../fixtures/herdr-runtime.js";
 import { eventsLab } from "../support/events-lab.js";
 import { until } from "../support/environment.js";

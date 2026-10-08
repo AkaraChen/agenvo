@@ -1,20 +1,19 @@
+import { socketTempDir } from "../support/environment.js";
 import { binary } from "@agenvo/connector/cli/binary";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { HerdrAdapter } from "../../apps/herdr/src/herdr.js";
 import { CodexAdapter } from "../../apps/codex-app-server/src/codex.js";
 import { instanceConfigSchema } from "../support/config.js";
 import { herdrFixture } from "../fixtures/herdr-runtime.ts";
-const exec = promisify(execFile);
 const executable = (name: string) => binary(name, {});
 
 test("Herdr isolated sessions preserve references across connector reconstruction", async (t) => {
-  const base = await realpath(await mkdtemp(join(tmpdir(), "agenvo-h-")));
+  const base = await realpath(
+    await mkdtemp(join(socketTempDir(), "agenvo-h-")),
+  );
   const root = join(base, "herdr");
   await mkdir(root);
   const binary = await executable("herdr");
@@ -53,7 +52,12 @@ test("Herdr isolated sessions preserve references across connector reconstructio
     try {
       await native.stop();
     } finally {
-      await rm(root, { recursive: true, force: true });
+      await rm(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   });
   const workspace: any = (await a.call("workspace.create", ref)).result;
@@ -293,7 +297,9 @@ test("Herdr isolated sessions preserve references across connector reconstructio
 });
 
 test("Codex native management creates full-access threads without a model turn", async (t) => {
-  const home = await realpath(await mkdtemp(join(tmpdir(), "agenvo-codex-")));
+  const home = await realpath(
+    await mkdtemp(join(socketTempDir(), "agenvo-codex-")),
+  );
   const cfg = instanceConfigSchema.parse({
     kind: "codex",
     id: "coding",
@@ -307,7 +313,12 @@ test("Codex native management creates full-access threads without a model turn",
   const adapter = new CodexAdapter(cfg);
   t.after(async () => {
     await adapter.close();
-    await rm(home, { recursive: true, force: true });
+    await rm(home, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
   await adapter.init();
   assert.equal(adapter.available, true);

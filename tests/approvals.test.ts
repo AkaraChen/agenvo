@@ -24,7 +24,12 @@ test("native transport automatically approves permissions and retains user quest
   const a = new CodexAdapter(config);
   t.after(async () => {
     await a.close();
-    await rm(root, { recursive: true, force: true });
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
   await a.init();
   await a.call("thread/start", {

@@ -5,7 +5,7 @@ import express from "express";
 import { createServer as httpServer } from "node:http";
 import { createServer as httpsServer } from "node:https";
 import { readFile, mkdir, lstat, open } from "node:fs/promises";
-import { join } from "node:path";
+import { join, isAbsolute } from "node:path";
 import { WebSocketServer, type WebSocket } from "ws";
 import { z } from "zod";
 import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
@@ -33,7 +33,7 @@ export const serverConfig = z.strictObject({
       const u = new URL(s);
       return u.protocol === "https:" && u.origin === s;
     }),
-  dataDir: z.string().startsWith("/"),
+  dataDir: z.string().refine(isAbsolute, "An absolute path is required"),
   host: z.string().default("127.0.0.1"),
   port: z.number().int().min(0).max(65535).default(8080),
   trustedProxy: z.boolean().default(false),

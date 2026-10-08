@@ -1,8 +1,6 @@
 import { binary as executable } from "@agenvo/connector/cli/binary";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { mkdir, writeFile, readFile } from "node:fs/promises";
 import { join, delimiter } from "node:path";
 import { eventsLab } from "../support/events-lab.js";
@@ -20,7 +18,6 @@ test(
     const model = await modelServer();
     lab.cleanup(() => model.close());
     model.hold();
-    const exec = promisify(execFile);
     const herdr = await executable("herdr", {});
     const codex = await executable("codex", {});
     const bin = join(lab.root, "bin"),

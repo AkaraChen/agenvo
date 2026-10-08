@@ -1,12 +1,11 @@
+import { socketTempDir } from "../support/environment.js";
 import { binary as executable } from "@agenvo/connector/cli/binary";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, realpath, rm, stat } from "node:fs/promises";
 import { CodexAdapter } from "../../apps/codex-app-server/src/codex.js";
 import { instanceConfigSchema } from "../support/config.js";
@@ -25,7 +24,7 @@ for (const mode of ["managed-stdio", "attach-unix"] as const)
     },
     async (t) => {
       const home = await realpath(
-        await mkdtemp(join(tmpdir(), "agenvo-native-turn-")),
+        await mkdtemp(join(socketTempDir(), "agenvo-native-turn-")),
       );
       let connected!: () => void;
       const requestStarted = new Promise<void>((resolve) => {
@@ -77,7 +76,12 @@ for (const mode of ["managed-stdio", "attach-unix"] as const)
           }
         }
         await new Promise<void>((resolve) => server.close(() => resolve()));
-        await rm(home, { recursive: true, force: true });
+        await rm(home, {
+          recursive: true,
+          force: true,
+          maxRetries: 10,
+          retryDelay: 100,
+        });
       });
       if (mode === "attach-unix") {
         child = spawn(

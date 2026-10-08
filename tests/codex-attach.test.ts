@@ -1,5 +1,5 @@
+import { socketTempDir } from "./support/environment.js";
 import { join } from "node:path";
-import { tmpdir } from "node:os";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
@@ -17,7 +17,7 @@ test(
   { skip: process.platform === "win32" ? "Unix socket attachment" : false },
   async (t) => {
     const root = await realpath(
-      await mkdtemp(join(tmpdir(), "agenvo-attach-")),
+      await mkdtemp(join(socketTempDir(), "agenvo-attach-")),
     );
     const http = createServer();
     const server = new WebSocketServer({ server: http });
@@ -64,7 +64,12 @@ test(
       for (const ws of server.clients) ws.terminate();
       server.close();
       await new Promise<void>((r) => http.close(() => r()));
-      await rm(root, { recursive: true, force: true });
+      await rm(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     });
     await adapter.init();
     assert.equal(adapter.available, true);
@@ -268,9 +273,11 @@ test("CLI writes attach configuration only in the selected installation", async 
   const { promisify } = await import("node:util");
   const { readFile } = await import("node:fs/promises");
   const root = await realpath(
-    await mkdtemp(join(tmpdir(), "agenvo-attach-cli-")),
+    await mkdtemp(join(socketTempDir(), "agenvo-attach-cli-")),
   );
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() =>
+    rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
+  );
   const args = [
     "--import",
     "tsx",

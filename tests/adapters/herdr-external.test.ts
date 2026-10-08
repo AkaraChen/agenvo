@@ -1,9 +1,7 @@
+import { socketTempDir } from "../support/environment.js";
 import { binary as executable } from "@agenvo/connector/cli/binary";
-import { tmpdir } from "node:os";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { HerdrAdapter } from "../../apps/herdr/src/herdr.js";
@@ -19,10 +17,9 @@ test(
   { timeout: 40000 },
   async (t) => {
     const root = await realpath(
-      await mkdtemp(join(tmpdir(), "agenvo-external-")),
+      await mkdtemp(join(socketTempDir(), "agenvo-external-")),
     );
     const model = await modelServer();
-    const exec = promisify(execFile);
     const binary = await executable("herdr", {});
     const codex = await executable("codex", {});
     const adapter = new HerdrAdapter({
@@ -37,7 +34,12 @@ test(
     t.after(async () => {
       await native.stop();
       await model.close();
-      await rm(root, { recursive: true, force: true });
+      await rm(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     });
     await native.start();
     await adapter.init();

@@ -43,7 +43,12 @@ test(
         child.kill("SIGTERM");
         await exited;
       }
-      await rm(dir, { recursive: true, force: true });
+      await rm(dir, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     });
     let workerOutput = "";
     const base = await new Promise<string>((resolve, reject) => {

@@ -29,7 +29,14 @@ test(
     const root = await realpath(
       await mkdtemp(join(tmpdir(), "agenvo-packages-")),
     );
-    t.after(() => rm(root, { recursive: true, force: true }));
+    t.after(() =>
+      rm(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      }),
+    );
     const installed = new Map<string, string>();
     for (const app of ["herdr", "codex-app-server", "server"]) {
       await exec(

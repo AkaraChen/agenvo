@@ -30,7 +30,12 @@ async function fixture(t: any) {
   const store = new SqliteStore(join(dir, "state.sqlite"));
   t.after(async () => {
     store.close();
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
   const config = { ORIGIN: origin, ADMIN_SECRET: secret };
   return { store, config, auth: new OwnerAuth(store, config) };

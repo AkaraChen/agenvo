@@ -40,7 +40,12 @@ test(
       "http://127.0.0.1:" + (runtime.server.address() as { port: number }).port;
     t.after(async () => {
       await runtime.close();
-      await rm(dataDir, { recursive: true, force: true });
+      await rm(dataDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     });
     const request = async (path: string, init: RequestInit = {}) =>
       fetch(base() + path, {
@@ -535,7 +540,12 @@ test("forwarded client addresses are trusted only with an explicit single-proxy 
       assert.equal((await pair("192.0.2.2")).status, trustedProxy ? 201 : 429);
     } finally {
       await runtime.close();
-      await rm(dataDir, { recursive: true, force: true });
+      await rm(dataDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
     }
   }
 });

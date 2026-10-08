@@ -9,7 +9,9 @@ import { HerdrAdapter } from "../apps/herdr/src/herdr.js";
 
 test("runtime diagnostics report versions without requiring the CI baseline", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "agenvo-versions-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
+  t.after(() =>
+    rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
+  );
   const binary = join(root, "runtime");
   await writeFile(
     binary,

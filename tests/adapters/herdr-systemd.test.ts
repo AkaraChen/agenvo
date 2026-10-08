@@ -50,7 +50,12 @@ test(
       try {
         await native.stop();
       } finally {
-        await rm(base, { recursive: true, force: true });
+        await rm(base, {
+          recursive: true,
+          force: true,
+          maxRetries: 10,
+          retryDelay: 100,
+        });
       }
     });
     await native.start();

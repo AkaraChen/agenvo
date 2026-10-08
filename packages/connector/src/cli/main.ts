@@ -75,8 +75,14 @@ export async function connectorCli<T extends InstanceConfig>(
   function openBrowser(url: string) {
     if (options["no-browser"]) return;
     const child = spawn(
-      process.platform === "darwin" ? "open" : "xdg-open",
-      [url],
+      process.platform === "win32"
+        ? "rundll32.exe"
+        : process.platform === "darwin"
+          ? "open"
+          : "xdg-open",
+      process.platform === "win32"
+        ? ["url.dll,FileProtocolHandler", url]
+        : [url],
       { stdio: "ignore", detached: true },
     );
     child.on("error", () => {});

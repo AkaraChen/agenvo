@@ -30,7 +30,12 @@ test("SQLite permits one owner and rolls back a failed nested operation", async 
     assert.deepEqual(store.get("saved"), { value: 1 });
   } finally {
     store.close();
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   }
 });
 
@@ -41,7 +46,12 @@ test("unapproved OAuth registrations expire instead of permanently exhausting ca
   const store = new SqliteStore(join(dir, "state.sqlite"));
   t.after(async () => {
     store.close();
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
   const relay = new Relay({
     origin: "https://relay.test",

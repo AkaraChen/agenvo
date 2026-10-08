@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // Positive allowlist: never inherit API keys, OAuth state, native session context,
@@ -45,3 +46,7 @@ export async function until<T>(
   } while (Date.now() < deadline);
   throw new Error("Condition timed out: " + JSON.stringify(value));
 }
+
+// Native Unix sockets have a small path limit, especially on macOS.
+export const socketTempDir = () =>
+  process.platform === "win32" ? tmpdir() : "/tmp";

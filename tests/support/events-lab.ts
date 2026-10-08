@@ -1,4 +1,4 @@
-import { tmpdir } from "node:os";
+import { socketTempDir } from "./environment.js";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import {
@@ -28,8 +28,12 @@ export async function eventsLab(t: TestContext) {
   t.after(async () => {
     for (const cleanup of cleanups.reverse()) await cleanup();
   });
-  const root = await realpath(await mkdtemp(join(tmpdir(), "agenvo-lab-")));
-  cleanups.push(() => rm(root, { recursive: true, force: true }));
+  const root = await realpath(
+    await mkdtemp(join(socketTempDir(), "agenvo-lab-")),
+  );
+  cleanups.push(() =>
+    rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
+  );
   const ca = join(root, "cert.pem"),
     key = join(root, "key.pem");
   await promisify(execFile)("openssl", [
