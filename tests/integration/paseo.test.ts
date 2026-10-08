@@ -226,5 +226,17 @@ test(
     await call("paseo.agents.archive", { agentId: external.id });
     assert.equal(external.status, "closed");
     assert.ok(external.archivedAt);
+    const archived = await call("paseo.workspaces.archive", {
+      workspaceId: "wks_fixture",
+    });
+    assert.equal(archived.workspaceId, "wks_fixture");
+    assert.ok(archived.archivedAt);
+    assert.ok(
+      daemon.requests.some(
+        (p) =>
+          p.type === "archive_workspace_request" &&
+          p.workspaceId === "wks_fixture",
+      ),
+    );
   },
 );

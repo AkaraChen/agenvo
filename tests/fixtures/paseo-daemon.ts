@@ -282,6 +282,13 @@ export async function paseoFixture(modernCreation = false) {
           });
           update(agent!);
           break;
+        case "archive_workspace_request":
+          reply("archive_workspace_response", {
+            workspaceId: p.workspaceId,
+            archivedAt: new Date().toISOString(),
+            error: null,
+          });
+          break;
         default:
           throw new Error("Unhandled Paseo fixture request: " + p.type);
       }
