@@ -25,7 +25,7 @@ References are opaque and bound to a Connector adapter incarnation. Copy them ve
 
 ## Create and send input
 
-`management.threads.create` takes `serviceRef` and backend-specific `providerOptions` described in its schema. Codex options include model and history mode. Herdr requires an existing pane, name and Agent kind; create a workspace through native methods first if needed. Full-access launches support Codex, Claude and Devin; other existing Agent kinds remain discoverable. The Connector does not start Herdr servers.
+`management.threads.create` takes `serviceRef` and backend-specific `providerOptions` described in its schema. Codex options include model and history mode. Herdr requires an existing pane, name and Agent kind; create a workspace first if needed, or use `tab.create` to start beside existing panes. Native `worktree.list`, `worktree.create`, `worktree.open` and `worktree.remove` manage Git worktree workspaces; `worktree.list` includes worktrees created outside Herdr, and removal keeps the branch. Full-access launches support Codex, Claude and Devin; other existing Agent kinds remain discoverable. The Connector does not start Herdr servers.
 
 Creation does not send a prompt. Codex returns `thread.threadRef`. Herdr returns `execution: starting` with `result.query`; poll that query and use the live `thread.threadRef` when available. Check workspace ownership and contents before cleanup after a failed start.
 
