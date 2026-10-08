@@ -26,10 +26,23 @@ test(
   "release tarballs install outside the workspace and expose isolated, usable applications",
   { timeout: 180000 },
   async (t) => {
+    const cleanups: Array<() => unknown | Promise<unknown>> = [];
+    t.after(async () => {
+      const errors: unknown[] = [];
+      for (const cleanup of cleanups.reverse()) {
+        try {
+          await cleanup();
+        } catch (error) {
+          errors.push(error);
+        }
+      }
+      if (errors.length)
+        throw new AggregateError(errors, "Installed package cleanup failed");
+    });
     const root = await realpath(
       await mkdtemp(join(tmpdir(), "agenvo-packages-")),
     );
-    t.after(() =>
+    cleanups.push(() =>
       rm(root, {
         recursive: true,
         force: true,
@@ -178,7 +191,7 @@ test(
       stdio: "pipe",
     });
     const exited = once(child, "exit");
-    t.after(async () => {
+    cleanups.push(async () => {
       if (child.exitCode === null && child.signalCode === null) {
         child.kill("SIGTERM");
         await exited;
@@ -235,7 +248,7 @@ test(
       { cwd: root, env, stdio: "pipe" },
     );
     const stopped = once(proc, "exit");
-    t.after(async () => {
+    cleanups.push(async () => {
       if (proc.exitCode === null && proc.signalCode === null) {
         proc.kill("SIGTERM");
         await stopped;

@@ -60,7 +60,7 @@ test("Herdr isolated sessions preserve references across connector reconstructio
     try {
       await native.stop();
     } finally {
-      await rm(root, {
+      await rm(base, {
         recursive: true,
         force: true,
         maxRetries: 10,
