@@ -27,16 +27,12 @@ test(
     // Hold the actual Codex launch until Herdr's startup deadline has expired.
     // The gate, not a guessed machine-speed-dependent sleep, controls readiness.
     await writeFile(
-      join(bin, process.platform === "win32" ? "codex.cmd" : "codex"),
+      join(bin, process.platform === "win32" ? "codex.ps1" : "codex"),
       process.platform === "win32"
-        ? `@echo off
-echo started>>"${launches}"
-:wait
-if exist "${gate}" goto run
-powershell -NoProfile -Command "Start-Sleep -Milliseconds 50"
-goto wait
-:run
-call "${codex}" %*
+        ? `Add-Content -LiteralPath '${launches.replaceAll("'", "''")}' -Value 'started'
+while (-not (Test-Path -LiteralPath '${gate.replaceAll("'", "''")}')) { Start-Sleep -Milliseconds 50 }
+& '${codex.replace(/\.cmd$/i, ".ps1").replaceAll("'", "''")}' @args
+exit $LASTEXITCODE
 `
         : `#!/bin/sh\nprintf 'started\\n' >> ${quote(launches)}\nwhile [ ! -f ${quote(gate)} ]; do sleep 0.05; done\nexec ${quote(codex)} "$@"\n`,
       { mode: 0o700 },

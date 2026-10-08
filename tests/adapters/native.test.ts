@@ -2,7 +2,14 @@ import { socketTempDir } from "../support/environment.js";
 import { binary } from "@agenvo/connector/cli/binary";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, realpath, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  realpath,
+  rm,
+  writeFile,
+  readFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { HerdrAdapter } from "../../apps/herdr/src/herdr.js";
 import { CodexAdapter } from "../../apps/codex-app-server/src/codex.js";
@@ -115,54 +122,53 @@ test("Herdr isolated sessions preserve references across connector reconstructio
     }),
     { code: "native_error" },
   );
+  // Prove interruption by observing the real child process, not OS-specific
+  // foreground-process labels reported by the terminal runtime.
+  const pidFile = join(base, "waiting.pid");
+  const script = join(base, "waiting.mjs");
+  await writeFile(
+    script,
+    `import { writeFileSync } from 'node:fs';
+writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+setInterval(() => {}, 1000);
+`,
+  );
+  const quote = (s: string) =>
+    "'" +
+    s.replaceAll("'", process.platform === "win32" ? "''" : "'\\''") +
+    "'";
   await b.call("pane.run", {
     ...ref,
     paneId: nativePane,
     command:
-      process.platform === "win32" ? "ping.exe -n 60 127.0.0.1" : "sleep 60",
+      (process.platform === "win32" ? "& " : "") +
+      [process.execPath, script].map(quote).join(" "),
   });
-  let running = false;
-  for (let i = 0; i < 40; i++) {
-    const info = await b.call("pane.process-info", {
-      ...ref,
-      paneId: nativePane,
-    });
-    if (
-      JSON.stringify(info).includes(
-        process.platform === "win32" ? "ping" : "sleep",
-      )
-    ) {
-      running = true;
-      break;
-    }
+  let waitingPid = 0;
+  for (let i = 0; i < 100; i++) {
+    waitingPid = Number(await readFile(pidFile, "utf8").catch(() => "0"));
+    if (waitingPid) break;
     await new Promise((r) => setTimeout(r, 100));
   }
-  assert.ok(running, "sleep must start before testing interruption");
+  assert.ok(waitingPid, "the child must start before testing interruption");
+  process.kill(waitingPid, 0);
   await b.call("pane.send-keys", {
     ...ref,
     paneId: nativePane,
     keys: ["ctrl+c"],
   });
   let stopped = false;
-  for (let i = 0; i < 40; i++) {
-    const info = await b.call("pane.process-info", {
-      ...ref,
-      paneId: nativePane,
-    });
-    if (
-      !JSON.stringify(info).includes(
-        process.platform === "win32" ? "ping" : "sleep",
-      )
-    ) {
+  for (let i = 0; i < 100; i++) {
+    try {
+      process.kill(waitingPid, 0);
+    } catch (error: any) {
+      if (error.code !== "ESRCH") throw error;
       stopped = true;
       break;
     }
     await new Promise((r) => setTimeout(r, 100));
   }
-  assert.ok(
-    stopped,
-    "interruption must be observable, not inferred from delivery",
-  );
+  assert.ok(stopped, "the interrupted child must exit");
   await b.call("pane.send-text", {
     ...ref,
     paneId: nativePane,

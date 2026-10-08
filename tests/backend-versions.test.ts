@@ -1,25 +1,37 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { join, delimiter } from "node:path";
 import { tmpdir } from "node:os";
 import { backend as codex } from "../apps/codex-app-server/src/backend.js";
 import { backend as herdr } from "../apps/herdr/src/backend.js";
+import { binary as findBinary } from "@agenvo/connector/cli/binary";
 import { HerdrAdapter } from "../apps/herdr/src/herdr.js";
 
 test("runtime diagnostics report versions without requiring the CI baseline", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "agenvo-versions-"));
+  const root = await mkdtemp(join(tmpdir(), "agenvo versions "));
   t.after(() =>
     rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
   );
-  const binary = join(root, "runtime");
+  const script = join(root, "runtime.mjs");
+  const binary =
+    process.platform === "win32" ? join(root, "runtime.cmd") : script;
   await writeFile(
-    binary,
+    script,
     `#!/usr/bin/env node
 console.log(process.argv.includes('--version') ? 'fixture 9.0.0' : 'Logged in');
 `,
     { mode: 0o755 },
   );
+  if (process.platform === "win32") {
+    await writeFile(binary, `@"${process.execPath}" "${script}" %*\r\n`);
+    const previousPath = process.env.PATH;
+    process.env.PATH = root + delimiter + previousPath;
+    t.after(() => {
+      process.env.PATH = previousPath;
+    });
+    assert.equal(await findBinary("runtime", {}), binary);
+  }
   const common = { id: "test", label: "Test", binary, cwd: root };
   const codexConfig = codex.schema.parse({
     ...common,

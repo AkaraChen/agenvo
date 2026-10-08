@@ -1,3 +1,4 @@
+import { stopProcess } from "../support/process.js";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -45,11 +46,7 @@ test(
       log += c;
     });
     t.after(async () => {
-      if (child.exitCode === null) {
-        const exit = once(child, "exit");
-        child.kill("SIGTERM");
-        await exit;
-      }
+      await stopProcess(child);
       await rm(dir, {
         recursive: true,
         force: true,

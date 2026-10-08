@@ -24,6 +24,7 @@ jobs:
       - run: npm run format:check
       - run: npm test
       - run: npm run test:integration
+        timeout-minutes: 3
       - run: npm run test:packages
       - run: npm audit --audit-level=high
   native:

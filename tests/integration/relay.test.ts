@@ -1,3 +1,4 @@
+import { stopProcess } from "../support/process.js";
 const ADMIN_SECRET = "test-admin-secret-not-for-production-1234567890";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -38,11 +39,7 @@ test(
       },
     );
     t.after(async () => {
-      if (child.exitCode === null) {
-        const exited = once(child, "exit");
-        child.kill("SIGTERM");
-        await exited;
-      }
+      await stopProcess(child);
       await rm(dir, {
         recursive: true,
         force: true,

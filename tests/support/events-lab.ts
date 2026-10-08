@@ -1,3 +1,4 @@
+import { stopProcess } from "./process.js";
 import { socketTempDir } from "./environment.js";
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
@@ -331,12 +332,7 @@ export async function eventsLab(t: TestContext) {
       logs += c;
     });
     cleanups.push(async () => {
-      if (child.exitCode !== null || child.signalCode !== null) return;
-      const exited = once(child, "exit");
-      child.kill("SIGTERM");
-      const timer = setTimeout(() => child.kill("SIGKILL"), 3000);
-      await exited;
-      clearTimeout(timer);
+      await stopProcess(child);
     });
     await until(
       async () => {
