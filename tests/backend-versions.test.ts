@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm, realpath } from "node:fs/promises";
 import { join, delimiter } from "node:path";
 import { tmpdir } from "node:os";
 import { backend as codex } from "../apps/codex-app-server/src/backend.js";
@@ -9,7 +9,9 @@ import { binary as findBinary } from "@agenvo/connector/cli/binary";
 import { HerdrAdapter } from "../apps/herdr/src/herdr.js";
 
 test("runtime diagnostics report versions without requiring the CI baseline", async (t) => {
-  const root = await mkdtemp(join(tmpdir(), "agenvo versions "));
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "agenvo versions ")),
+  );
   t.after(() =>
     rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
   );

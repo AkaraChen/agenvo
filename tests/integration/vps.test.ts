@@ -22,6 +22,10 @@ test(
   "VPS persists OAuth/device state and routes MCP over authenticated WebSockets",
   { timeout: 30000 },
   async (t) => {
+    const cleanups: Array<() => unknown | Promise<unknown>> = [];
+    t.after(async () => {
+      for (const cleanup of cleanups.reverse()) await cleanup();
+    });
     const dataDir = await mkdtemp(join(tmpdir(), "agenvo-vps-"));
     const probe = createServer();
     probe.listen(0, "127.0.0.1");
@@ -38,8 +42,7 @@ test(
     let runtime = await startServer(config, ADMIN_SECRET);
     let base = () =>
       "http://127.0.0.1:" + (runtime.server.address() as { port: number }).port;
-    t.after(async () => {
-      await runtime.close();
+    cleanups.push(async () => {
       await rm(dataDir, {
         recursive: true,
         force: true,
@@ -47,6 +50,7 @@ test(
         retryDelay: 100,
       });
     });
+    cleanups.push(() => runtime.close());
     const request = async (path: string, init: RequestInit = {}) =>
       fetch(base() + path, {
         redirect: "manual",
@@ -320,7 +324,7 @@ test(
         "Agenvo-Protocol": "1",
       },
     });
-    t.after(() => ws.terminate());
+    cleanups.push(() => ws.terminate());
     await once(ws, "open");
     const welcome = once(ws, "message");
     ws.send(JSON.stringify({ v: 1, type: "hello", instances: [instance] }));
@@ -337,7 +341,7 @@ test(
     if (adapterConfig.kind !== "codex") throw Error();
     const adapter = new CodexAdapter(adapterConfig);
     await adapter.init();
-    t.after(() => adapter.close());
+    cleanups.push(() => adapter.close());
     ws.on("message", async (raw) => {
       const p = JSON.parse(raw.toString());
       if (p.type !== "call") return;

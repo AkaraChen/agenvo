@@ -63,6 +63,7 @@ export class CodexAdapter implements Adapter {
   private interactionBytes = 0;
   private readBuffer = Buffer.alloc(0);
   private closed = false;
+  private terminating?: Promise<unknown>;
   readonly management: CodexManagement;
   constructor(public config: CodexConfig) {
     this.management = new CodexManagement(
@@ -544,7 +545,21 @@ export class CodexAdapter implements Adapter {
     }
     if (this.child && !this.closed) {
       this.closed = true;
-      this.child.kill("SIGTERM");
+      const child = this.child;
+      // npm's Windows entry point is a cmd/Node wrapper. Killing only that
+      // wrapper leaves the managed app-server running with the inherited pipes.
+      if (process.platform === "win32" && child.pid) {
+        this.terminating = execa(
+          "taskkill",
+          ["/PID", String(child.pid), "/T", "/F"],
+          {
+            timeout: 3000,
+            reject: false,
+          },
+        ).then(() => {
+          child.kill("SIGKILL");
+        });
+      } else child.kill("SIGTERM");
     }
   }
   methods(): Method[] {
@@ -714,6 +729,7 @@ export class CodexAdapter implements Adapter {
       this.resumeTargets.clear();
     }
     this.fail();
+    await this.terminating;
     if (!child || child.exitCode !== null || child.signalCode !== null) return;
     await new Promise<void>((resolve) => {
       const timer = setTimeout(() => {
