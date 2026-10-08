@@ -293,7 +293,7 @@ test("CLI writes attach configuration only in the selected installation", async 
     "--cwd",
     root,
     "--socket",
-    root + "/existing.sock",
+    join(root, "existing.sock"),
     "--binary",
     resolve("tests/fixtures/codex-backend.mjs"),
   ];
@@ -308,7 +308,7 @@ test("CLI writes attach configuration only in the selected installation", async 
     await readFile(root + "/connector/config.json", "utf8"),
   );
   assert.equal(config.instances[0].mode, "attach-unix");
-  assert.equal(config.instances[0].socketPath, root + "/existing.sock");
+  assert.equal(config.instances[0].socketPath, join(root, "existing.sock"));
   assert.equal(config.instances[0].home, root);
   assert.equal(config.deviceId, undefined);
 });

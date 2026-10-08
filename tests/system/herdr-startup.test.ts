@@ -128,7 +128,18 @@ call "${codex}" %*
           (a: any) => a.threadId === paneId && a.activity === "idle",
         ),
       20000,
-    );
+    ).catch(async (error) => {
+      const visible = await call("pane.read", {
+        ...ref,
+        paneId,
+        source: "visible",
+        lines: 100,
+      });
+      throw new Error(
+        `Delayed native Codex did not become idle: ${JSON.stringify(visible)}; launches: ${await readFile(launches, "utf8").catch(() => "missing")}`,
+        { cause: error },
+      );
+    });
     const thread = listed.result.items.find((a: any) => a.threadId === paneId);
     assert.notEqual(thread.native.interactive_ready, true);
     assert.equal(thread.operations.send.available, true);

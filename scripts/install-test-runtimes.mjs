@@ -19,6 +19,11 @@ if (!os || !arch)
 const name = `herdr-${os}-${arch}${process.platform === "win32" ? ".zip" : ""}`;
 const release = await fetch(
   "https://api.github.com/repos/herdrdev/herdr/releases/tags/v0.9.3",
+  {
+    headers: process.env.GH_TOKEN
+      ? { Authorization: `Bearer ${process.env.GH_TOKEN}` }
+      : {},
+  },
 ).then((r) => {
   if (!r.ok) throw new Error(`Release lookup: ${r.status}`);
   return r.json();

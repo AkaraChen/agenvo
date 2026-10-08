@@ -68,14 +68,24 @@ test(
       );
       installed.set(app, entry);
       const { stdout } = await exec(
-        join(prefix, "node_modules", ".bin", "agenvo-" + app),
+        join(
+          prefix,
+          "node_modules",
+          ".bin",
+          "agenvo-" + app + (process.platform === "win32" ? ".cmd" : ""),
+        ),
         ["--help"],
         {
           cwd: root,
           env: isolatedEnvironment(root),
         },
       );
-      assert.match(stdout, new RegExp("agenvo-" + app));
+      assert.match(
+        stdout,
+        new RegExp(
+          "agenvo-" + app + (process.platform === "win32" ? ".cmd" : ""),
+        ),
+      );
       const bundle = await readFile(entry, "utf8");
       assert.doesNotMatch(bundle, /(?:from|import)\s*["']@agenvo\//);
       const manifest = JSON.parse(
