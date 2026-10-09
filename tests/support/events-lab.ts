@@ -1,3 +1,4 @@
+import { callCode, nativeOutcome } from "./code.js";
 import { stopProcess } from "./process.js";
 import { socketTempDir } from "./environment.js";
 import assert from "node:assert/strict";
@@ -216,10 +217,10 @@ export async function eventsLab(t: TestContext) {
     },
     body: new URLSearchParams({ handle, decision: "approve" }).toString(),
   });
-  assert.equal(approved.status, 302);
-  const code = new URL(approved.headers.get("location")!).searchParams.get(
-    "code",
-  )!;
+  assert.equal(approved.status, 200);
+  const code = new URL(
+    approved.headers.get("refresh")!.replace(/^0;url=/, ""),
+  ).searchParams.get("code")!;
   const exchanged = await request("/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -273,7 +274,7 @@ export async function eventsLab(t: TestContext) {
   const connect = async (instances: InstanceConfig[]) => {
     instances = await Promise.all(
       instances.map(async (c) =>
-        c.kind === "paseo"
+        c.kind === "paseo" || c.kind === "lody"
           ? c
           : {
               ...c,
@@ -381,11 +382,13 @@ export async function eventsLab(t: TestContext) {
     params: Record<string, unknown> = {},
   ) => {
     const r = await rpc("tools/call", {
-      name: "runtime_call",
-      arguments: { deviceId, instanceId, method, params },
+      name: "execute",
+      arguments: callCode({ deviceId, instanceId, method, params }),
     });
     assert.equal(r.isError, false, JSON.stringify(r));
-    return JSON.parse(r.content[0].text).result;
+    const outcome = nativeOutcome(r);
+    assert.equal(outcome.error, undefined, JSON.stringify(outcome));
+    return outcome.result;
   };
   return {
     cleanup: (action: () => unknown | Promise<unknown>) => {

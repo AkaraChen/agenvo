@@ -1,95 +1,71 @@
-# Agent 管理服务的统一接口
+# MCP 与 Connector 设计原则
 
-面向调用者的流程见[管理 Agent 会话](../docs/management.zh-CN.md)，适配器的原生版本约束见[接口依据](agent-management-interface-audit.zh-CN.md)。
+Agenvo 为有自主判断能力的 Agent 提供可发现、可组合的原生能力。调用者决定目标、工作流和下一步行动；Agenvo 负责连接、路由和准确传递结果。Thread 是管理工作的粒度，具体资源及执行轮次沿用原生服务的模型。
 
-## 目标与对象
+## 按需发现，组合调用
 
-Agenvo 对接管理 Agent 的服务。上层助手发现已有会话、创建工作上下文、发送输入、观察进展，并按后端能力回答问题、中断、恢复和归档。接入范围是整个获准服务，包括其他客户端创建的上下文。仅提供命令、容器、SSH 或进程执行的环境不属于这一抽象。
+MCP 只提供 `search({query, deviceId?, instanceId?})` 和 `execute({code})`。新增 Connector 或原生操作扩展方法目录，不增加 MCP 工具。这样调用者无需预先加载完整目录，可以在脚本内处理分页、条件判断和结果筛选，减少无关 schema 和中间结果进入 context。代价是调用者需要理解原生参数和行为边界，因此这些信息必须随能力描述一起被发现。设计不承诺固定的 token 节省比例。
 
-统一管理单位是 Thread：可寻址、可持续交互的 Agent 工作上下文。原生执行轮次作为输入确认、事件证据和后端控制参数保留，不建立公共 Run 对象，也不建立另一套任务数据库。上层业务目标可能跨多轮输入，原生轮次完成不能说明业务成功。
+`search` 接受关键词，不执行代码或原生业务操作。空查询列出获准实例及状态，不加载方法目录；非空查询按空白分词、不区分大小写，所有词均需出现在 Connector 类型、方法名或描述中。Relay 按 deviceId、instanceId 限定目标，Connector 先筛选方法再分页。结果保留离线状态和查询错误，在线且无匹配方法的实例不进入非空结果。
 
-```mermaid
-flowchart TB
-    U["上层助手 / MCP 客户端"] --> R["Relay · 认证、授权、路由"]
-    R <--> C["Connector · 连接与能力发现"]
-    C --> T["Thread 管理 · 发现 / 输入 / 观察 / 中断"]
-    T --> H["Herdr · 活跃 Agent / 终端"]
-    T --> X["Codex app-server · thread"]
-    H -. "每次 observe 查询状态与终端" .-> O["Thread 观察 · 当前状态 / 事件 / 待回应请求"]
-    X -. "原生 thread / turn / item 通知" .-> O
-    C --> N["原生方法 · 特有操作与精确轮次控制"]
-```
+`execute` 执行异步 JavaScript 函数体，通过 `call({deviceId, instanceId}, method, params)` 调用目录中的方法。调用者选择返回哪些信息；执行器不提供宿主文件、网络、环境变量或模块导入。调用示例和响应结构见[使用指南](../docs/management.zh-CN.md)，脚本时限、引擎生命周期与性能证据见[执行器设计](mcp-execution.zh-CN.md)。
 
-| 对象 | 契约 | Herdr 映射 | Codex 映射 |
-| --- | --- | --- | --- |
-| 服务引用 `serviceRef` | 在获准实例内明确选择一个管理服务 | config root 下的 session 与 backendGeneration | 特定 app-server 连接和获准 home |
-| 会话引用 `threadRef` | 可继续交互的工作上下文，不要求独立进程或持久历史 | 活跃 Agent，保留 terminal、pane、workspace 和原生 session 身份 | thread，持久性取决于原生历史模式及 ephemeral 设置 |
-| 交互引用 `interactionRef` | 需要回答的原生请求，绑定连接代次 | 无可靠的共同结构化请求身份 | Connector 收到的 server request |
+## 实例上下文通告
 
-引用不透明，由适配器签名，绑定实例、对象种类和适配器代次。重启或 Codex 连接重建后需要重新发现；原生 thread ID 仍可用于发现持久上下文。引用失效不意味着原生上下文被删除。
+实例可以配置可选的 `context` 自由文本，供调用方在发现和使用实例时理解当地工作环境。内容由配置者决定，可以使用 Markdown，包含工作约定、目录线索、工具说明、项目背景或临时注意事项；这些都是例子，不是协议分类。Agenvo 不解析正文，不执行其中的指令，不从中生成方法、默认参数或权限设置。具体调用仍以原生 schema、执行策略和当前结果为依据。
 
-Herdr 的名称和 pane 会复用。引用保留 terminal_id、Agent kind、可用的 agent_session 及服务代次；操作前检查目标。原生终端输入没有原子身份前置条件，查询与输入之间仍有竞争窗口，不能宣称完全避免误投。启动中的引用额外绑定目标 pane 与类型，不能误认同名新对象或掩盖启动失败。
+上下文属于实例，不把 Connector 身份等同于物理机器。配置者应说明内容适用的执行环境；例如 Lody cloud 的一个实例可以涉及多台机器，Connector 本机路径不代表目标机器上的路径。原生 Agent、provider、项目和宿主目录继续通过原生方法查询，不复制成通用上下文清单。
 
-原生服务拥有执行、历史和会话生命周期。Herdr 独立启动；Connector 不提供其 session.start/stop。Codex managed-stdio 管理显式创建的子进程，attach-unix 只连接已有 app-server，关闭 Connector 不停止附着服务。
+`context` 从实例配置进入描述，通过既有 `hello` / `instances_changed` 通道送到 Relay。Relay 保存最近通告，`search` 的空查询和匹配方法的实例结果原样携带它，调用者直接搜索操作时也能看到上下文。关键词匹配仍只搜索 Connector 类型、方法名和方法描述；上下文中的文字不能让无关方法命中。离线实例保留最近通告，在线状态和原生查询结果决定当前可用性。上下文可以省略，不新增 MCP 工具、握手完成状态或调用前置检查。
 
-## 管理接口
+配置沿用显式重启契约：进程启动时读取，重连发布该进程已加载的描述。编辑 `config.json` 后需要重启 Connector；不会为刷新文本自动重启托管运行时。上下文不进入授权 scope 或 fingerprint，修改、清空和删除它无需重新批准实例；改变真实运行时范围仍需批准。通告继续受现有传输帧大小限制，不静默截断正文。
 
-保留 `instances_list`、`instance_describe`、`runtime_call` 三个 MCP 工具。共同接口使用 `management.*`，原生方法继续处理服务特有行为。Relay 无需理解 Thread 或原生 turn。`instance_describe` 的 `managementVersion: 1`、能力及方法 schema 是实际可调用范围。
+选择自由文本是为了让配置者表达任何有用的上下文，而无需 Agenvo 预先定义字段。它也意味着内容的解释和应用由调用 Agent 判断，Agenvo 不保证客户端遵循它。原生能力与执行边界继续由已有方法描述和 scope 提供。
 
-| 方法 | 调用者可观察的契约 |
+验收覆盖各 Connector 配置与协议中的文本往返、上下文变化不改变 fingerprint、真实 MCP 的空查询与方法搜索、通告更新和离线读取。配置方法见[补充实例上下文](../docs/usage.zh-CN.md#补充实例上下文)。
+
+## 描述能力，保留原生语义
+
+每个方法提供 `name`、`description`、`readOnly` 和 `inputSchema`。描述应让调用者知道操作什么资源、需要什么前置条件、会产生什么副作用，以及结果能证明什么。支持范围依据实际原生能力；各 Connector 不必实现相同的方法集合。
+
+方法名在目标实例内唯一，注册时检查重名，调用时按准确名称派发。保留原生方法名、字段和标识，不添加 Agenvo 的全局前缀或统一别名。原生协议无法直接表达为调用时，可以提供必要桥接，但必须说明它的来源、状态范围和结果边界。
+
+相同意图使用一致的操作词，让同一搜索词能找到不同 Connector 的对应能力。共同术语用于发现，不改变原生对象的含义：
+
+| 术语 | 描述要求 |
 | --- | --- |
-| `management.services.list` | 发现服务；磁盘端点存在不等于连通 |
-| `management.threads.list` | 发现当前上下文，包括其他客户端创建的对象；发现不自动订阅 |
-| `management.threads.create` | 创建上下文，不发送初始提示词；Herdr 异步返回启动查询 |
-| `management.threads.get` | 查询元数据和活动状态 |
-| `management.threads.send` | 提交文本，保留原生确认和忙碌输入语义，不承诺新轮或排队 |
-| `management.threads.observe` | 查询该 Thread 当前状态、分页观察事件及待回应请求摘要 |
-| `management.threads.read` | 按需读取原生历史或终端快照，与观察游标独立 |
-| `management.threads.interrupt` | 请求中断当前原生执行，不重选目标或重试；Codex 保留轮次身份，Amp 使用无轮次前置条件的原生 cancel |
-| `management.threads.resume` | 加载并订阅已有上下文，不发送提示词；仅 Codex 支持 |
-| `management.threads.archive/unarchive` | 改变可见性，不等同取消或销毁；仅 Codex 支持 |
-| `management.interactions.list/read/respond` | 按 Thread 列出待回应请求，按交互引用读取或回答；仅 Codex 支持 |
+| Connector / deviceId | 连接器及其连接身份，不等同于物理机器 |
+| Instance / instanceId | Connector 暴露的一个原生服务配置 |
+| Work context | 可持续交互的工作上下文，说明其对应的原生资源 |
+| list / create / read | 列出、创建、读取，明确操作对象与覆盖范围 |
+| create work context / submit input / read output / interrupt / respond | 对已有同类能力复用这些搜索词，并说明实际效果和前置条件 |
+| input / output / native status / request | 分别描述输入、输出、原生状态和待响应请求 |
+| task success | 业务目标是否达成，由调用 Agent 根据证据判断 |
 
-没有公共执行引用、执行资源查询、实例级观察列表或统一 steer。精确轮次操作继续使用原生 `turn/steer`、`turn/interrupt` 和 `thread/items/list`。这样原生轮次身份留在需要它的边界，而普通管理方只维护 Thread 和观察游标。
+描述中应明确影响调用决策的差异，例如某个操作是否隐式启动执行、改变资源身份或只返回当前连接收到的信息。调用者不应为了正确使用一个已发现的方法，还必须阅读 Connector 的开发文档。
 
-Herdr 的原生 agent.prompt 写入终端；Codex send 调用 turn/start。同一个方法不承诺“新的一轮”。对活跃 Codex 轮次追加指令且要求身份匹配时，调用原生 turn/steer；expectedTurnId 不匹配时原生拒绝。没有经验证的原生契约就不增加下一轮队列或自动重发。
+## 职责与信任
 
-## Thread 观察
+原生服务持有工作上下文、执行状态和历史。Connector 负责原生连接、能力描述、输入校验、结果传递及必要的连接状态；只在原生协议存在实际缺口时增加桥接。终端文本可以是有效输出，不为统一形式推导结构化结论，也不维护第二套任务状态机。
 
-`observe(threadRef, cursor?, limit?)` 返回 `thread`、`items`、`interactions`、`nextCursor`、`caughtUp`、`gap` 和 `coverage`。Thread 状态、事件与待回应请求分别采样，不是同一时刻的原子快照。调用方持续传回 nextCursor；caughtUp 只说明当前缓冲已读完。
+Relay 负责设备、实例 fingerprint、访问授权及撤销。客户端与 Connector 经 OAuth 和配对建立信任；新增能力复用这一边界，不叠加授权快照、额外结果扣留或原生服务没有要求的确认参数。原生参数校验保证协议正确，连接状态用于表达可用性，脚本中断用于结束停滞执行，各自承担明确职责。
 
-三种事实保持独立：
+执行权限与访问授权分开。Agenvo 创建或管理的执行路径遵循 full-access 策略；已有资源的原生设置和服务限制仍由对应运行时持有。用户问题和业务决定不能因为执行无需审批而自动代答。
 
-- 可访问性：Connector 或服务是否连通；离线期间原生工作可能继续。
-- 活动状态：starting、idle、working、blocked、unknown，附原生状态、观察时间和来源。Herdr done 归为空闲观察，保留 completion_seq；Codex notLoaded 和 systemError 不归为空闲。
-- 原生事件结果：Codex turn/completed 可表达完成、失败或中断。事件保留原生轮次 ID 和错误，即使当前 Thread 已进入下一轮，也不能仅返回最新状态而丢失此前失败。
+## 结果与生命周期
 
-Connector 自动订阅已加载的 Codex Thread。首次 observe 尚未订阅的 Thread 时，调用 thread/resume（excludeTurns: true）建立订阅，不发送输入，然后读取当前元数据与该 Thread 的待回应请求。因为 resume 会加载上下文并应用全权限设置，observe 的 readOnly 标志为 false。订阅失败不伪装成空事件；归档、未持久化或原生历史不可用等失败保持原生错误。以后通过当前连接收到的通知增量观察，订阅不补发过去事件。
+每次原生调用返回 Outcome，保留原生结果、错误和可用的关联标识。`accepted` 只证明输入被接受，`starting` 表示操作仍在启动；原生轮次完成或空闲都不证明业务目标完成。`unknown` 表示执行结果无法确认，调用者应先检查原生状态，再决定是否重试。
 
-Herdr observe 每次主动查询 agent.get 并读取 agent.read 终端快照，不依赖先前管理调用。启动中的对象先返回启动状态，活跃后才读取终端。快照声明读取行数与有界覆盖，不转写为结构化 assistant 消息；两次采样之间的状态变化可能丢失。Connector 另外通过原生订阅把状态变化发送为 `runtime.changed` webhook，终端内容仍按需读取，详见[事件设计](events.zh-CN.md)。启动引用变为活跃引用后，调用方使用返回的新引用并重新开始游标。
+脚本中的调用相互独立，不构成事务，也不自动重试或回滚。脚本失败仍返回已派发调用的精简确认；后续调用被拒绝不抹去先前调用已返回的结果。脚本失败与原生拒绝分开表达，判断具体操作时以该次调用的确认和 requestId 为依据。
 
-Connector 使用一个有界记录，而不是为无限多个 Thread 建立持久缓存。每条记录关联原生 Thread 身份，输出分页前按目标筛选；游标包含记录代次、Thread 身份摘要和位置。跨 Thread 使用返回 invalid_cursor。其他 Thread 的事件不占当前页面条数，空页也能越过无关事件推进游标。快照和事件最多保留 256 条、512 KiB，单次事件页不超过 32 KiB；大事件截断仍保留可用的原生身份、状态和错误。完整结果还受现有 64 KiB 信封限制。
+附着原生服务只负责连接，显式托管进程的生命周期单独处理。连接断开或脚本超时不代表原生工作已取消；重新连接不自动重发业务写入。连接范围内的标识、订阅和缓存应明确其失效条件，缺失信息如实返回，不补造完整历史。
 
-游标遇到淘汰或连接重建返回 gap。共享缓冲无法证明被丢弃事件都不属于目标，因此保守报告缺口，可能包含其他 Thread 导致的淘汰。旧 Codex 引用失效后重新发现同一个原生 Thread，旧观察游标仍能报告记录代次变化。Herdr 服务代次变化则需要新的引用与游标。缓冲不补齐断线、未订阅和进程重启期间的事件；历史恢复依赖原生能力。
+变化事件用于唤醒调用者，调用者再读取所需状态和输出。事件投递不承担业务调度；订阅覆盖、重放能力和信息缺口必须与原生能力一致。共享事件机制见[事件设计](events.zh-CN.md)。
 
-`read` 返回 conversation_items 或 terminal_snapshot。Codex 按轮次分页，详细 item 通过原生接口继续读取。后端不支持历史、没有 materialized rollout、临时会话历史不可用与空结果不同，必须显式返回错误。交付物保留原生来源，不从任意终端文本推断已经验证的 artifact 清单。
+## 新增或扩展 Connector
 
-## 中断、交互与故障
+实现通过共享 [Adapter 接口](../packages/connector/src/adapters/adapter.ts)的 `methods()` 声明目录，由 `call(method, params)` 执行。运行时自己的配置、协议和生命周期留在对应 `apps/` 中；共享层承载各 Connector 共同遵循的契约。
 
-Codex Thread 中断先以 thread/turns/list 查询最新一条轮次元数据（desc、limit: 1、itemsView: notLoaded）。没有 inProgress 轮次时返回 no_active_execution，查询失败时不派发中断。取得 turnId 后只发送一次 turn/interrupt；不能在原生拒绝或超时后重选当前轮次，避免误中断下一轮。响应只确认请求，完成事件才说明实际结果。
+交付时验证调用者能按共同术语发现能力，并经真实 MCP 入口使用返回的 schema 完成对应操作。覆盖与本次能力相关的原生拒绝、结果不确定、连接中断及部分成功等边界；方法目录测试不能代替实际调用验证。复用[原生契约测试](../tests/native-contracts.test.ts)、隔离 fixture 和[贡献指南](../CONTRIBUTING.zh-CN.md)中的入口。
 
-Herdr 不支持这一中断契约；Esc/Ctrl+C 继续作为原生终端操作，不伪装成任务级取消。archive、interrupt 和关闭 workspace 是不同动作。Relay 或 Connector 断开不隐式取消原生工作。
-
-Codex observe 返回该 Thread 的待回应请求摘要和 interactionRef；完整内容通过 interactions.read 获取。interactions.list 按 Thread 筛选后分页，提供原生 response schema。其分页游标与观察游标不同。动态工具调用和用户问题必须按实际 schema 回答；权限请求自动处理。其他客户端已回答、轮次结束或连接重建时，旧交互引用失效。回复成功可能只代表已提交，不能据此证明赢得原生多客户端竞争。
-
-所有 Codex 创建、恢复和输入路径，包括 attach 模式与原生入口，强制 danger-full-access / never，权限请求自动回答。Herdr 已有终端保持自身设置；支持的新启动加入原生 bypass 参数。设备配对、远程访问授权与实例指纹仍然有效，它们不属于 Agent 执行审批。
-
-`Outcome.execution` 描述调用交付状态：not_started、starting、accepted、rejected、unknown，与 Thread 活动和原生轮次结果分开。只有确定没有派发时才能说 not_started；断线或超时造成的执行不确定性保持 unknown。Thread/turn ID、调用关联 ID 和观察游标都不是幂等键。没有原生去重契约就不重放写操作。
-
-## 实现归属
-
-共同方法注册、输入校验和引用由 `management.ts` 维护；有界观察记录由 `observations.ts` 维护。`HerdrManagement` 与 `CodexManagement` 负责原生映射、观察及控制，统一方法和原生方法复用适配器传输与执行配置。Relay 只路由调用，不保存另一套任务状态。
-
-回归测试需要保护引用归属、游标缺口、自动订阅的副作用、中断竞争和原生错误传播。测试入口与隔离要求见[贡献指南](../CONTRIBUTING.zh-CN.md)。
-
-Amp 的共同接口映射、取消竞争和观察范围见 [Amp 原生接口依据](amp-interface-audit.zh-CN.md)。
+具体 Connector 的资源映射、接口来源、限制和验证证据写在[对应开发文档](agent-management-interface-audit.zh-CN.md)；影响调用者选择的信息同时写进方法描述和用户指南。内部协议与文档随变更同步更新，兼容范围遵循[项目约定](../AGENTS.md#发布与兼容性)。
