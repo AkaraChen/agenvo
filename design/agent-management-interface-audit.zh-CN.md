@@ -16,6 +16,7 @@
 | `events.subscribe` | 没有公开 cursor/since 参数；内部 sequence 不构成断线重放契约 |
 | `agent.send-keys`、`pane.send-keys` | 效果取决于终端程序，不能保证 Thread 中断 |
 | `workspace.close` | 关闭资源，不等于归档会话 |
+| `worktree.list/create/open/remove`、`tab.create/close` | 直接读写 Git worktree：列表包括 Herdr 之外创建的 worktree，删除移除检出、保留分支；`tab.create` 新开 shell pane 供 `agent.start` 使用，不占用已有 pane |
 
 `interactive_ready` 表示 Herdr 受管启动已进入 Active 阶段；它不是所有原生 Agent 的发送能力开关。外部启动、或启动确认超时后仍存活的 Codex、Claude、Devin 可以通过 `agent.prompt` 接收输入。Agenvo 对这些已支持的 Agent 不以该字段为前提，仍在发送前检查身份，并保留 Herdr 对前台进程、启动中状态和交互阻塞的检查。
 

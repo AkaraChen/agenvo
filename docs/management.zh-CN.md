@@ -25,7 +25,7 @@ Agenvo 以 Thread 管理 Agent 服务。Thread 是可寻址、可持续交互的
 
 ## 创建与发送输入
 
-`management.threads.create` 接受 `serviceRef` 和 schema 中的 `providerOptions`。Codex 可指定模型及历史模式。Herdr 需要已有 pane、名称和 Agent 类型；必要时先通过原生接口创建工作区。全权限启动支持 Codex、Claude 和 Devin，其他已经运行的 Agent 类型仍可发现。Connector 不启动 Herdr 服务。
+`management.threads.create` 接受 `serviceRef` 和 schema 中的 `providerOptions`。Codex 可指定模型及历史模式。Herdr 需要已有 pane、名称和 Agent 类型；必要时先创建工作区，或用 `tab.create` 在已有 pane 旁新开。原生 `worktree.list`、`worktree.create`、`worktree.open` 和 `worktree.remove` 管理 Git worktree 工作区；`worktree.list` 包括 Herdr 之外创建的 worktree，删除时保留分支。全权限启动支持 Codex、Claude 和 Devin，其他已经运行的 Agent 类型仍可发现。Connector 不启动 Herdr 服务。
 
 创建不包含初始提示词。Codex 返回 `thread.threadRef`。Herdr 返回 `execution: starting` 和 `result.query`；轮询这个查询，成功后使用活跃对象的 `thread.threadRef`。启动失败后清理工作区前，先检查其归属与内容。
 
