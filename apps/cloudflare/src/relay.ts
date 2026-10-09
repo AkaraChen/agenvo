@@ -142,6 +142,9 @@ export class AgenvoRelay extends DurableObject<Env> {
   adminState() {
     return this.relay.adminState();
   }
+  adminCall(input: Call) {
+    return this.relay.adminCall(input);
+  }
   adminStateJson() {
     return this.relay.adminStateJson();
   }

@@ -1,9 +1,16 @@
 import { z } from "zod";
-import { readBody, transportedFault, asOutcome } from "@agenvo/protocol";
+import {
+  readBody,
+  transportedFault,
+  asOutcome,
+  callSchema,
+  type Call,
+} from "@agenvo/protocol";
 import { type Relay } from "./core.js";
 
-type Result<K extends "approvePairing" | "approveInstance" | "revoke"> =
-  ReturnType<Relay[K]>;
+type Result<
+  K extends "approvePairing" | "approveInstance" | "revoke" | "adminCall",
+> = ReturnType<Relay[K]>;
 export interface AdminRelay {
   adminStateJson(): string | Promise<string>;
   approvePairing(
@@ -20,6 +27,7 @@ export interface AdminRelay {
     id: string,
     instanceId?: string,
   ): Result<"revoke"> | Promise<Result<"revoke">>;
+  adminCall(input: Call): Result<"adminCall">;
 }
 
 /** Shared owner endpoints keep validation and revocation semantics identical. */
@@ -36,6 +44,7 @@ export async function admin(
       "/api/admin/pairings/approve",
       "/api/admin/instances/approve",
       "/api/admin/revoke",
+      "/api/admin/call",
     ].includes(path)
   )
     return;
@@ -60,6 +69,11 @@ export async function admin(
       );
     }
     const input = JSON.parse(await readBody(request));
+    if (path === "/api/admin/call")
+      // runtime_call as the owner: the outcome, faults included, is the body.
+      return Response.json(await relay.adminCall(callSchema.parse(input)), {
+        headers,
+      });
     if (path === "/api/admin/pairings/approve") {
       const p = z
         .strictObject({

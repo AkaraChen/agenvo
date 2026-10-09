@@ -76,6 +76,8 @@ export interface RelayHost {
   scheduleCleanup(at?: number): Promise<void>;
   sendWebhook?: WebhookTransport;
 }
+/** The grant of the owner's own calls (adminCall); no OAuth grant has it. */
+const OWNER = "owner";
 export class Relay {
   private events: Events;
   private pending = new Map<string, Pending>();
@@ -251,7 +253,7 @@ export class Relay {
     instanceId?: string,
     fingerprint?: string,
   ) {
-    if (!this.checkGrant(grant)) return false;
+    if (grant !== OWNER && !this.checkGrant(grant)) return false;
     if (!deviceId) return true;
     const d = this.device(deviceId);
     if (!d || d.revoked) return false;
@@ -386,6 +388,15 @@ export class Relay {
       execution: "accepted",
       result: page(items, options.cursor, options.limit),
     } satisfies Outcome;
+  }
+  /**
+   * A runtime call by the relay's owner, through the administrator API: any
+   * approved instance, with no OAuth grant. A service holding the
+   * administrator secret calls runtimes this way instead of consenting to an
+   * MCP grant for itself.
+   */
+  adminCall(input: Call): Promise<Outcome> {
+    return this.call(OWNER, input);
   }
   async call(grantId: string, input: Call): Promise<Outcome> {
     const requestId = crypto.randomUUID();
