@@ -28,14 +28,29 @@ const target = {
   ),
 };
 const pane = { ...ref, paneId: id };
-// A repository, by one of its workspaces or a directory inside it; the
-// instance's directory when neither is given.
+const trustRepository = z
+  .boolean()
+  .default(false)
+  .describe(
+    "Trust this repository for this Git command even if owned by another user. Maps to native --trust-repository; does not change Git configuration.",
+  );
 const repository = {
-  workspaceId: id.optional(),
-  cwd: z.string().optional(),
+  workspaceId: id
+    .optional()
+    .describe("Select the repository by a workspace; omit cwd."),
+  cwd: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      "Select the repository by a directory inside it; omit workspaceId. If neither is given, use the configured instance directory.",
+    ),
+  trustRepository,
 };
-const source = (p: Record<string, any>, cwd: string) =>
-  p.workspaceId ? ["--workspace", p.workspaceId] : ["--cwd", p.cwd ?? cwd];
+const source = (p: Record<string, any>, cwd: string) => [
+  ...(p.workspaceId ? ["--workspace", p.workspaceId] : ["--cwd", p.cwd ?? cwd]),
+  ...(p.trustRepository ? ["--trust-repository"] : []),
+];
 const oneSource = (p: { workspaceId?: string; cwd?: string }) =>
   !(p.workspaceId && p.cwd);
 const sourceMessage = {
@@ -60,9 +75,9 @@ const keys = z
     "Native logical keys, for example esc, ctrl+c, enter. Herdr validates the whole list before writing.",
   );
 const snapshot =
-  "Read a bounded terminal snapshot, not a durable or cursor-based task log. Inspect output and task evidence before declaring success.";
+  "Read terminal output as a bounded snapshot. Output is not durable conversation history; native status does not establish task success.";
 const inputKeys =
-  "Send native logical keys to the explicitly selected target. Read the current UI before answering an approval or question and follow the caller's authorization. esc or ctrl+c may interrupt depending on the running program. accepted confirms input delivery only; re-read state/output to verify the effect. Never blindly retry lost confirmation.";
+  "Submit input as native logical keys to the selected terminal. esc or ctrl+c may interrupt the running agent. accepted confirms input delivery, not task success. Read terminal output to observe the result.";
 // Each method owns its schema, discovery contract and native argument mapping.
 // Session discovery is handled locally; all other calls target an existing server.
 type NativeMethod = {
@@ -76,7 +91,7 @@ const methods: Record<string, NativeMethod> = {
     schema: z.strictObject({ cursor: z.string().optional() }),
     readOnly: true,
     description:
-      "Discover independently started sessions in the approved config root, with server lifetime references. Herdr startup, shutdown and restart are managed locally; this adapter does not provide session.start or session.stop.",
+      "List native service sessions in the approved instance config root, including backendGeneration. A session is a running Herdr server, not a conversation thread. Service startup and shutdown are managed locally.",
   },
   "workspace.list": {
     schema: z.strictObject(ref),
@@ -92,7 +107,7 @@ const methods: Record<string, NativeMethod> = {
     }),
     readOnly: false,
     description:
-      "Create a workspace without changing user focus. Retain returned native IDs; inspect workspace.list after unknown confirmation before retrying.",
+      "Create a workspace containing terminal panes without changing user focus. Returns native workspace and pane IDs.",
     argv: (p, cwd) => [
       "workspace",
       "create",
@@ -113,7 +128,7 @@ const methods: Record<string, NativeMethod> = {
     schema: z.strictObject({ ...ref, workspaceId: id }),
     readOnly: false,
     description:
-      "Close a whole workspace and its terminals. Preserve required output and artifacts before cleanup.",
+      "Close a workspace and its terminal panes, stopping the programs running in them.",
     argv: (p) => ["workspace", "close", p.workspaceId],
   },
   "worktree.list": {
@@ -162,7 +177,7 @@ const methods: Record<string, NativeMethod> = {
       }),
     readOnly: false,
     description:
-      "Open an existing Git worktree as a workspace without changing user focus.",
+      "Open an existing Git worktree as a workspace without changing user focus. Select exactly one of path or branch.",
     argv: (p, cwd) => [
       "worktree",
       "open",
@@ -176,6 +191,7 @@ const methods: Record<string, NativeMethod> = {
       ...ref,
       workspaceId: id,
       force: z.boolean().default(false),
+      trustRepository,
     }),
     readOnly: false,
     description:
@@ -186,6 +202,7 @@ const methods: Record<string, NativeMethod> = {
       "--workspace",
       p.workspaceId,
       ...(p.force ? ["--force"] : []),
+      ...(p.trustRepository ? ["--trust-repository"] : []),
     ],
   },
   "tab.create": {
@@ -233,7 +250,7 @@ const methods: Record<string, NativeMethod> = {
     schema: z.strictObject(pane),
     readOnly: true,
     description:
-      "Inspect the selected pane before raw terminal input; pane state is not task success.",
+      "Read terminal pane metadata and native status. Native status does not establish task success.",
     argv: (p) => ["pane", "get", p.paneId],
   },
   "pane.process-info": {
@@ -247,7 +264,7 @@ const methods: Record<string, NativeMethod> = {
     schema: z.strictObject({ ...pane, command: z.string().max(48000) }),
     readOnly: false,
     description:
-      "Submit command text and Enter to a terminal. accepted is input delivery, not command completion or exit status; inspect output before further input.",
+      "Submit input as command text followed by Enter to a terminal pane. accepted confirms input delivery, not command completion or exit status.",
     argv: (p) => ["pane", "run", p.paneId, p.command],
   },
   "pane.read": {
@@ -272,21 +289,20 @@ const methods: Record<string, NativeMethod> = {
     schema: z.strictObject({ ...pane, text: z.string().min(1).max(48000) }),
     readOnly: false,
     description:
-      "Send literal text without Enter to the selected terminal, including a question's text field. Inspect the current UI and authorization first; use pane.send-keys for an explicit submission. Raw terminal input has no approval request ID or stale-dialog protection.",
+      "Submit input as literal text without Enter to a terminal pane, including responses to requests for user input. Use pane.send-keys to send Enter.",
     argv: (p) => ["pane", "send-text", p.paneId, p.text],
   },
   "pane.send-keys": {
     schema: z.strictObject({ ...pane, keys }),
     readOnly: false,
-    description:
-      inputKeys + " Raw pane input does not validate agent identity.",
+    description: inputKeys,
     argv: (p) => ["pane", "send-keys", p.paneId, ...p.keys],
   },
   "agent.list": {
     schema: z.strictObject(ref),
     readOnly: true,
     description:
-      "Discover live agents, including agents started outside Agenvo. Use a returned live name or pane ID with agent methods. Names identify the current pane occupant, not a durable task.",
+      "List running agents, including agents started outside Agenvo. Use a returned name or pane ID with agent methods. Each agent runs in a terminal pane; its name is not a durable conversation ID.",
     argv: () => ["agent", "list"],
   },
   "agent.start": {
@@ -300,7 +316,7 @@ const methods: Record<string, NativeMethod> = {
     }),
     readOnly: false,
     description:
-      "Start asynchronously. Poll agent.get using the returned session, name and backendGeneration. A startup timeout does not stop the process; rediscover agents by pane ID if the launch name is gone. Do not repeat after lost confirmation. Startup tracking is connector-local; rediscover native agents after reconnect.",
+      "Create a work context by starting an agent in an existing terminal pane. Uses full access and starts asynchronously. Poll agent.get using the returned session, name and backendGeneration. A startup timeout does not stop the process; rediscover agents by pane ID if the launch name is gone. Do not repeat after lost confirmation. Startup tracking is connector-local; rediscover native agents after reconnect.",
     argv: (p) => [
       "agent",
       "start",
@@ -316,17 +332,20 @@ const methods: Record<string, NativeMethod> = {
     ],
   },
   "agent.prompt": {
-    schema: z.strictObject({ ...target, text: z.string().max(48000) }),
+    schema: z.strictObject({
+      ...target,
+      text: z.string().max(48000),
+    }),
     readOnly: false,
     description:
-      "Submit a prompt to a live agent. Native Herdr rejects blocked approval/question dialogs; inspect agent.explain and agent.read and use authorized input instead. accepted does not establish turn completion.",
+      "Submit input as a prompt to a running agent. Native Herdr rejects prompts while a request for user input is blocking; read agent.explain and terminal output to choose text or key input. accepted does not establish task success.",
     argv: (p) => ["agent", "prompt", p.name, p.text],
   },
   "agent.get": {
     schema: z.strictObject(target),
     readOnly: true,
     description:
-      "Read native lifecycle and startup state. idle/done means ready for input, not verified task success; blocked requires agent.explain and agent.read. This instance does not expose requests.list.",
+      "Read agent metadata, native status and startup state. idle, done and unknown do not establish task success. Read agent.explain and terminal output for requests for user input.",
     argv: (p) => ["agent", "get", p.name],
   },
   "agent.read": {
@@ -351,19 +370,16 @@ const methods: Record<string, NativeMethod> = {
     schema: z.strictObject(target),
     readOnly: true,
     description:
-      "Return native JSON detection evidence for the selected agent, including why it appears blocked or unknown. This is classifier diagnostics, not a structured approval request or task result.",
+      "Read native detection diagnostics for an agent, including blocked or unknown status and requests for user input. These diagnostics are not structured request IDs or proof of task success.",
     argv: (p) => ["agent", "explain", p.name, "--json"],
   },
   "agent.send-keys": {
     schema: z.strictObject({ ...target, keys }),
     readOnly: false,
-    description:
-      inputKeys +
-      " Herdr resolves a live agent; this does not bind input to a specific approval dialog.",
+    description: inputKeys,
     argv: (p) => ["agent", "send-keys", p.name, ...p.keys],
   },
 };
-import { HerdrManagement } from "./herdr-management.js";
 
 export class HerdrAdapter implements Adapter {
   available = false;
@@ -372,13 +388,7 @@ export class HerdrAdapter implements Adapter {
     string,
     { state: "starting" | "settled"; outcome?: Outcome }
   >();
-  readonly management: HerdrManagement;
-  constructor(public config: HerdrConfig) {
-    this.management = new HerdrManagement(
-      (m, p) => this.call(m, p),
-      () => this.nativeMethods(),
-    );
-  }
+  constructor(public config: HerdrConfig) {}
   async init() {
     if (basename(this.config.configRoot) !== "herdr")
       throw new Fault(
@@ -392,9 +402,6 @@ export class HerdrAdapter implements Adapter {
     this.available = true;
   }
   methods(): Method[] {
-    return [...this.management.methods(), ...this.nativeMethods()];
-  }
-  private nativeMethods(): Method[] {
     return Object.entries(methods).map(([name, method]) => ({
       name,
       description: method.description,
@@ -496,8 +503,6 @@ export class HerdrAdapter implements Adapter {
     }
   }
   async call(method: string, input: Record<string, unknown>): Promise<Outcome> {
-    if (method.startsWith("management."))
-      return this.management.call(method, input);
     const definition = Object.hasOwn(methods, method)
       ? methods[method]
       : undefined;
