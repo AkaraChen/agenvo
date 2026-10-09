@@ -1,6 +1,6 @@
+import { codexServer } from "../support/codex-server.js";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolve } from "node:path";
 import { eventsLab } from "../support/events-lab.js";
 import { until } from "../support/environment.js";
 
@@ -14,13 +14,14 @@ test(
       return true;
     });
     const lab = await eventsLab(t);
+    const native = await codexServer(lab.root);
+    lab.cleanup(native.close);
     const device = await lab.connect([
       {
         id: "codex",
         label: "Isolated Codex protocol fixture",
         kind: "codex",
-        binary: resolve("tests/fixtures/codex-backend.mjs"),
-        mode: "managed-stdio",
+        endpoint: native.endpoint,
         cwd: lab.root,
         home: lab.root,
       },

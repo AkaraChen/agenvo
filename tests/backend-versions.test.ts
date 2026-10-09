@@ -1,3 +1,4 @@
+import { codexServer } from "./support/codex-server.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, writeFile, rm, realpath } from "node:fs/promises";
@@ -12,9 +13,16 @@ test("runtime diagnostics report versions without requiring the CI baseline", as
   const root = await realpath(
     await mkdtemp(join(tmpdir(), "agenvo versions ")),
   );
-  t.after(() =>
-    rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
-  );
+  const native = await codexServer(root);
+  t.after(async () => {
+    await native.close();
+    await rm(root, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
+  });
   const script = join(root, "runtime.mjs");
   const binary =
     process.platform === "win32" ? join(root, "runtime.cmd") : script;
@@ -36,16 +44,21 @@ console.log(process.argv.includes('--version') ? 'fixture 9.0.0' : 'Logged in');
   }
   const common = { id: "test", label: "Test", binary, cwd: root };
   const codexConfig = codex.schema.parse({
-    ...common,
+    id: "test",
+    label: "Test",
+    cwd: root,
     kind: "codex",
     home: root,
-    mode: "managed-stdio",
+    endpoint: native.endpoint,
   });
   const codexChecks = await codex.doctor(codexConfig);
-  assert.equal(codexChecks.find((c) => c.check === "test:version")?.ok, true);
   assert.equal(
-    codexChecks.find((c) => c.check === "test:version")?.detail,
-    "fixture 9.0.0",
+    codexChecks.find((c) => c.check === "test:connection")?.ok,
+    true,
+  );
+  assert.equal(
+    codexChecks.find((c) => c.check === "test:connection")?.detail,
+    "codex-cli 0.161.0",
   );
   const configRoot = join(root, "herdr");
   await mkdir(configRoot);
