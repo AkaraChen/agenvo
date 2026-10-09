@@ -259,6 +259,13 @@ export class PaseoAdapter implements Adapter {
       "Create a native workspace without running an agent.",
       (p) => this.connected().createWorkspace(p),
     );
+    define(
+      "paseo.workspaces.archive",
+      z.strictObject({ workspaceId: z.string().min(1).max(256) }),
+      false,
+      "Archive a workspace and everything it owns: its agents stop, and a Paseo-managed worktree checkout is removed (its branch stays).",
+      (p) => this.connected().archiveWorkspace(p.workspaceId),
+    );
   }
   connected(expected?: DaemonClient) {
     if (
