@@ -34,6 +34,19 @@ deviceId 标识一个 Connector，不是一台物理机器。离线或无法查�
 
 ## 执行
 
+### Paseo 终端与项目
+
+发现 `paseo.terminals` 可在已有 workspace 创建普通 shell、列出终端、执行命令、
+捕获输出、输入文字或按键、关闭终端，无需启动 Agent。保留返回的原生 terminal ID。
+`run` 附加回车，`send-text` 不附加任何内容。输入确认仅表示传输提交；Paseo 不确认
+终端输入已收到，也不报告命令退出码。另行读取输出，不因结果不确定而重复输入。
+
+`read` 保留 Paseo 原生 capture 的 `start`/`end` 偏移。输出超过中继限制时缩小范围。
+`send-keys` 提供 schema 中列明的一组逻辑按键，其他输入可使用文字。
+
+将克隆后的目录注册到 Paseo 项目列表时，发现 `paseo.projects.add` 并传入 `cwd`，
+再通过 `paseo.projects.list` 验证。创建 workspace 与注册项目是不同操作，均不会 clone 仓库。
+
 把下面的函数体传给 `execute`，将目标替换为发现的 ID：
 
 ```js

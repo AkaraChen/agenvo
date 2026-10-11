@@ -36,6 +36,25 @@ Search may also return optional `result.updates` for newer formal Agenvo server 
 
 ## Execute
 
+### Paseo terminals and projects
+
+Discover `paseo.terminals` to create a plain shell in an existing workspace,
+list terminals, run commands, capture output, send text or keys, and close a
+terminal. These operations do not start an Agent. Keep the returned native
+terminal ID. `run` adds Enter; `send-text` adds nothing. Input confirmation
+means transport submission only: Paseo does not acknowledge terminal input or
+report a command's exit status. Read output separately; do not replay input
+after an uncertain result.
+
+`read` preserves Paseo's native capture `start`/`end` offsets. Narrow the range
+if a capture exceeds the relay result limit. `send-keys` exposes a small
+documented set of logical keys; use literal text for other input.
+
+To register a cloned directory in Paseo's project list, discover
+`paseo.projects.add` and pass its `cwd`, then verify with
+`paseo.projects.list`. Creating a workspace and registering a project are
+different operations; neither clones a repository.
+
 Pass this body to `execute`, replacing the target with discovered IDs:
 
 ```js

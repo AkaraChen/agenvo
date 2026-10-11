@@ -276,6 +276,151 @@ export class PaseoAdapter implements Adapter {
       "Archive a native workspace and stop its agents and terminals. Paseo may remove its managed worktree checkout when no active workspace still references it; the branch remains. Successful archival does not confirm directory removal, which can be skipped or fail independently.",
       (p) => this.connected().archiveWorkspace(p.workspaceId),
     );
+    define(
+      "paseo.projects.list",
+      z.strictObject({}),
+      true,
+      "List native projects; opening a workspace is not project registration.",
+      () => this.connected().listProjects(),
+    );
+    define(
+      "paseo.projects.add",
+      z.strictObject({ cwd: z.string().min(1) }),
+      false,
+      "Register an existing directory as a native project. Does not clone a repository.",
+      (p) => this.connected().addProject(p.cwd),
+    );
+    const terminalTarget = z.strictObject({
+      terminalId: z.string().min(1).max(256),
+    });
+    define(
+      "paseo.terminals.list",
+      z.strictObject({
+        cwd: z.string().optional(),
+        workspaceId: z.string().optional(),
+      }),
+      true,
+      "List native terminals, optionally scoped to a directory or workspace.",
+      (p) =>
+        this.connected().listTerminals(p.cwd, undefined, {
+          workspaceId: p.workspaceId,
+        }),
+    );
+    define(
+      "paseo.terminals.create",
+      z.strictObject({
+        cwd: z.string().min(1),
+        workspaceId: z.string().optional(),
+        name: z.string().optional(),
+      }),
+      false,
+      "Create a shell terminal without starting an agent. Returns native terminal identity; inspect list after unknown before retrying.",
+      (p) =>
+        this.connected().createTerminal(p.cwd, p.name, undefined, {
+          workspaceId: p.workspaceId,
+        }),
+    );
+    define(
+      "paseo.terminals.run",
+      terminalTarget.extend({ command: z.string().max(48000) }),
+      false,
+      "Send command text followed by Enter. Confirms transport submission only, not native receipt, command completion or exit status; read output to observe the result.",
+      async (p) => {
+        this.connected().sendTerminalInput(p.terminalId, {
+          type: "input",
+          data: p.command + "\r",
+        });
+        return {
+          terminalId: p.terminalId,
+          confirmation: "transport_submitted",
+        };
+      },
+    );
+    define(
+      "paseo.terminals.send-text",
+      terminalTarget.extend({ text: z.string().min(1).max(48000) }),
+      false,
+      "Send literal terminal input without adding Enter. Confirms transport submission only.",
+      async (p) => {
+        this.connected().sendTerminalInput(p.terminalId, {
+          type: "input",
+          data: p.text,
+        });
+        return {
+          terminalId: p.terminalId,
+          confirmation: "transport_submitted",
+        };
+      },
+    );
+    const keys = {
+      enter: "\r",
+      esc: "\u001b",
+      "ctrl+c": "\u0003",
+      "ctrl+d": "\u0004",
+      tab: "\t",
+      backspace: "\u007f",
+      up: "\u001b[A",
+      down: "\u001b[B",
+      right: "\u001b[C",
+      left: "\u001b[D",
+    };
+    define(
+      "paseo.terminals.send-keys",
+      terminalTarget.extend({
+        keys: z
+          .array(
+            z.enum([
+              "enter",
+              "esc",
+              "ctrl+c",
+              "ctrl+d",
+              "tab",
+              "backspace",
+              "up",
+              "down",
+              "right",
+              "left",
+            ]),
+          )
+          .min(1)
+          .max(64),
+      }),
+      false,
+      "Send supported logical keys as terminal input. ctrl+c may interrupt a running program. Confirms transport submission only.",
+      async (p) => {
+        this.connected().sendTerminalInput(p.terminalId, {
+          type: "input",
+          data: p.keys.map((key) => keys[key]).join(""),
+        });
+        return {
+          terminalId: p.terminalId,
+          confirmation: "transport_submitted",
+        };
+      },
+    );
+    define(
+      "paseo.terminals.read",
+      terminalTarget.extend({
+        start: z.number().int().optional(),
+        end: z.number().int().optional(),
+        stripAnsi: z.boolean().default(true),
+      }),
+      true,
+      "Capture native terminal output. start/end use Paseo capture offsets (negative offsets read recent lines); narrow the range when the result is too large. Output is not durable history or proof of success.",
+      (p) =>
+        this.connected().captureTerminal(p.terminalId, {
+          start: p.start,
+          end: p.end,
+          stripAnsi: p.stripAnsi,
+        }),
+    );
+    define(
+      "paseo.terminals.close",
+      terminalTarget,
+      false,
+      "Kill a native terminal and its running program. Preserve required output before closing.",
+      (p) => this.connected().killTerminal(p.terminalId),
+    );
   }
   connected(expected?: DaemonClient) {
     if (
