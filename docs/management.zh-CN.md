@@ -42,7 +42,9 @@ deviceId 标识一个 Connector，不是一台物理机器。离线或无法查�
 终端输入已收到，也不报告命令退出码。另行读取输出，不因结果不确定而重复输入。
 
 `read` 保留 Paseo 原生 capture 的 `start`/`end` 偏移。输出超过中继限制时缩小范围。
-`send-keys` 提供 schema 中列明的一组逻辑按键，其他输入可使用文字。
+`send-keys` 接受 Paseo 的按键描述，例如 `{key: "Enter"}` 或 `{key: "c", ctrl: true}`。
+复用原生编码器，并通过原生 restore/output 流跟踪输入模式，包括 application cursor 模式。
+不支持的按键会在发送任何输入前拒绝。
 
 将克隆后的目录注册到 Paseo 项目列表时，发现 `paseo.projects.add` 并传入 `cwd`，
 再通过 `paseo.projects.list` 验证。创建 workspace 与注册项目是不同操作，均不会 clone 仓库。

@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { encodeTerminalKeyInput } from "@getpaseo/protocol/terminal-key-input";
+import { TerminalInputModeTracker } from "@getpaseo/protocol/terminal-input-mode";
 import {
   AgentPermissionResponseSchema,
   FetchAgentsRequestMessageSchema,
@@ -77,6 +79,14 @@ export class PaseoAdapter implements Adapter {
   >();
   private controlled = new Set<string>();
   private approvals = new Set<string>();
+  private terminalInputs = new Map<
+    string,
+    {
+      tracker: TerminalInputModeTracker;
+      subscription: ReturnType<DaemonClient["observeTerminal"]>;
+      restored: Promise<void>;
+    }
+  >();
 
   constructor(readonly config: PaseoConfig) {
     const define = <S extends z.ZodType>(
@@ -352,45 +362,35 @@ export class PaseoAdapter implements Adapter {
         };
       },
     );
-    const keys = {
-      enter: "\r",
-      esc: "\u001b",
-      "ctrl+c": "\u0003",
-      "ctrl+d": "\u0004",
-      tab: "\t",
-      backspace: "\u007f",
-      up: "\u001b[A",
-      down: "\u001b[B",
-      right: "\u001b[C",
-      left: "\u001b[D",
-    };
     define(
       "paseo.terminals.send-keys",
       terminalTarget.extend({
         keys: z
           .array(
-            z.enum([
-              "enter",
-              "esc",
-              "ctrl+c",
-              "ctrl+d",
-              "tab",
-              "backspace",
-              "up",
-              "down",
-              "right",
-              "left",
-            ]),
+            z.strictObject({
+              key: z.string().min(1).max(64),
+              ctrl: z.boolean().optional(),
+              alt: z.boolean().optional(),
+              shift: z.boolean().optional(),
+              meta: z.boolean().optional(),
+            }),
           )
           .min(1)
           .max(64),
       }),
       false,
-      "Send supported logical keys as terminal input. ctrl+c may interrupt a running program. Confirms transport submission only.",
+      "Send Paseo key descriptors (e.g. {key: 'Enter'}, {key: 'c', ctrl: true}) using native encoding and terminal modes. Unknown keys are rejected before sending. Confirms transport submission only.",
       async (p) => {
-        this.connected().sendTerminalInput(p.terminalId, {
+        const client = this.connected();
+        const inputMode = await this.terminalInputMode(p.terminalId, client);
+        const encoded = p.keys.map((key) =>
+          encodeTerminalKeyInput(key, { inputMode }),
+        );
+        if (encoded.some((data) => !data))
+          throw new Fault("invalid_params", "Unsupported Paseo terminal key");
+        this.connected(client).sendTerminalInput(p.terminalId, {
           type: "input",
-          data: p.keys.map((key) => keys[key]).join(""),
+          data: encoded.join(""),
         });
         return {
           terminalId: p.terminalId,
@@ -419,8 +419,95 @@ export class PaseoAdapter implements Adapter {
       terminalTarget,
       false,
       "Kill a native terminal and its running program. Preserve required output before closing.",
-      (p) => this.connected().killTerminal(p.terminalId),
+      async (p) => {
+        const result = await this.connected().killTerminal(p.terminalId);
+        if (result.success) this.terminalInputs.delete(p.terminalId);
+        return result;
+      },
     );
+  }
+  private async terminalInputMode(id: string, client: DaemonClient) {
+    let entry = this.terminalInputs.get(id);
+    if (!entry) {
+      if (this.terminalInputs.size >= 128)
+        throw new Fault(
+          "resource_exhausted",
+          "At most 128 terminal input modes can be observed per connection",
+        );
+      const tracker = new TerminalInputModeTracker();
+      const decoder = new TextDecoder();
+      let resolve!: () => void;
+      let reject!: (error: unknown) => void;
+      const restored = {
+        promise: new Promise<void>((yes, no) => {
+          resolve = yes;
+          reject = no;
+        }),
+        resolve: () => resolve(),
+        reject: (error: unknown) => reject(error),
+      };
+      const subscription = client.observeTerminal(
+        id,
+        (event) => {
+          if (event.type === "restore") {
+            tracker.reset();
+            decoder.decode();
+            tracker.feed(decoder.decode(event.data, { stream: true }));
+            restored.resolve();
+          } else if (event.type === "output") {
+            tracker.feed(decoder.decode(event.data, { stream: true }));
+          }
+        },
+        { restore: { mode: "visible-snapshot" } },
+      );
+      entry = { tracker, subscription, restored: restored.promise };
+      this.terminalInputs.set(id, entry);
+      const remove = () => {
+        if (this.terminalInputs.get(id) === entry)
+          this.terminalInputs.delete(id);
+      };
+      subscription.subscribe({
+        snapshot: () => {},
+        update: (message) => {
+          if (message.type === "terminal_stream_exit") {
+            remove();
+            restored.reject(
+              new Fault("runtime_unavailable", "Terminal observation ended"),
+            );
+          }
+        },
+        error: (error) => {
+          remove();
+          restored.reject(error);
+        },
+      });
+    }
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        Promise.all([entry.subscription.ready, entry.restored]),
+        new Promise((_, reject) => {
+          timeout = setTimeout(
+            () =>
+              reject(
+                new Fault(
+                  "runtime_unavailable",
+                  "Terminal input mode snapshot timed out",
+                ),
+              ),
+            8000,
+          );
+        }),
+      ]);
+    } catch (error) {
+      if (this.terminalInputs.get(id) === entry) this.terminalInputs.delete(id);
+      await entry.subscription.release().catch(() => {});
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+    this.connected(client);
+    return entry.tracker.getState();
   }
   connected(expected?: DaemonClient) {
     if (
@@ -504,6 +591,7 @@ export class PaseoAdapter implements Adapter {
     this.timelines.clear();
     this.controlled.clear();
     this.approvals.clear();
+    this.terminalInputs.clear();
     this.onAvailabilityChange?.();
     this.emit("agenvo.resync_required", undefined, {
       reason: "daemon_disconnected",
@@ -695,6 +783,7 @@ export class PaseoAdapter implements Adapter {
     this.available = false;
     this.timelines.clear();
     this.controlled.clear();
+    this.terminalInputs.clear();
     await client?.close();
   }
 }

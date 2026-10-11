@@ -73,7 +73,10 @@ test(
       terminalId,
       text: `"${process.execPath}" -e "console.log('AG_TERMINAL'+'_ok')"`,
     });
-    await call("paseo.terminals.send-keys", { terminalId, keys: ["enter"] });
+    await call("paseo.terminals.send-keys", {
+      terminalId,
+      keys: [{ key: "Enter" }],
+    });
     await until(
       async () =>
         JSON.stringify(
@@ -81,13 +84,11 @@ test(
         ),
       (output) => output.includes("AG_TERMINAL_ok"),
     );
-    await assert.rejects(
-      adapter.call("paseo.terminals.send-keys", {
-        terminalId,
-        keys: ["unknown-key"],
-      }),
-      { code: "invalid_params" },
-    );
+    const invalid = await adapter.call("paseo.terminals.send-keys", {
+      terminalId,
+      keys: [{ key: "unknown-key" }],
+    });
+    assert.equal(invalid.error?.code, "invalid_params");
     await call("paseo.terminals.run", {
       terminalId,
       command: `"${process.execPath}" -e "console.log('AG_RUN'+'_ok')"`,
@@ -98,6 +99,28 @@ test(
           await call("paseo.terminals.read", { terminalId, start: 0, end: 20 }),
         ),
       (output) => output.includes("AG_RUN_ok"),
+    );
+    await call("paseo.terminals.run", {
+      terminalId,
+      command: `"${process.execPath}" -e "process.stdin.setRawMode(true);process.stdout.write(String.fromCharCode(27)+'[?1h'+['MODE','READY'].join('_'));process.stdin.once('data',b=>{process.stdout.write('KEYHEX='+b.toString('hex')+String.fromCharCode(27)+'[?1l');process.exit()})"`,
+    });
+    await until(
+      async () =>
+        JSON.stringify(
+          await call("paseo.terminals.read", { terminalId, start: 0, end: 80 }),
+        ),
+      (output) => output.includes("MODE_READY"),
+    );
+    await call("paseo.terminals.send-keys", {
+      terminalId,
+      keys: [{ key: "ArrowUp" }],
+    });
+    await until(
+      async () =>
+        JSON.stringify(
+          await call("paseo.terminals.read", { terminalId, start: 0, end: 80 }),
+        ),
+      (output) => output.includes("KEYHEX=1b4f41"),
     );
     await call("paseo.terminals.close", { terminalId });
     assert.ok(
