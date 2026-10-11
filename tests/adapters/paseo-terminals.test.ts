@@ -62,7 +62,7 @@ test(
     );
     await call("paseo.terminals.send-text", {
       terminalId,
-      text: "printf 'AG_TERMINAL_%s\\n' ok",
+      text: `"${process.execPath}" -e "console.log('AG_TERMINAL'+'_ok')"`,
     });
     await call("paseo.terminals.send-keys", { terminalId, keys: ["enter"] });
     await until(
@@ -81,7 +81,7 @@ test(
     );
     await call("paseo.terminals.run", {
       terminalId,
-      command: "printf 'AG_RUN_%s\\n' ok",
+      command: `"${process.execPath}" -e "console.log('AG_RUN'+'_ok')"`,
     });
     await until(
       async () =>
