@@ -13,9 +13,18 @@ test(
   { timeout: 45000 },
   async (t) => {
     const root = await mkdtemp(join(tmpdir(), "ag-terminal-"));
-    t.after(() => rm(root, { recursive: true, force: true }));
+    let closeAdapter = async () => {};
+    let closeDaemon = async () => {};
+    t.after(async () => {
+      try {
+        await closeAdapter();
+      } finally {
+        await closeDaemon();
+        await rm(root, { recursive: true, force: true });
+      }
+    });
     const daemon = await nativePaseo(root);
-    t.after(() => daemon.close());
+    closeDaemon = daemon.close;
     const client = new DaemonClient({
       url: daemon.endpoint,
       clientId: crypto.randomUUID(),
@@ -32,7 +41,7 @@ test(
       endpoint: daemon.endpoint,
       serverId,
     });
-    t.after(() => adapter.close());
+    closeAdapter = () => adapter.close();
     await adapter.init();
     const call = async (method: string, input = {}) => {
       const outcome = await adapter.call(method, input);
