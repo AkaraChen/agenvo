@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { encodeTerminalKeyInput } from "@getpaseo/protocol/terminal-key-input";
+import { TerminalInputModeTracker } from "@getpaseo/protocol/terminal-input-mode";
 import {
   AgentPermissionResponseSchema,
   FetchAgentsRequestMessageSchema,
@@ -15,7 +17,6 @@ import {
   type Method,
 } from "@agenvo/connector/adapters/adapter";
 import { password, type PaseoConfig } from "./config.js";
-import { PaseoManagement } from "./paseo-management.js";
 
 export const agentTarget = z.strictObject({
   agentId: z.string().min(1).max(256),
@@ -51,8 +52,7 @@ export const permissionInput = agentTarget.extend({
   response: AgentPermissionResponseSchema,
 });
 type Operation = Method & {
-  schema: z.ZodType;
-  run: (p: any) => Promise<unknown>;
+  prepare: (input: Record<string, unknown>) => () => Promise<unknown>;
 };
 const executionMode = (provider: string) => {
   if (provider === "codex") return "full-access";
@@ -67,7 +67,6 @@ export class PaseoAdapter implements Adapter {
   available = false;
   version = "unknown";
   onAvailabilityChange?: () => void;
-  readonly management: PaseoManagement;
   private client?: DaemonClient;
   private stopped = false;
   private reconnect?: NodeJS.Timeout;
@@ -80,22 +79,33 @@ export class PaseoAdapter implements Adapter {
   >();
   private controlled = new Set<string>();
   private approvals = new Set<string>();
+  private terminalInputs = new Map<
+    string,
+    {
+      tracker: TerminalInputModeTracker;
+      subscription: ReturnType<DaemonClient["observeTerminal"]>;
+      restored: Promise<void>;
+    }
+  >();
 
   constructor(readonly config: PaseoConfig) {
-    this.management = new PaseoManagement(this);
-    const define = (
+    const define = <S extends z.ZodType>(
       name: string,
-      schema: z.ZodType,
+      schema: S,
       readOnly: boolean,
       description: string,
-      run: Operation["run"],
+      run: (params: z.output<S>) => Promise<unknown>,
     ) => {
+      if (this.operations.has(name)) throw new Fault("duplicate_method", name);
       this.operations.set(name, {
         name,
-        schema,
         readOnly,
         description,
-        run,
+        prepare: (input) => {
+          const parsed = schema.safeParse(input);
+          if (!parsed.success) throw new Fault("invalid_params");
+          return () => run(parsed.data);
+        },
         inputSchema: z.toJSONSchema(schema, { unrepresentable: "any" }),
       });
     };
@@ -103,21 +113,21 @@ export class PaseoAdapter implements Adapter {
       "paseo.agents.list",
       listInput,
       true,
-      "Discover agents across the daemon, including other clients' agents. No subscription.",
+      "List work contexts (native agents) across the daemon, including other clients' agents. No subscription.",
       (p) => this.connected().fetchAgents(p),
     );
     define(
       "paseo.agents.get",
       agentTarget,
       true,
-      "Read an agent by its full native ID.",
+      "Read native agent status and pending requests for user input by full agent ID; native status does not establish task success.",
       (p) => this.get(p.agentId),
     );
     define(
       "paseo.agents.create",
       createInput,
       false,
-      "Create a full-access Codex or Claude agent without a prompt. Without workspaceId, Paseo creates a workspace.",
+      "Create a work context as a full-access Codex or Claude agent without a prompt. Without workspaceId, Paseo creates a workspace.",
       async (p) => {
         const key = randomUUID();
         const { workspaceId, ...config } = p;
@@ -139,10 +149,20 @@ export class PaseoAdapter implements Adapter {
       },
     );
     define(
+      "paseo.agents.subscribe",
+      agentTarget,
+      false,
+      "Subscribe to native agent output and status events on this connection. Reconnect requires subscribing again; read native history for earlier output.",
+      async (p) => {
+        await this.observe(p.agentId);
+        return { agentId: p.agentId, subscribed: true };
+      },
+    );
+    define(
       "paseo.agents.send",
       sendInput,
       false,
-      "Apply full access and send text. Default interrupt replaces active work; steer may also replace or start a turn. May unarchive/load the agent and clear pending permissions. No connector queue or replay.",
+      "Submit input text after applying full access. Default interrupt replaces active work; steer may also replace or start a turn. May unarchive/load the agent and clear pending permissions. No connector queue or replay.",
       async (p) => {
         const client = await this.prepare(p.agentId);
         const messageId = p.messageId ?? randomUUID();
@@ -170,7 +190,7 @@ export class PaseoAdapter implements Adapter {
       "paseo.agents.cancel",
       agentTarget,
       false,
-      "Cancel execution current when Paseo handles the request. No turn identity precondition; never retarget or retry.",
+      "Interrupt execution current when Paseo handles the request. No turn identity precondition; never retarget or retry.",
       async (p) => {
         await this.connected().cancelAgent(p.agentId);
         return { agentId: p.agentId, interruption: "requested" };
@@ -205,7 +225,7 @@ export class PaseoAdapter implements Adapter {
       "paseo.agents.history",
       historyInput,
       true,
-      "Read native timeline history. Epoch replacement invalidates prior history cursors.",
+      "Read output from native timeline history. Epoch replacement invalidates prior history cursors.",
       (p) => {
         const { agentId, ...options } = p;
         return this.connected().fetchAgentTimeline(agentId, options);
@@ -215,14 +235,14 @@ export class PaseoAdapter implements Adapter {
       "paseo.interactions.respond",
       permissionInput,
       false,
-      "Submit a response to a currently pending question/decision. Transport submission is not acknowledgement or proof of winning a multi-client race.",
+      "Respond to a pending native request for user input. Transport submission is not acknowledgement or proof of winning a multi-client race.",
       (p) => this.respond(p),
     );
     define(
       "paseo.providers.list",
       z.strictObject({}),
       true,
-      "Discover available providers; discovery is not a guarantee of full-access execution support.",
+      "List available providers; discovery is not a guarantee of full-access execution support.",
       () => this.connected().listAvailableProviders(),
     );
     define(
@@ -232,7 +252,7 @@ export class PaseoAdapter implements Adapter {
         cwd: z.string().optional(),
       }),
       true,
-      "Discover native provider models.",
+      "List native provider models.",
       (p) => this.connected().listProviderModels(p.provider, { cwd: p.cwd }),
     );
     define(
@@ -242,7 +262,7 @@ export class PaseoAdapter implements Adapter {
         cwd: z.string().optional(),
       }),
       true,
-      "Discover native provider permission modes.",
+      "List native provider permission modes.",
       (p) => this.connected().listProviderModes(p.provider, { cwd: p.cwd }),
     );
     define(
@@ -263,9 +283,231 @@ export class PaseoAdapter implements Adapter {
       "paseo.workspaces.archive",
       z.strictObject({ workspaceId: z.string().min(1).max(256) }),
       false,
-      "Archive a workspace and everything it owns: its agents stop, and a Paseo-managed worktree checkout is removed (its branch stays).",
+      "Archive a native workspace and stop its agents and terminals. Paseo may remove its managed worktree checkout when no active workspace still references it; the branch remains. Successful archival does not confirm directory removal, which can be skipped or fail independently.",
       (p) => this.connected().archiveWorkspace(p.workspaceId),
     );
+    define(
+      "paseo.projects.list",
+      z.strictObject({}),
+      true,
+      "List native projects; opening a workspace is not project registration.",
+      () => this.connected().listProjects(),
+    );
+    define(
+      "paseo.projects.add",
+      z.strictObject({ cwd: z.string().min(1) }),
+      false,
+      "Register an existing directory as a native project. Does not clone a repository.",
+      (p) => this.connected().addProject(p.cwd),
+    );
+    const terminalTarget = z.strictObject({
+      terminalId: z.string().min(1).max(256),
+    });
+    define(
+      "paseo.terminals.list",
+      z.strictObject({
+        cwd: z.string().optional(),
+        workspaceId: z.string().optional(),
+      }),
+      true,
+      "List native terminals, optionally scoped to a directory or workspace.",
+      (p) =>
+        this.connected().listTerminals(p.cwd, undefined, {
+          workspaceId: p.workspaceId,
+        }),
+    );
+    define(
+      "paseo.terminals.create",
+      z.strictObject({
+        cwd: z.string().min(1),
+        workspaceId: z.string().optional(),
+        name: z.string().optional(),
+      }),
+      false,
+      "Create a shell terminal without starting an agent. Returns native terminal identity; inspect list after unknown before retrying.",
+      (p) =>
+        this.connected().createTerminal(p.cwd, p.name, undefined, {
+          workspaceId: p.workspaceId,
+        }),
+    );
+    define(
+      "paseo.terminals.run",
+      terminalTarget.extend({ command: z.string().max(48000) }),
+      false,
+      "Send command text followed by Enter. Confirms transport submission only, not native receipt, command completion or exit status; read output to observe the result.",
+      async (p) => {
+        this.connected().sendTerminalInput(p.terminalId, {
+          type: "input",
+          data: p.command + "\r",
+        });
+        return {
+          terminalId: p.terminalId,
+          confirmation: "transport_submitted",
+        };
+      },
+    );
+    define(
+      "paseo.terminals.send-text",
+      terminalTarget.extend({ text: z.string().min(1).max(48000) }),
+      false,
+      "Send literal terminal input without adding Enter. Confirms transport submission only.",
+      async (p) => {
+        this.connected().sendTerminalInput(p.terminalId, {
+          type: "input",
+          data: p.text,
+        });
+        return {
+          terminalId: p.terminalId,
+          confirmation: "transport_submitted",
+        };
+      },
+    );
+    define(
+      "paseo.terminals.send-keys",
+      terminalTarget.extend({
+        keys: z
+          .array(
+            z.strictObject({
+              key: z.string().min(1).max(64),
+              ctrl: z.boolean().optional(),
+              alt: z.boolean().optional(),
+              shift: z.boolean().optional(),
+              meta: z.boolean().optional(),
+            }),
+          )
+          .min(1)
+          .max(64),
+      }),
+      false,
+      "Send Paseo key descriptors (e.g. {key: 'Enter'}, {key: 'c', ctrl: true}) using native encoding and terminal modes. Unknown keys are rejected before sending. Confirms transport submission only.",
+      async (p) => {
+        const client = this.connected();
+        const inputMode = await this.terminalInputMode(p.terminalId, client);
+        const encoded = p.keys.map((key) =>
+          encodeTerminalKeyInput(key, { inputMode }),
+        );
+        if (encoded.some((data) => !data))
+          throw new Fault("invalid_params", "Unsupported Paseo terminal key");
+        this.connected(client).sendTerminalInput(p.terminalId, {
+          type: "input",
+          data: encoded.join(""),
+        });
+        return {
+          terminalId: p.terminalId,
+          confirmation: "transport_submitted",
+        };
+      },
+    );
+    define(
+      "paseo.terminals.read",
+      terminalTarget.extend({
+        start: z.number().int().optional(),
+        end: z.number().int().optional(),
+        stripAnsi: z.boolean().default(true),
+      }),
+      true,
+      "Capture native terminal output. start/end use Paseo capture offsets (negative offsets read recent lines); narrow the range when the result is too large. Output is not durable history or proof of success.",
+      (p) =>
+        this.connected().captureTerminal(p.terminalId, {
+          start: p.start,
+          end: p.end,
+          stripAnsi: p.stripAnsi,
+        }),
+    );
+    define(
+      "paseo.terminals.close",
+      terminalTarget,
+      false,
+      "Kill a native terminal and its running program. Preserve required output before closing.",
+      async (p) => {
+        const result = await this.connected().killTerminal(p.terminalId);
+        if (result.success) this.terminalInputs.delete(p.terminalId);
+        return result;
+      },
+    );
+  }
+  private async terminalInputMode(id: string, client: DaemonClient) {
+    let entry = this.terminalInputs.get(id);
+    if (!entry) {
+      if (this.terminalInputs.size >= 128)
+        throw new Fault(
+          "resource_exhausted",
+          "At most 128 terminal input modes can be observed per connection",
+        );
+      const tracker = new TerminalInputModeTracker();
+      const decoder = new TextDecoder();
+      let resolve!: () => void;
+      let reject!: (error: unknown) => void;
+      const restored = {
+        promise: new Promise<void>((yes, no) => {
+          resolve = yes;
+          reject = no;
+        }),
+        resolve: () => resolve(),
+        reject: (error: unknown) => reject(error),
+      };
+      const subscription = client.observeTerminal(
+        id,
+        (event) => {
+          if (event.type === "restore") {
+            tracker.reset();
+            decoder.decode();
+            tracker.feed(decoder.decode(event.data, { stream: true }));
+            restored.resolve();
+          } else if (event.type === "output") {
+            tracker.feed(decoder.decode(event.data, { stream: true }));
+          }
+        },
+        { restore: { mode: "visible-snapshot" } },
+      );
+      entry = { tracker, subscription, restored: restored.promise };
+      this.terminalInputs.set(id, entry);
+      const remove = () => {
+        if (this.terminalInputs.get(id) === entry)
+          this.terminalInputs.delete(id);
+      };
+      subscription.subscribe({
+        snapshot: () => {},
+        update: (message) => {
+          if (message.type === "terminal_stream_exit") {
+            remove();
+            restored.reject(
+              new Fault("runtime_unavailable", "Terminal observation ended"),
+            );
+          }
+        },
+        error: (error) => {
+          remove();
+          restored.reject(error);
+        },
+      });
+    }
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      await Promise.race([
+        Promise.all([entry.subscription.ready, entry.restored]),
+        new Promise((_, reject) => {
+          timeout = setTimeout(
+            () =>
+              reject(
+                new Fault(
+                  "runtime_unavailable",
+                  "Terminal input mode snapshot timed out",
+                ),
+              ),
+            8000,
+          );
+        }),
+      ]);
+    } catch (error) {
+      if (this.terminalInputs.get(id) === entry) this.terminalInputs.delete(id);
+      await entry.subscription.release().catch(() => {});
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+    this.connected(client);
+    return entry.tracker.getState();
   }
   connected(expected?: DaemonClient) {
     if (
@@ -323,7 +565,6 @@ export class PaseoAdapter implements Adapter {
           const p = message.payload;
           const id = p.kind === "upsert" ? p.agent.id : p.agentId;
           this.emit("agent_update", id, p);
-          this.management.observations.append(id, "agent_update", p);
         },
         error: () =>
           this.emit("agenvo.resync_required", undefined, {
@@ -350,7 +591,7 @@ export class PaseoAdapter implements Adapter {
     this.timelines.clear();
     this.controlled.clear();
     this.approvals.clear();
-    this.management.reset();
+    this.terminalInputs.clear();
     this.onAvailabilityChange?.();
     this.emit("agenvo.resync_required", undefined, {
       reason: "daemon_disconnected",
@@ -385,7 +626,6 @@ export class PaseoAdapter implements Adapter {
           message.type === "agent.timeline.replacement" ||
           message.type === "agent.timeline.subscription_restored"
         ) {
-          this.management.observations.reset();
           this.emit("agenvo.resync_required", undefined, {
             reason: message.type,
             agentId: id,
@@ -394,7 +634,6 @@ export class PaseoAdapter implements Adapter {
         if (message.type === "agent.timeline.error") {
           this.timelines.delete(id);
           this.controlled.delete(id);
-          this.management.observations.reset();
           this.emit("agenvo.resync_required", undefined, {
             reason: "timeline_subscription_failed",
             agentId: id,
@@ -402,10 +641,6 @@ export class PaseoAdapter implements Adapter {
         }
         if (message.type !== "agent_stream") return;
         const event = message.payload.event;
-        this.management.observations.append(id, event.type, event, {
-          agentId: id,
-          type: event.type,
-        });
         if (event.type !== "timeline") this.emit(event.type, id, event);
         if (
           event.type === "permission_requested" &&
@@ -471,28 +706,22 @@ export class PaseoAdapter implements Adapter {
     };
   }
   methods(): Method[] {
-    return [
-      ...this.management.methods(),
-      ...[...this.operations.values()].map(
-        ({ name, description, inputSchema, readOnly }) => ({
-          name,
-          description,
-          inputSchema,
-          readOnly,
-        }),
-      ),
-    ];
+    return [...this.operations.values()].map(
+      ({ name, description, inputSchema, readOnly }) => ({
+        name,
+        description,
+        inputSchema,
+        readOnly,
+      }),
+    );
   }
   async call(method: string, input: Record<string, unknown>): Promise<Outcome> {
-    if (method.startsWith("management."))
-      return this.management.call(method, input);
     const op = this.operations.get(method);
     if (!op) throw new Fault("unsupported_capability");
-    const p = op.schema.safeParse(input);
-    if (!p.success) throw new Fault("invalid_params");
+    const run = op.prepare(input);
     this.connected();
     try {
-      const result = await op.run(p.data);
+      const result = await run();
       if (
         result &&
         typeof result === "object" &&
@@ -554,7 +783,7 @@ export class PaseoAdapter implements Adapter {
     this.available = false;
     this.timelines.clear();
     this.controlled.clear();
-    this.management.reset();
+    this.terminalInputs.clear();
     await client?.close();
   }
 }

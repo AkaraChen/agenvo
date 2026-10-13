@@ -1,6 +1,6 @@
 {
   "name": "@agenvo/relay",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -10,16 +10,27 @@
     "./admin/management": "./src/admin/management.ts",
     "./admin/page": "./src/admin/page.ts",
     "./admin": "./src/admin.ts",
+    "./brand": "./src/brand.ts",
     "./core": "./src/core.ts",
     "./events": "./src/events.ts",
     "./mcp": "./src/mcp.ts",
-    "./webhook": "./src/webhook.ts"
+    "./webhook": "./src/webhook.ts",
+    "./engine": {
+      "workerd": "./src/engine.cloudflare.ts",
+      "default": "./src/engine.ts"
+    },
+    "./releases": "./src/releases.ts",
+    "./store": "./src/store.ts",
+    "./http": "./src/http.ts"
   },
   "dependencies": {
-    "@agenvo/protocol": "0.1.0",
-    "zod": "4.6.5",
+    "@agenvo/logging": "0.2.0",
+    "@agenvo/protocol": "0.2.0",
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
     "@modelcontextprotocol/server": "2.3.1",
+    "quickjs-emscripten-core": "0.32.0",
+    "semver": "^7.8.5",
     "standardwebhooks": "1.1.1",
-    "@agenvo/logging": "0.1.0"
+    "zod": "4.6.5"
   }
 }

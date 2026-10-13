@@ -1,3 +1,6 @@
+import { noReleases } from "./releases.js";
+import type { ReleaseFetch } from "@agenvo/relay/releases";
+import { callCode, nativeOutcome } from "./code.js";
 import { stopProcess } from "./process.js";
 import { socketTempDir } from "./environment.js";
 import assert from "node:assert/strict";
@@ -24,7 +27,11 @@ import { descriptor, atomicJson, type InstanceConfig } from "./config.js";
 import { digest } from "@agenvo/protocol";
 import { isolatedEnvironment, until } from "./environment.js";
 
-export async function eventsLab(t: TestContext) {
+export async function eventsLab(
+  t: TestContext,
+  prefix = "",
+  releaseFetch: ReleaseFetch = noReleases,
+) {
   const cleanups: Array<() => unknown | Promise<unknown>> = [];
   t.after(async () => {
     const errors: unknown[] = [];
@@ -41,9 +48,18 @@ export async function eventsLab(t: TestContext) {
   const root = await realpath(
     await mkdtemp(join(socketTempDir(), "agenvo-lab-")),
   );
-  cleanups.push(() =>
-    rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
-  );
+  // The suite launcher owns files until this test process has exited. Native
+  // libraries and current-directory handles may outlive an individual test.
+  // Direct invocations have no outer owner, so keep their local cleanup.
+  if (!process.env.AGENVO_TEST_ROOT)
+    cleanups.push(() =>
+      rm(root, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      }),
+    );
   const ca = join(root, "cert.pem"),
     key = join(root, "key.pem");
   await promisify(execFile)("openssl", [
@@ -100,9 +116,10 @@ export async function eventsLab(t: TestContext) {
   const port = (probe.address() as { port: number }).port;
   await new Promise<void>((done) => probe.close(() => done()));
   const origin = `https://127.0.0.1:${port}`;
+  const baseUrl = origin + prefix;
   const ownerSecret = randomBytes(32).toString("hex");
   const serverConfig = {
-    origin,
+    baseUrl,
     dataDir: join(root, "relay"),
     port,
     tls: { cert: ca, key },
@@ -116,11 +133,16 @@ export async function eventsLab(t: TestContext) {
     assert.equal(url, "https://receiver.example/events");
     return sendWebhook(receiverUrl, body, headers);
   };
-  let runtime = await startServer(serverConfig, ownerSecret, delivery);
+  let runtime = await startServer(
+    serverConfig,
+    ownerSecret,
+    delivery,
+    releaseFetch,
+  );
   cleanups.push(() => runtime.close());
   const request = (path: string, init: RequestInit = {}): Promise<Response> =>
     new Promise((done, reject) => {
-      const url = new URL(path, origin);
+      const url = new URL(prefix + path, origin);
       const body = init.body?.toString();
       const headers = Object.fromEntries(new Headers(init.headers));
       if (body) headers["content-length"] = String(Buffer.byteLength(body));
@@ -187,7 +209,7 @@ export async function eventsLab(t: TestContext) {
       code_challenge_method: "S256",
       code_challenge: createHash("sha256").update(verifier).digest("base64url"),
       scope: "runtime:approved",
-      resource: origin + "/mcp",
+      resource: baseUrl + "/mcp",
       state: "test",
     });
   const login = await request("/login", {
@@ -198,7 +220,7 @@ export async function eventsLab(t: TestContext) {
     },
     body: new URLSearchParams({
       secret: ownerSecret,
-      next: authorize,
+      next: prefix + authorize,
     }).toString(),
   });
   const cookie = login.headers
@@ -216,10 +238,10 @@ export async function eventsLab(t: TestContext) {
     },
     body: new URLSearchParams({ handle, decision: "approve" }).toString(),
   });
-  assert.equal(approved.status, 302);
-  const code = new URL(approved.headers.get("location")!).searchParams.get(
-    "code",
-  )!;
+  assert.equal(approved.status, 200);
+  const code = new URL(
+    approved.headers.get("refresh")!.replace(/^0;url=/, ""),
+  ).searchParams.get("code")!;
   const exchanged = await request("/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -229,7 +251,7 @@ export async function eventsLab(t: TestContext) {
       code,
       redirect_uri: client.redirect_uris[0],
       code_verifier: verifier,
-      resource: origin + "/mcp",
+      resource: baseUrl + "/mcp",
     }).toString(),
   });
   assert.equal(exchanged.status, 200, await exchanged.clone().text());
@@ -269,15 +291,20 @@ export async function eventsLab(t: TestContext) {
     assert.equal(result.error, undefined, JSON.stringify(result));
     return result.result;
   };
-  const connectors = new Map<string, () => Promise<void>>();
+  const connectors = new Map<
+    string,
+    { stop(): Promise<void>; start(): Promise<void> }
+  >();
   const connect = async (instances: InstanceConfig[]) => {
     instances = await Promise.all(
       instances.map(async (c) =>
-        c.kind === "paseo"
+        c.kind === "paseo" || c.kind === "lody" || c.kind === "opencode"
           ? c
           : {
               ...c,
-              binary: await realpath(c.binary),
+              ...(c.kind === "codex"
+                ? {}
+                : { binary: await realpath(c.binary) }),
               cwd: await realpath(c.cwd),
               ...(c.kind === "herdr"
                 ? { configRoot: await realpath(c.configRoot) }
@@ -316,40 +343,60 @@ export async function eventsLab(t: TestContext) {
     assert.equal(((await poll.json()) as any).deviceId, deviceId);
     await atomicJson(join(dir, "config.json"), {
       schema: 1,
-      relay: origin,
+      relay: baseUrl,
       deviceId,
       name: "test",
       instances,
     });
     await atomicJson(join(dir, "credentials.json"), { secret: deviceSecret });
     await mkdir(join(root, "config"), { recursive: true });
-    const child = spawn(
-      process.execPath,
-      [
-        resolve(
-          `apps/${instances[0].kind === "codex" ? "codex-app-server" : instances[0].kind}/dist/cli.js`,
-        ),
-        "run",
-      ],
-      {
-        env: {
-          ...isolatedEnvironment(root),
-          AGENVO_CONFIG_DIR: dir,
-          NODE_EXTRA_CA_CERTS: ca,
+    let child: ReturnType<typeof spawn>;
+    const startConnector = async () => {
+      await rm(join(dir, "status.json"), { force: true });
+      await atomicJson(join(dir, "credentials.json"), { secret: deviceSecret });
+      child = spawn(
+        process.execPath,
+        [
+          resolve(
+            `apps/${instances[0].kind === "codex" ? "codex-app-server" : instances[0].kind}/dist/cli.js`,
+          ),
+          "run",
+        ],
+        {
+          env: {
+            ...isolatedEnvironment(root),
+            AGENVO_CONFIG_DIR: dir,
+            NODE_EXTRA_CA_CERTS: ca,
+          },
+          stdio: ["ignore", "pipe", "pipe"],
         },
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
-    let logs = "";
-    child.stdout.on("data", (c) => {
-      logs += c;
-    });
-    child.stderr.on("data", (c) => {
-      logs += c;
-    });
+      );
+      let logs = "";
+      child.stdout!.on("data", (c) => {
+        logs += c;
+      });
+      child.stderr!.on("data", (c) => {
+        logs += c;
+      });
+      try {
+        await until(
+          async () => {
+            if (child.exitCode !== null || child.signalCode !== null)
+              throw new Error("Connector exited before becoming online");
+            return readFile(join(dir, "status.json"), "utf8")
+              .then(JSON.parse)
+              .catch(() => ({}));
+          },
+          (s) => s.state === "online",
+        );
+      } catch (error) {
+        throw new Error(`${error}\nConnector output:\n${logs}`, {
+          cause: error,
+        });
+      }
+    };
     const stopConnector = async () => {
-      // Credential removal uses the connector's normal shutdown path on every
-      // platform, allowing managed runtimes to close before their parent exits.
+      // Exercise the connector's normal shutdown path on every platform.
       await rm(join(dir, "credentials.json"), { force: true });
       try {
         await until(
@@ -362,16 +409,8 @@ export async function eventsLab(t: TestContext) {
       }
     };
     cleanups.push(stopConnector);
-    connectors.set(deviceId, stopConnector);
-    await until(
-      async () => {
-        if (child.exitCode !== null) throw new Error(logs);
-        return readFile(join(dir, "status.json"), "utf8")
-          .then(JSON.parse)
-          .catch(() => ({}));
-      },
-      (s) => s.state === "online",
-    );
+    await startConnector();
+    connectors.set(deviceId, { stop: stopConnector, start: startConnector });
     return deviceId;
   };
   const call = async (
@@ -381,18 +420,20 @@ export async function eventsLab(t: TestContext) {
     params: Record<string, unknown> = {},
   ) => {
     const r = await rpc("tools/call", {
-      name: "runtime_call",
-      arguments: { deviceId, instanceId, method, params },
+      name: "execute",
+      arguments: callCode({ deviceId, instanceId, method, params }),
     });
     assert.equal(r.isError, false, JSON.stringify(r));
-    return JSON.parse(r.content[0].text).result;
+    const outcome = nativeOutcome(r);
+    assert.equal(outcome.error, undefined, JSON.stringify(outcome));
+    return outcome.result;
   };
   return {
     cleanup: (action: () => unknown | Promise<unknown>) => {
       cleanups.push(action);
     },
     root,
-    origin,
+    origin: baseUrl,
     ownerSecret,
     ca,
     secret,
@@ -401,7 +442,12 @@ export async function eventsLab(t: TestContext) {
     request,
     rpc,
     connect,
-    disconnect: (deviceId: string) => connectors.get(deviceId)!(),
+    disconnect: (deviceId: string) => connectors.get(deviceId)!.stop(),
+    async restartConnector(deviceId: string) {
+      const connector = connectors.get(deviceId)!;
+      await connector.stop();
+      await connector.start();
+    },
     call,
     admin,
     setDeliveryStatus(status: number) {
@@ -409,7 +455,12 @@ export async function eventsLab(t: TestContext) {
     },
     async restart() {
       await runtime.close();
-      runtime = await startServer(serverConfig, ownerSecret, delivery);
+      runtime = await startServer(
+        serverConfig,
+        ownerSecret,
+        delivery,
+        releaseFetch,
+      );
     },
     subscription(deviceId: string, instanceId: string, filters = {}) {
       return {

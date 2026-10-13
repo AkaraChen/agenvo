@@ -27,7 +27,10 @@ test("workspace boundaries keep shared libraries independent of applications", a
     "apps/herdr",
     "apps/codex-app-server",
     "apps/paseo",
+    "apps/opencode",
     "apps/amp",
+
+    "apps/lody",
     "apps/server",
     "apps/cloudflare",
   ];
@@ -39,7 +42,10 @@ test("workspace boundaries keep shared libraries independent of applications", a
     herdr: ["protocol", "connector"],
     "codex-app-server": ["protocol", "connector"],
     paseo: ["protocol", "connector"],
+    opencode: ["protocol", "connector"],
     amp: ["protocol", "connector"],
+
+    lody: ["protocol", "connector"],
     server: ["protocol", "relay", "logging"],
     cloudflare: ["protocol", "relay", "logging"],
   };
@@ -77,6 +83,7 @@ test("workspace boundaries keep shared libraries independent of applications", a
             .split("/")
             .slice(0, spec.startsWith("@") ? 2 : 1)
             .join("/");
+          if (pkg === manifest.name) continue;
           assert.ok(
             pkg in dependencies,
             `${file}: undeclared dependency ${pkg}`,

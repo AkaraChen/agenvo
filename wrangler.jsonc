@@ -6,6 +6,7 @@
   "compatibility_flags": [
     "nodejs_compat", "global_fetch_strictly_public"
   ],
+  "rules": [{"type":"CompiledWasm","globs":["**/*.wasm", "**/wasm"],"fallthrough":true}],
   "workers_dev": true,
   "preview_urls": false,
   "durable_objects": {
@@ -30,11 +31,14 @@
     }
   ],
   "vars": {
-    "ORIGIN": "https://configure.example"
+    "BASE_URL": "https://configure.example"
   },
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
+    "logs": {
+      "invocation_logs": false
+    },
     "redact_query_string": true
   },
   "secrets": {

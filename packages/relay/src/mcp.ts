@@ -1,52 +1,54 @@
+import { runCode } from "./code.js";
+import { serverInfo } from "./brand.js";
+import type { Release } from "./releases.js";
+import { search } from "./catalog.js";
 import { logger } from "@agenvo/logging";
 import { McpServer, createMcpHandler } from "@modelcontextprotocol/server";
 import { ProtocolError } from "@modelcontextprotocol/server";
 import { subscribeInput, unsubscribeInput } from "@agenvo/protocol/events";
 import { Fault } from "@agenvo/protocol";
 import { z } from "zod";
-import {
-  callSchema,
-  identifier,
-  VERSION,
-  asOutcome,
-  type Outcome,
-  type Call,
-} from "@agenvo/protocol";
+import { asOutcome, type Outcome, type Call } from "@agenvo/protocol";
 
 const log = logger.child({ component: "relay.mcp" });
 
 export interface McpRelay {
+  release(grant: string): Release | null | Promise<Release | null>;
   instances(
     grant: string,
     options: { deviceId?: string; cursor?: string; limit?: number },
   ): Outcome | Promise<Outcome>;
   call(grant: string, input: Call): Promise<Outcome>;
+  describe(
+    grant: string,
+    target: {
+      deviceId: string;
+      instanceId: string;
+      query: string;
+      cursor?: string;
+    },
+  ): Promise<Outcome>;
   eventsList(grant: string): unknown;
   eventsSubscribe(grant: string, input: unknown): Promise<unknown>;
   eventsUnsubscribe(grant: string, input: unknown): Promise<unknown>;
 }
-export async function mcp(request: Request, relay: McpRelay, grantId: string) {
+export async function mcp(
+  request: Request,
+  relay: McpRelay,
+  grantId: string,
+  baseUrl: string,
+) {
   if (request.method !== "POST")
     return new Response(null, { status: 405, headers: { Allow: "POST" } });
-  const wrap = async (
+  const completed = (
     tool: string,
-    action: () => Outcome | Promise<Outcome>,
-    target?: Pick<Call, "deviceId" | "instanceId" | "method">,
+    started: number,
+    outcome: Partial<Pick<Outcome, "requestId" | "execution" | "error">>,
+    error?: unknown,
   ) => {
-    const started = Date.now();
-    let outcome: Outcome;
-    let error: unknown;
-    try {
-      outcome = await action();
-    } catch (e) {
-      outcome = asOutcome(e);
-      if (outcome.error?.code === "internal_error") error = e;
-    }
-    outcome.requestId ??= crypto.randomUUID();
     const fields = {
       event: "mcp.tool.completed",
       tool,
-      ...target,
       requestId: outcome.requestId,
       execution: outcome.execution,
       errorCode: outcome.error?.code,
@@ -59,6 +61,22 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
     } else {
       log.info(fields, "MCP tool %s completed", tool);
     }
+  };
+  const wrap = async (
+    tool: string,
+    action: () => Outcome | Promise<Outcome>,
+  ) => {
+    const started = Date.now();
+    let outcome: Outcome;
+    let error: unknown;
+    try {
+      outcome = await action();
+    } catch (e) {
+      outcome = asOutcome(e);
+      if (outcome.error?.code === "internal_error") error = e;
+    }
+    outcome.requestId ??= crypto.randomUUID();
+    completed(tool, started, outcome, error);
     return {
       content: [{ type: "text" as const, text: JSON.stringify(outcome) }],
       isError: Boolean(outcome.error),
@@ -66,61 +84,99 @@ export async function mcp(request: Request, relay: McpRelay, grantId: string) {
   };
   const handler = createMcpHandler(
     () => {
-      const server = new McpServer({ name: "agenvo", version: VERSION });
+      const server = new McpServer(serverInfo(baseUrl));
       server.registerTool(
-        "instances_list",
+        "search",
         {
           annotations: { readOnlyHint: true },
           description:
-            "List approved runtime instances, including offline Connectors. deviceId identifies one Connector, not a physical computer; use it with instanceId for subsequent calls.",
+            "Search native methods by case-insensitive keywords in connector kind, method name and description; all words must match. Returns instances, their optional owner-supplied context, and matching method summaries (name, description, readOnly) by default. Set includeSchema:true to retrieve full inputSchema for matching methods; narrow query and target to the methods you will call. Read context when choosing and using an instance; it is free-form guidance, not a live capability or permission guarantee. Optional updates report newer formal Agenvo server or connector releases, not native runtime updates or compatibility guarantees. Read the release notes and update guide, then decide whether to update using your existing deployment tools. Missing updates does not prove versions are current. Empty query lists instances without loading methods. Optionally filter deviceId and instanceId. Examples: {query:'submit input'}, {query:'thread/start',includeSchema:true}, {query:'herdr',deviceId:'device',instanceId:'local'}.",
           inputSchema: z.strictObject({
-            deviceId: identifier.optional(),
-            cursor: z.string().optional(),
-            limit: z.number().int().min(1).max(50).optional(),
+            query: z.string(),
+            deviceId: z.string().optional(),
+            instanceId: z.string().optional(),
+            includeSchema: z.boolean().optional(),
           }),
         },
         (input) =>
-          wrap("instances_list", () => relay.instances(grantId, input)),
+          wrap("search", async () => ({
+            execution: "accepted",
+            result: await search(relay, grantId, input),
+          })),
       );
       server.registerTool(
-        "instance_describe",
-        {
-          annotations: { readOnlyHint: true },
-          description:
-            "Read management capabilities, method schemas and execution behavior before calling an instance. Paginate using cursor or select method.",
-          inputSchema: z.strictObject({
-            deviceId: identifier,
-            instanceId: identifier,
-            method: z.string().optional(),
-            cursor: z.string().optional(),
-          }),
-        },
-        ({ deviceId, instanceId, ...params }) =>
-          wrap(
-            "instance_describe",
-            () =>
-              relay.call(grantId, {
-                deviceId,
-                instanceId,
-                method: "agenvo.describe",
-                params,
-              }),
-            { deviceId, instanceId, method: "agenvo.describe" },
-          ),
-      );
-      server.registerTool(
-        "runtime_call",
+        "execute",
         {
           description:
-            "Call an advertised management.* or native method on one approved instance. accepted means backend confirmation, not task completion. starting has a native query key. After unknown or transport failure, inspect native state; never blindly repeat a write. Use instance_describe to discover capabilities. Prefer management.services.list, then management.threads.*. Subscribe to runtime.changed for native changes, then read management.threads.observe with threadRef for current state, output and pending interactions. Poll when events are unavailable; inspect gaps. Permission approvals are automatic; user questions remain explicit interactions.",
-          inputSchema: callSchema,
+            "Run an async JavaScript function body with await call({deviceId, instanceId}, method, params). call returns {execution, requestId, result, nativeIds?, error?}. Discover methods with search and request includeSchema:true for their parameters; use native IDs. Choose what to return: strings are delivered verbatim and other JSON values are serialized directly, without an envelope or automatic receipts. No return produces null. Inspect call errors and return any confirmations you need. Calls are independent, never a transaction. Script failure returns diagnostics and receipts for dispatched calls. accepted confirms input, not task completion. After unknown, inspect native state before repeating writes. No host network/files/imports or timers (setTimeout/sleep). Return after submitting input; wait in the calling agent, then use a separate execute to read status or output. Do not busy-wait or poll for completion inside a script. The 30s script deadline bounds execution, not task waiting. Example: return await call({deviceId:'device',instanceId:'local'}, 'thread/list', {});",
+          inputSchema: z.strictObject({ code: z.string() }),
         },
-        (input) =>
-          wrap("runtime_call", () => relay.call(grantId, input), {
-            deviceId: input.deviceId,
-            instanceId: input.instanceId,
-            method: input.method,
-          }),
+        async ({ code }) => {
+          const started = Date.now();
+          const result = await runCode(code, {
+            call: async (input) => {
+              let outcome: Outcome;
+              let error: unknown;
+              try {
+                outcome = await relay.call(grantId, input);
+              } catch (e) {
+                outcome = asOutcome(e);
+                error = e;
+              }
+              const fields = {
+                event: "runtime.call.completed",
+                deviceId: input.deviceId,
+                instanceId: input.instanceId,
+                method: input.method,
+                requestId: outcome.requestId,
+                execution: outcome.execution,
+                errorCode: outcome.error?.code,
+                ...(outcome.error?.code === "internal_error"
+                  ? { err: error }
+                  : {}),
+              };
+              log[
+                outcome.error
+                  ? outcome.error.code === "internal_error"
+                    ? "error"
+                    : "warn"
+                  : "info"
+              ](
+                fields,
+                "Native call %s on %s/%s: %s%s",
+                input.method,
+                input.deviceId,
+                input.instanceId,
+                outcome.execution,
+                outcome.error ? ` (${outcome.error.code})` : "",
+              );
+              return outcome;
+            },
+          });
+          const requestId = crypto.randomUUID();
+          completed("execute", started, { requestId, error: result.error });
+          const content: Array<{ type: "text"; text: string }> = [];
+          if (!result.error || result.value !== undefined)
+            content.push({
+              type: "text",
+              text:
+                typeof result.value === "string"
+                  ? result.value
+                  : JSON.stringify(result.value ?? null),
+            });
+          if (result.error) {
+            content.push({
+              type: "text",
+              text: `Execution failed (${result.error.code}): ${result.error.message}\nRequest ID: ${requestId}`,
+            });
+            if (result.calls?.length)
+              content.push({
+                type: "text",
+                text: `Dispatched calls (not rolled back; inspect native state before repeating writes):\n${JSON.stringify(result.calls)}`,
+              });
+          }
+          return { content, isError: Boolean(result.error) };
+        },
       );
       const capabilities = { tools: {}, events: {} };
       server.server.registerCapabilities(capabilities);

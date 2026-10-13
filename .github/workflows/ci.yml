@@ -1,7 +1,15 @@
 name: CI
 on:
   push:
+    branches: ["**"]
   pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Commit or tag to validate"
+        required: false
+        type: string
 permissions:
   contents: read
 jobs:
@@ -14,10 +22,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.21.0
           cache: npm
+      - run: npm install --global npm@11.19.1
       - run: npm ci
       - run: npm run check
       - run: npm run build
@@ -36,10 +47,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.21.0
           cache: npm
+      - run: npm install --global npm@11.19.1
       - run: npm ci
       - run: node scripts/install-test-runtimes.mjs "${{ runner.temp }}/agenvo-runtimes"
         env:
@@ -55,5 +69,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - run: docker build -f deploy/vps/Dockerfile -t agenvo:test .
       - run: docker run --rm agenvo:test --help

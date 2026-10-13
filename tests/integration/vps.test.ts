@@ -1,9 +1,13 @@
+import { noReleases } from "../support/releases.js";
+import { codexServer } from "../support/codex-server.js";
+import { assertPublicBrand, assertServerBrand } from "../support/brand.js";
+import { callCode, nativeOutcome } from "../support/code.js";
 const ADMIN_SECRET = "test-admin-secret-not-for-production-1234567890";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:net";
 import { once } from "node:events";
@@ -34,12 +38,17 @@ test(
     await new Promise<void>((resolve) => probe.close(() => resolve()));
     const origin = "https://127.0.0.1:" + port;
     const config = {
-      origin,
+      baseUrl: origin,
       dataDir,
       host: "127.0.0.1",
       port,
     };
-    let runtime = await startServer(config, ADMIN_SECRET);
+    let runtime = await startServer(
+      config,
+      ADMIN_SECRET,
+      undefined,
+      noReleases,
+    );
     let base = () =>
       "http://127.0.0.1:" + (runtime.server.address() as { port: number }).port;
     cleanups.push(async () => {
@@ -85,6 +94,7 @@ test(
       return r.json() as Promise<any>;
     };
     assert.equal((await request("/health")).status, 200);
+    await assertPublicBrand(request, origin);
     assert.equal((await request("/api/admin/state")).status, 403);
     for (const [value, expected] of [
       [{ kind: "grant", id: "missing" }, 404],
@@ -148,6 +158,15 @@ test(
       .getSetCookie()
       .map((c) => c.split(";")[0])
       .join("; ");
+    const failedForm = await request("/admin/pair", {
+      method: "POST",
+      headers: { Cookie: ownerCookie, Origin: origin, Accept: "text/html" },
+      body: new URLSearchParams({ code: "invalid", digest: "a".repeat(64) }),
+    });
+    assert.equal(failedForm.status, 400);
+    assert.match(failedForm.headers.get("Content-Type")!, /text\/html/);
+    assert.match(await failedForm.text(), /Unable to complete this request/);
+
     for (const [locale, titles, excluded] of [
       [
         "zh-CN",
@@ -171,6 +190,12 @@ test(
         assert.equal(page.headers.get("Content-Language"), locale);
         assert.match(page.headers.get("Vary")!, /Accept-Language/i);
         const body = await page.text();
+        assert.match(body, /<link rel="icon"[^>]+href="\/assets\/agenvo.png"/);
+        assert.match(body, /<img src="\/assets\/agenvo.png"/);
+        assert.match(
+          page.headers.get("Content-Security-Policy")!,
+          /img-src 'self'/,
+        );
         assert.ok(body.includes(`<html lang="${locale}">`));
         assert.ok(body.includes(titles[index]));
         assert.ok(!body.includes(excluded[index]));
@@ -219,9 +244,11 @@ test(
       403,
     );
     const approved = await consentPost();
-    assert.equal(approved.status, 302);
+    assert.equal(approved.status, 200);
     assert.equal((await consentPost()).status, 403);
-    const redirect = new URL(approved.headers.get("location")!);
+    const redirect = new URL(
+      approved.headers.get("refresh")!.replace(/^0;url=/, ""),
+    );
     assert.equal(redirect.searchParams.get("state"), "bound-state");
     const denyPage = await request(url.pathname + url.search, {
       headers: { Cookie: ownerCookie },
@@ -234,8 +261,10 @@ test(
       headers: { Cookie: ownerCookie, Origin: origin },
       body: new URLSearchParams({ handle: denyHandle, decision: "deny" }),
     });
-    assert.equal(deniedConsent.status, 302);
-    const deniedConsentUrl = new URL(deniedConsent.headers.get("location")!);
+    assert.equal(deniedConsent.status, 200);
+    const deniedConsentUrl = new URL(
+      deniedConsent.headers.get("refresh")!.replace(/^0;url=/, ""),
+    );
     assert.equal(deniedConsentUrl.searchParams.get("error"), "access_denied");
     assert.equal(deniedConsentUrl.searchParams.get("state"), "bound-state");
     assert.equal(deniedConsentUrl.searchParams.get("iss"), metadata.issuer);
@@ -300,10 +329,29 @@ test(
         }),
       )
     ).json()) as any;
-    const device = await admin("/api/admin/pairings/approve", {
-      code: pair.code,
-      digest: await digest(secret),
+    const pairingPage = await request("/admin/pair?code=" + pair.code, {
+      headers: { Cookie: ownerCookie },
     });
+    assert.match(
+      await pairingPage.text(),
+      new RegExp(`name="code" value="${pair.code}"`),
+    );
+    const approvePairing = await request("/admin/pair", {
+      method: "POST",
+      headers: { Cookie: ownerCookie, Origin: origin, Accept: "text/html" },
+      body: new URLSearchParams({
+        code: pair.code,
+        digest: await digest(secret),
+      }),
+    });
+    assert.equal(approvePairing.status, 303);
+    assert.equal(
+      approvePairing.headers.get("Location"),
+      "/admin?notice=paired#connectors",
+    );
+    const device = {
+      deviceId: (await admin("/api/admin/state")).devices[0].id,
+    };
     const poll = await request("/pairings/poll", {
       ...json({ code: pair.code }),
       headers: {
@@ -313,7 +361,7 @@ test(
     });
     assert.equal(((await poll.json()) as any).deviceId, device.deviceId);
     await runtime.close();
-    runtime = await startServer(config, ADMIN_SECRET);
+    runtime = await startServer(config, ADMIN_SECRET, undefined, noReleases);
     const state = await admin("/api/admin/state");
     assert.equal(state.devices[0].id, device.deviceId);
     const ws = new WebSocket(base().replace("http:", "ws:") + "/connect", {
@@ -329,14 +377,15 @@ test(
     const welcome = once(ws, "message");
     ws.send(JSON.stringify({ v: 1, type: "hello", instances: [instance] }));
     assert.equal(JSON.parse((await welcome)[0].toString()).type, "welcome");
+    const native = await codexServer(dataDir);
+    cleanups.push(native.close);
     const adapterConfig = instanceConfigSchema.parse({
       id: "test",
       label: "Test runtime",
       kind: "codex",
-      binary: resolve("tests/fixtures/codex-backend.mjs"),
+      endpoint: native.endpoint,
       cwd: dataDir,
       home: dataDir,
-      mode: "managed-stdio",
     });
     if (adapterConfig.kind !== "codex") throw Error();
     const adapter = new CodexAdapter(adapterConfig);
@@ -344,11 +393,11 @@ test(
     cleanups.push(() => adapter.close());
     ws.on("message", async (raw) => {
       const p = JSON.parse(raw.toString());
-      if (p.type !== "call") return;
+      if (p.type !== "call" && p.type !== "describe") return;
       let outcome;
       try {
         outcome =
-          p.method === "agenvo.describe"
+          p.type === "describe"
             ? accepted(describe(adapter, p.params))
             : await adapter.call(p.method, p.params);
       } catch (error) {
@@ -377,67 +426,114 @@ test(
       },
     );
     await mcp.connect(transport);
+    assertServerBrand(mcp.getServerVersion(), origin);
     const tools = await mcp.listTools();
     assert.deepEqual(tools.tools.map((v) => v.name).sort(), [
-      "instance_describe",
-      "instances_list",
-      "runtime_call",
+      "execute",
+      "search",
     ]);
     const listed = await mcp.callTool({
-      name: "instances_list",
-      arguments: {},
+      name: "search",
+      arguments: { query: "" },
     });
     assert.match(JSON.stringify(listed), /Test runtime/);
     const result = await mcp.callTool({
-      name: "runtime_call",
-      arguments: {
+      name: "execute",
+      arguments: callCode({
         deviceId: device.deviceId,
         instanceId: "test",
         method: "thread/list",
         params: {},
-      },
+      }),
     });
     assert.match(JSON.stringify(result), /canAcceptDirectInput/);
     const call = async (method: string, params = {}) => {
       const response = await mcp.callTool({
-        name: "runtime_call",
-        arguments: {
+        name: "execute",
+        arguments: callCode({
           deviceId: device.deviceId,
           instanceId: "test",
           method,
           params,
-        },
+        }),
       });
       assert.equal(response.isError, false, JSON.stringify(response));
-      return JSON.parse((response.content as any)[0].text).result;
+      return nativeOutcome(response).result;
     };
     const info = await mcp.callTool({
-      name: "instance_describe",
+      name: "search",
       arguments: {
-        deviceId: device.deviceId,
-        instanceId: "test",
-        method: "management.threads.send",
+        query: "turn/start",
       },
     });
-    assert.match(JSON.stringify(info), /managementVersion/);
-    const services = await call("management.services.list");
-    const created = await call("management.threads.create", {
-      serviceRef: services.items[0].serviceRef,
+    assert.equal(info.isError, false);
+    const summaries = JSON.parse((info.content as any[])[0].text).result.items;
+    assert.ok(summaries.length > 0);
+    const summary = summaries[0].methods.find(
+      (m: any) => m.name === "turn/start",
+    );
+    assert.deepEqual(Object.keys(summary).sort(), [
+      "description",
+      "name",
+      "readOnly",
+    ]);
+    assert.equal(summary.readOnly, false);
+    assert.match(summary.description, /Submit input/);
+    for (const includeSchema of [false, true]) {
+      const response = await mcp.callTool({
+        name: "search",
+        arguments: {
+          query: "turn/start",
+          deviceId: device.deviceId,
+          instanceId: "test",
+          includeSchema,
+        },
+      });
+      assert.equal(response.isError, false);
+      const entries = JSON.parse((response.content as any[])[0].text).result
+        .items;
+      if (!includeSchema) {
+        assert.deepEqual(entries, summaries);
+      } else {
+        assert.equal(entries.length, 1);
+        const method = entries[0].methods.find(
+          (m: any) => m.name === "turn/start",
+        );
+        const { inputSchema, ...fields } = method;
+        assert.deepEqual(fields, summary);
+        assert.ok(inputSchema.properties.threadId);
+        assert.ok(inputSchema.required.includes("threadId"));
+      }
+    }
+    const invalidSearch = await mcp.callTool({
+      name: "search",
+      arguments: { query: "turn/start", includeSchema: "true" },
     });
-    const sent = await call("management.threads.send", {
-      threadRef: created.thread.threadRef,
-      text: "Integration fixture",
+    assert.equal(invalidSearch.isError, true);
+    const created = await call("thread/start");
+    const threadId = created.thread.id;
+    const sent = await call("turn/start", {
+      threadId,
+      input: [{ type: "text", text: "Integration fixture" }],
     });
-    assert.equal(sent.native.turn.id, "turn");
-    await call("management.threads.interrupt", {
-      threadRef: created.thread.threadRef,
-    });
-    const observed = await call("management.threads.observe", {
-      threadRef: created.thread.threadRef,
-      limit: 50,
-    });
+    assert.equal(sent.turn.id, "turn");
+    await call("turn/interrupt", { threadId, turnId: sent.turn.id });
+    const observed = await call("notifications.list", { threadId, limit: 50 });
     assert.equal(observed.gap, false);
     assert.ok(observed.items.some((i: any) => i.type === "turn/completed"));
+
+    const partial = await mcp.callTool({
+      name: "execute",
+      arguments: {
+        code: `await call(${JSON.stringify({ deviceId: device.deviceId, instanceId: "test" })}, "thread/start", {}); throw Error("after dispatch");`,
+      },
+    });
+    assert.equal(partial.isError, true);
+    assert.match(
+      (partial.content as any)[0].text,
+      /Execution failed \(script_error\)/,
+    );
+    assert.match((partial.content as any)[1].text, /"threadId":"t"/);
 
     // A temporarily absent instance must still have its retained approval revoked.
     let changed = once(ws, "message");
@@ -458,24 +554,24 @@ test(
     );
     await changed;
     const reappeared = await mcp.callTool({
-      name: "runtime_call",
-      arguments: {
+      name: "execute",
+      arguments: callCode({
         deviceId: device.deviceId,
         instanceId: "test",
         method: "thread/list",
-      },
+      }),
     });
-    assert.equal(reappeared.isError, true);
+    assert.equal(nativeOutcome(reappeared).error.code, "permission_denied");
     await admin("/api/admin/revoke", { kind: "device", id: device.deviceId });
     const denied = await mcp.callTool({
-      name: "runtime_call",
-      arguments: {
+      name: "execute",
+      arguments: callCode({
         deviceId: device.deviceId,
         instanceId: "test",
         method: "thread/list",
-      },
+      }),
     });
-    assert.equal(denied.isError, true);
+    assert.equal(nativeOutcome(denied).error.code, "permission_denied");
     await mcp.close();
     const refreshed = await exchange({
       grant_type: "refresh_token",
@@ -516,7 +612,7 @@ test("forwarded client addresses are trusted only with an explicit single-proxy 
     await new Promise<void>((resolve) => probe.close(() => resolve()));
     const runtime = await startServer(
       {
-        origin: "https://127.0.0.1:" + port,
+        baseUrl: "https://127.0.0.1:" + port,
         dataDir,
         host: "127.0.0.1",
         port,

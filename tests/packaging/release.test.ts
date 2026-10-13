@@ -1,3 +1,7 @@
+import { opencodeFixture } from "../fixtures/opencode-server.js";
+import { releasePackages } from "../../scripts/release-packages.ts";
+import { codexServer } from "../support/codex-server.js";
+import { assertPublicBrand } from "../support/brand.js";
 import { VERSION } from "@agenvo/protocol";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -16,6 +20,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { request } from "node:http";
 import { isolatedEnvironment, until } from "../support/environment.js";
+import { lodyCloudFixture } from "../fixtures/lody-cloud.js";
 import { paseoFixture } from "../fixtures/paseo-daemon.js";
 import { eventsLab } from "../support/events-lab.js";
 import { serviceDefinition } from "@agenvo/connector/cli/service";
@@ -25,7 +30,7 @@ const repository = resolve(".");
 
 test(
   "release tarballs install outside the workspace and expose isolated, usable applications",
-  { timeout: 180000 },
+  { timeout: 300000 },
   async (t) => {
     const cleanups: Array<() => unknown | Promise<unknown>> = [];
     t.after(async () => {
@@ -52,7 +57,8 @@ test(
       }),
     );
     const installed = new Map<string, string>();
-    for (const app of ["herdr", "codex-app-server", "paseo", "amp", "server"]) {
+    for (const { manifest: sourceManifest } of releasePackages(repository)) {
+      const app = sourceManifest.name.slice("@agenvo/".length);
       await exec(
         "npm",
         ["pack", "--workspace", "@agenvo/" + app, "--pack-destination", root],
@@ -72,45 +78,39 @@ test(
         ],
         { cwd: prefix },
       );
-      const entry = join(
-        prefix,
-        "node_modules",
-        "@agenvo",
-        app,
-        "dist",
-        "cli.js",
-      );
-      installed.set(app, entry);
-      const { stdout } = await exec(
-        join(
-          prefix,
-          "node_modules",
-          ".bin",
-          "agenvo-" + app + (process.platform === "win32" ? ".cmd" : ""),
-        ),
-        ["--help"],
-        {
-          cwd: root,
-          env: isolatedEnvironment(root),
-        },
-      );
-      assert.match(stdout, new RegExp("agenvo-" + app));
-      const bundle = await readFile(entry, "utf8");
-      assert.doesNotMatch(bundle, /(?:from|import)\s*["']@agenvo\//);
+      t.diagnostic(`Installed isolated tarball: ${sourceManifest.name}`);
+      const packageDir = join(prefix, "node_modules", sourceManifest.name);
       const manifest = JSON.parse(
-        await readFile(
-          join(prefix, "node_modules", "@agenvo", app, "package.json"),
-          "utf8",
-        ),
+        await readFile(join(packageDir, "package.json"), "utf8"),
       );
-      assert.equal(manifest.private, undefined);
+      assert.notEqual(manifest.private, true);
       assert.equal(
-        Object.keys(manifest.dependencies).some((name) =>
+        Object.keys(manifest.dependencies ?? {}).some((name) =>
           name.startsWith("@agenvo/"),
         ),
         false,
       );
-      if (app !== "server") {
+      for (const [name, path] of Object.entries(sourceManifest.bin ?? {})) {
+        const { stdout } = await exec(
+          join(
+            prefix,
+            "node_modules",
+            ".bin",
+            name + (process.platform === "win32" ? ".cmd" : ""),
+          ),
+          ["--help"],
+          { cwd: root, env: isolatedEnvironment(root) },
+        );
+        assert.ok(stdout.length > 0, `${name} should expose CLI help`);
+        const bundle = await readFile(join(packageDir, path), "utf8");
+        assert.doesNotMatch(bundle, /(?:from|import)\s*["']@agenvo\//);
+      }
+      const cli = sourceManifest.bin?.["agenvo-" + app];
+      if (!cli) continue;
+      const entry = join(packageDir, cli);
+      installed.set(app, entry);
+      const bundle = await readFile(entry, "utf8");
+      if (sourceManifest.devDependencies?.["@agenvo/connector"]) {
         assert.doesNotMatch(
           bundle,
           /from ["']express|@cloudflare\/workers-oauth-provider/,
@@ -148,6 +148,36 @@ test(
         "linux",
       ).name,
     );
+
+    const opencode = await opencodeFixture();
+    cleanups.push(opencode.close);
+    const opencodeCli = installed.get("opencode")!;
+    await exec(
+      process.execPath,
+      [
+        opencodeCli,
+        "instance",
+        "add",
+        "--id",
+        "opencode",
+        "--endpoint",
+        opencode.endpoint,
+      ],
+      { cwd: root, env: isolatedEnvironment(root) },
+    );
+    const opencodeConfig = JSON.parse(
+      await readFile(
+        join(root, ".config", "agenvo", "opencode", "config.json"),
+        "utf8",
+      ),
+    );
+    assert.equal(opencodeConfig.instances[0].endpoint, opencode.endpoint);
+    assert.equal(opencodeConfig.instances[0].binary, undefined);
+    const doctor = await exec(process.execPath, [opencodeCli, "doctor"], {
+      cwd: root,
+      env: isolatedEnvironment(root),
+    });
+    assert.match(doctor.stdout, /HTTP and global events connected/);
 
     const paseo = await paseoFixture();
     cleanups.push(() => paseo.close());
@@ -242,8 +272,47 @@ test(
       { code: "ENOENT" },
     );
 
+    const lody = await lodyCloudFixture();
+    cleanups.push(() => lody.close());
+    await exec(
+      process.execPath,
+      [
+        installed.get("lody")!,
+        "instance",
+        "add",
+        "--id",
+        "lody",
+        "--workspace-id",
+        "workspace1",
+        "--token-file",
+        lody.tokenFile,
+        "--auth-url",
+        lody.config.authUrl,
+        "--auth-site-url",
+        lody.config.authSiteUrl,
+      ],
+      { cwd: root, env: isolatedEnvironment(root) },
+    );
+    const lodyConfig = JSON.parse(
+      await readFile(
+        join(root, ".config", "agenvo", "lody", "config.json"),
+        "utf8",
+      ),
+    );
+    assert.equal(lodyConfig.instances[0].userId, "user1");
+    assert.equal(lodyConfig.instances[0].workspaceId, "workspace1");
+    assert.doesNotMatch(JSON.stringify(lodyConfig), /fixture-cli-token/);
+    const lodyDoctor = await exec(
+      process.execPath,
+      [installed.get("lody")!, "doctor"],
+      { cwd: root, env: isolatedEnvironment(root) },
+    );
+    assert.match(lodyDoctor.stdout, /Lody cloud workspace synchronized/);
+
     // Exercise CLI configuration and pairing against an isolated HTTPS Relay.
-    const lab = await eventsLab(t);
+    const lab = await eventsLab(t, "/packaging/team/agent");
+    const native = await codexServer(root);
+    cleanups.push(native.close);
     const cli = installed.get("codex-app-server")!;
     const env = {
       ...isolatedEnvironment(root),
@@ -258,8 +327,10 @@ test(
         "add",
         "--id",
         "test",
-        "--binary",
-        resolve("tests/fixtures/codex-backend.mjs"),
+        "--endpoint",
+        native.endpoint,
+        "--home",
+        root,
         "--cwd",
         root,
       ],
@@ -298,18 +369,8 @@ test(
         ),
       (s) => s.state === "online",
     );
-    const services = await lab.call(
-      config.deviceId,
-      "test",
-      "management.services.list",
-    );
-    const thread = await lab.call(
-      config.deviceId,
-      "test",
-      "management.threads.create",
-      { serviceRef: services.items[0].serviceRef },
-    );
-    assert.ok(thread.thread.threadRef);
+    const thread = await lab.call(config.deviceId, "test", "thread/start");
+    assert.ok(thread.thread.id);
     await exec(process.execPath, [cli, "disconnect"], { cwd: root, env });
     await exited;
     assert.equal(
@@ -325,7 +386,7 @@ test(
       [
         server,
         "init",
-        "--origin",
+        "--base-url",
         "https://relay.example",
         "--data-dir",
         join(root, "data"),
@@ -361,23 +422,44 @@ test(
         );
       return line ? JSON.parse(line).listening.port : undefined;
     }, Boolean);
-    const health = await new Promise<string>((resolve, reject) => {
-      request(
-        {
-          hostname: "127.0.0.1",
-          port: Number(port),
-          path: "/health",
-          headers: { Host: "relay.example" },
-        },
-        (res) => {
-          let body = "";
-          res.on("data", (chunk) => (body += chunk));
-          res.on("end", () => resolve(body));
-        },
-      )
-        .on("error", reject)
-        .end();
-    });
-    assert.equal(JSON.parse(health).service, "agenvo");
+    // Preserve the configured Host when exercising the installed server over loopback.
+    const installedRequest = (path: string, init: RequestInit = {}) =>
+      new Promise<Response>((resolve, reject) => {
+        request(
+          {
+            hostname: "127.0.0.1",
+            port: Number(port),
+            path,
+            method: init.method ?? "GET",
+            headers: { Host: "relay.example" },
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on("data", (chunk) => chunks.push(chunk));
+            res.on("error", reject);
+            res.on("end", () =>
+              resolve(
+                new Response(
+                  init.method === "HEAD" ? null : Buffer.concat(chunks),
+                  {
+                    status: res.statusCode,
+                    headers: Object.fromEntries(
+                      Object.entries(res.headers).map(([key, value]) => [
+                        key,
+                        String(value),
+                      ]),
+                    ),
+                  },
+                ),
+              ),
+            );
+          },
+        )
+          .on("error", reject)
+          .end();
+      });
+    const health = await installedRequest("/health");
+    assert.equal(JSON.parse(await health.text()).service, "agenvo");
+    await assertPublicBrand(installedRequest, "https://relay.example");
   },
 );

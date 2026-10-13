@@ -1,6 +1,6 @@
 {
   "name": "agenvo-workspace",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,7 +15,12 @@
     "format:check": "prettier --check packages apps tests scripts",
     "test:system": "node scripts/test-system.mjs",
     "test:ci": "npm run check && npm run build && npm run format:check && npm test && npm run test:integration && npm run test:system && npm run test:adapters && npm run test:packages",
-    "test:packages": "tsx --test tests/packaging/*.test.ts"
+    "test:packages": "tsx --test tests/packaging/*.test.ts",
+    "release:pack": "node scripts/release.ts pack",
+    "release:publish": "node scripts/release.ts publish",
+    "release:github": "node scripts/release.ts github",
+    "release:trust": "node scripts/release.ts trust",
+    "release:bootstrap": "node scripts/release.ts bootstrap"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261006.1",
@@ -35,7 +40,9 @@
     "express": "5.2.1",
     "standardwebhooks": "1.1.1",
     "ws": "8.22.0",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "@loro-dev/loro-cli": "0.6.0",
+    "@types/semver": "^7.8.0"
   },
   "engines": {
     "node": ">=24.13.0"

@@ -1,3 +1,7 @@
+import { callCode } from "../support/code.js";
+import { assertPublicBrand, assertServerBrand } from "../support/brand.js";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { stopProcess } from "../support/process.js";
 const ADMIN_SECRET = "test-admin-secret-not-for-production-1234567890";
 import test from "node:test";
@@ -8,7 +12,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
-import { isolatedEnvironment } from "../support/environment.js";
+import { isolatedEnvironment, until } from "../support/environment.js";
 import { once } from "node:events";
 import { digest } from "@agenvo/protocol";
 
@@ -87,6 +91,10 @@ test(
       assert.equal(r.status, 200, await r.clone().text());
       return r.json() as Promise<any>;
     };
+    await assertPublicBrand(
+      (path, init) => fetch(base + path, init),
+      "https://agenvo.test",
+    );
     for (const [value, status] of [
       [{ kind: "grant", id: "missing" }, 404],
       [{ kind: "device", id: "missing" }, 404],
@@ -118,6 +126,19 @@ test(
       .getSetCookie()
       .map((c) => c.split(";")[0])
       .join("; ");
+    const failedForm = await fetch(base + "/admin/pair", {
+      method: "POST",
+      headers: {
+        Cookie: ownerCookie,
+        Origin: "https://agenvo.test",
+        Accept: "text/html",
+      },
+      body: new URLSearchParams({ code: "invalid", digest: "a".repeat(64) }),
+    });
+    assert.equal(failedForm.status, 400);
+    assert.match(failedForm.headers.get("Content-Type")!, /text\/html/);
+    assert.match(await failedForm.text(), /Unable to complete this request/);
+
     assert.equal(
       (await fetch(base + "/admin", { headers: { Cookie: ownerCookie } }))
         .status,
@@ -182,6 +203,12 @@ test(
         assert.equal(page.headers.get("Content-Language"), locale);
         assert.match(page.headers.get("Vary")!, /Accept-Language/i);
         const body = await page.text();
+        assert.match(body, /<link rel="icon"[^>]+href="\/assets\/agenvo.png"/);
+        assert.match(body, /<img src="\/assets\/agenvo.png"/);
+        assert.match(
+          page.headers.get("Content-Security-Policy")!,
+          /img-src 'self'/,
+        );
         assert.ok(body.includes(`<html lang="${locale}">`));
         assert.ok(body.includes(titles[index]));
         assert.ok(!body.includes(excluded[index]));
@@ -206,7 +233,7 @@ test(
       },
       body: new URLSearchParams({ handle, decision: "approve" }),
     });
-    assert.equal(approved.status, 302, await approved.clone().text());
+    assert.equal(approved.status, 200, await approved.clone().text());
     const replay = await fetch(base + "/authorize", {
       method: "POST",
       redirect: "manual",
@@ -217,9 +244,36 @@ test(
       body: new URLSearchParams({ handle, decision: "approve" }),
     });
     assert.equal(replay.status, 400);
-    const code = new URL(approved.headers.get("location")!).searchParams.get(
-      "code",
-    )!;
+    const code = new URL(
+      approved.headers.get("refresh")!.replace(/^0;url=/, ""),
+    ).searchParams.get("code")!;
+    const denyPage = await fetch(authorization, {
+      headers: { Cookie: ownerCookie },
+    });
+    const denyHandle = /name="handle" value="([^"]+)"/.exec(
+      await denyPage.text(),
+    )![1];
+    const denyCookie = denyPage.headers
+      .getSetCookie()
+      .map((c) => c.split(";")[0])
+      .join("; ");
+    const denied = await fetch(base + "/authorize", {
+      method: "POST",
+      headers: {
+        Origin: "https://agenvo.test",
+        Cookie: ownerCookie + "; " + denyCookie,
+      },
+      body: new URLSearchParams({ handle: denyHandle, decision: "deny" }),
+    });
+    assert.equal(denied.status, 200);
+    assert.equal(denied.headers.get("location"), null);
+    assert.match(denied.headers.get("set-cookie")!, /Max-Age=0/);
+    const deniedUrl = new URL(
+      denied.headers.get("refresh")!.replace(/^0;url=/, ""),
+    );
+    assert.equal(deniedUrl.searchParams.get("error"), "access_denied");
+    assert.equal(deniedUrl.searchParams.get("state"), "test-state");
+    assert.equal(deniedUrl.origin, "http://127.0.0.1:8899");
     const exchange = () =>
       fetch(base + "/oauth/token", {
         method: "POST",
@@ -252,6 +306,16 @@ test(
       renewed.status === 200 ? "" : await renewed.clone().text(),
     );
     Object.assign(tokens, await renewed.json());
+    const mcp = new Client({ name: "brand-test", version: "1" });
+    await mcp.connect(
+      new StreamableHTTPClientTransport(new URL(base + "/mcp"), {
+        requestInit: {
+          headers: { Authorization: "Bearer " + tokens.access_token },
+        },
+      }),
+    );
+    assertServerBrand(mcp.getServerVersion(), "https://agenvo.test");
+    await mcp.close();
     const toolsCall = (token: string) =>
       fetch(base + "/mcp", {
         method: "POST",
@@ -264,7 +328,7 @@ test(
           jsonrpc: "2.0",
           id: 1,
           method: "tools/call",
-          params: { name: "instances_list", arguments: {} },
+          params: { name: "search", arguments: { query: "" } },
         }),
       });
     const oauthCall = await toolsCall(tokens.access_token);
@@ -291,6 +355,7 @@ test(
       instanceId: "work",
       kind: "herdr",
       label: "Work",
+      context: "# Work\nInitial owner context.",
       fingerprint,
       scope: {},
       backendVersion: "0.9.3",
@@ -477,24 +542,104 @@ test(
       assert.equal(response.status, 200);
       const body: any = await response.json();
       assert.equal(body.error, undefined, JSON.stringify(body));
+      assert.ok(!JSON.stringify(body).includes("user cancelled MCP tool call"));
+      if (name === "execute") return body.result;
       const outcome = JSON.parse(body.result.content[0].text);
       assert.equal(body.result.isError, Boolean(outcome.error));
       assert.match(outcome.requestId, /^[0-9a-f-]{36}$/);
-      assert.ok(!JSON.stringify(body).includes("user cancelled MCP tool call"));
       return outcome;
     };
+    const interruptedScript = await mcpCall("execute", {
+      code: "while(true){}",
+    });
+    assert.equal(interruptedScript.isError, true);
+    assert.match(
+      interruptedScript.content[0].text,
+      /Execution failed \(script_error\)/,
+    );
+    const isolated = await mcpCall("execute", {
+      code: "return [typeof process, typeof fetch, typeof require];",
+    });
+    assert.equal(isolated.isError, false);
+    assert.deepEqual(isolated.content, [
+      { type: "text", text: '["undefined","undefined","undefined"]' },
+    ]);
+    const text = await mcpCall("execute", {
+      code: 'return "Selected output\\n第二行";',
+    });
+    assert.equal(text.isError, false);
+    assert.deepEqual(text.content, [
+      { type: "text", text: "Selected output\n第二行" },
+    ]);
+    instance.context =
+      "# Work\nUpdated before Connector hello. 代码在目标机器上。";
     const ws = await connect();
+    const discovered = await mcpCall("search", { query: "" });
+    assert.equal(discovered.result.items[0].context, instance.context);
+    instance.context =
+      "# Work\nUpdated through instances_changed without reapproval.";
+    ws.send(
+      JSON.stringify({
+        v: 1,
+        type: "instances_changed",
+        instances: [instance],
+      }),
+    );
+    await until(
+      () => mcpCall("search", { query: "" }),
+      (r) => r.result.items[0]?.context === instance.context,
+    );
     const nextCall = () =>
       new Promise<any>((resolve) => {
         const listener = (event: any) => {
           const p = JSON.parse(event.data);
-          if (p.type === "call") {
+          if (p.type === "call" || p.type === "describe") {
             ws.removeEventListener("message", listener);
             resolve(p);
           }
         };
         ws.addEventListener("message", listener);
       });
+    // Keep two HTTP executions pending together, then deliver confirmations in reverse order.
+    const concurrentPackets = new Promise<any[]>((resolve) => {
+      const packets: any[] = [];
+      const listener = (event: any) => {
+        const packet = JSON.parse(event.data);
+        if (packet.type !== "call") return;
+        packets.push(packet);
+        if (packets.length === 2) {
+          ws.removeEventListener("message", listener);
+          resolve(packets);
+        }
+      };
+      ws.addEventListener("message", listener);
+    });
+    const overlapping = [1, 2].map((marker) =>
+      mcpCall("execute", {
+        code: `globalThis.marker = ${marker}; const r = await call(${JSON.stringify({ deviceId, instanceId: "work" })}, 'pane.run', {marker:${marker}}); return [marker,r.result];`,
+      }),
+    );
+    for (const packet of (await concurrentPackets).reverse())
+      ws.send(
+        JSON.stringify({
+          v: 1,
+          type: "result",
+          requestId: packet.requestId,
+          outcome: { execution: "accepted", result: packet.params.marker },
+        }),
+      );
+    const sharedResults = await Promise.all(overlapping);
+    assert.deepEqual(
+      sharedResults.map((r) => {
+        assert.equal(r.isError, false);
+        assert.equal(r.content.length, 1);
+        return JSON.parse(r.content[0].text);
+      }),
+      [
+        [1, 1],
+        [2, 2],
+      ],
+    );
     const input = {
       deviceId,
       instanceId: "work",
@@ -521,31 +666,62 @@ test(
       }),
     );
     assert.equal((await result).result, "correct");
-    for (const args of [{}, { cursor: "20" }]) {
-      const received = nextCall();
-      const described = mcpCall("instance_describe", {
-        deviceId,
-        instanceId: "work",
-        ...args,
-      });
-      const packet = await received;
-      assert.equal(packet.method, "agenvo.describe");
-      assert.deepEqual(packet.params, args);
+    const described = mcpCall("search", {
+      query: "read",
+      deviceId,
+      instanceId: "work",
+    });
+    for (const expected of [
+      { query: "read" },
+      { query: "read", cursor: "5" },
+    ]) {
+      const packet = await nextCall();
+      assert.equal(packet.type, "describe");
+      assert.deepEqual(packet.params, expected);
       ws.send(
         JSON.stringify({
           v: 1,
           type: "result",
           requestId: packet.requestId,
-          outcome: { execution: "accepted", result: { items: [] } },
+          outcome: {
+            execution: "accepted",
+            result: {
+              items: [{ name: "read" }],
+              ...(!expected.cursor ? { nextCursor: "5" } : {}),
+            },
+          },
         }),
       );
-      assert.equal((await described).requestId, packet.requestId);
     }
-    const nativePacket = nextCall();
-    const nativeFailure = mcpCall("runtime_call", {
-      ...input,
-      method: "agent.read",
+    const matched = (await described).result.items[0];
+    assert.equal(matched.methods.length, 2);
+    assert.equal(matched.context, instance.context);
+    const partialPacket = nextCall();
+    const partial = mcpCall("execute", {
+      code: `await call(${JSON.stringify({ deviceId, instanceId: "work" })}, "pane.run", {}); throw Error("after dispatch");`,
     });
+    const partialRequest = await partialPacket;
+    ws.send(
+      JSON.stringify({
+        v: 1,
+        type: "result",
+        requestId: partialRequest.requestId,
+        outcome: { execution: "accepted", nativeIds: { paneId: "created" } },
+      }),
+    );
+    const failedScript = await partial;
+    assert.equal(failedScript.isError, true);
+    assert.match(
+      failedScript.content[0].text,
+      /Execution failed \(script_error\)/,
+    );
+    assert.match(failedScript.content[1].text, /"paneId":"created"/);
+    assert.ok(failedScript.content[1].text.includes(partialRequest.requestId));
+    const nativePacket = nextCall();
+    const nativeFailure = mcpCall(
+      "execute",
+      callCode({ ...input, method: "agent.read" }),
+    );
     const nativeRequest = await nativePacket;
     ws.send(
       JSON.stringify({
@@ -562,7 +738,10 @@ test(
         },
       }),
     );
-    const nativeOutcome = await nativeFailure;
+    const nativeResponse = await nativeFailure;
+    assert.equal(nativeResponse.isError, false);
+    assert.equal(nativeResponse.content.length, 1);
+    const nativeOutcome = JSON.parse(nativeResponse.content[0].text);
     assert.equal(nativeOutcome.error.native.code, "agent_not_idle");
     assert.equal(nativeOutcome.requestId, nativeRequest.requestId);
     assert.equal((await fetch(base + "/fixture-log-error")).status, 204);
@@ -578,15 +757,23 @@ test(
     assert.equal(failureLog.args[0].level, "warn");
     assert.equal(
       failureLog.args[0].message,
-      "MCP tool runtime_call failed: native_error",
+      `Native call agent.read on ${deviceId}/work: rejected (native_error)`,
     );
-    assert.equal(failureLog.args[0].event, "mcp.tool.completed");
+    assert.equal(failureLog.args[0].event, "runtime.call.completed");
     assert.equal(failureLog.args[0].deviceId, deviceId);
+    const acceptedLog = logs.find(
+      (entry) => entry.args[0]?.requestId === partialRequest.requestId,
+    );
+    assert.equal(acceptedLog?.method, "info");
+    assert.equal(
+      acceptedLog.args[0].message,
+      `Native call pane.run on ${deviceId}/work: accepted`,
+    );
     assert.ok(
       logs.some(
         (entry) =>
           entry.method === "info" &&
-          entry.args[0]?.message === "MCP tool instance_describe completed",
+          entry.args[0]?.message === "MCP tool search completed",
       ),
     );
     assert.ok(!JSON.stringify(logs).includes("Herdr rejected the request"));
@@ -654,9 +841,11 @@ test(
     await fixture("approveInstance", deviceId, "work", fingerprint);
     // A timed-out write is unknown, and its late result cannot settle another call.
     const timeoutPacket = nextCall();
-    const timedOut = mcpCall("runtime_call", input);
+    const timedOut = mcpCall("execute", callCode(input));
     const timed = await timeoutPacket;
-    const timeoutOutcome = await timedOut;
+    const timeoutResponse = await timedOut;
+    assert.equal(timeoutResponse.isError, false);
+    const timeoutOutcome = JSON.parse(timeoutResponse.content[0].text);
     assert.equal(timeoutOutcome.execution, "unknown");
     assert.equal(timeoutOutcome.error.code, "execution_unknown");
     assert.equal(timeoutOutcome.requestId, timed.requestId);
@@ -669,10 +858,12 @@ test(
       }),
     );
     const oldPacket = nextCall();
-    const oldCall = mcpCall("runtime_call", input);
+    const oldCall = mcpCall("execute", callCode(input));
     const oldRequest = await oldPacket;
     const replacement = await connect();
-    const disconnected = await oldCall;
+    const disconnectedResponse = await oldCall;
+    assert.equal(disconnectedResponse.isError, false);
+    const disconnected = JSON.parse(disconnectedResponse.content[0].text);
     assert.equal(disconnected.execution, "unknown");
     assert.equal(disconnected.error.code, "execution_unknown");
     assert.equal(disconnected.requestId, oldRequest.requestId);

@@ -1,6 +1,9 @@
+import { RelayAddress } from "@agenvo/protocol/address";
 import { z } from "zod";
 import { readBody, transportedFault, asOutcome } from "@agenvo/protocol";
 import { type Relay } from "./core.js";
+
+export type AdminState = ReturnType<Relay["adminState"]>;
 
 type Result<K extends "approvePairing" | "approveInstance" | "revoke"> =
   ReturnType<Relay[K]>;
@@ -25,10 +28,11 @@ export interface AdminRelay {
 /** Shared owner endpoints keep validation and revocation semantics identical. */
 export async function admin(
   request: Request,
+  baseUrl: string,
   relay: AdminRelay,
   authorize: (request: Request) => Promise<void>,
 ): Promise<Response | undefined> {
-  const path = new URL(request.url).pathname;
+  const path = new RelayAddress(baseUrl).route(request.url);
   if (
     ![
       "/api/admin/state",
@@ -36,7 +40,7 @@ export async function admin(
       "/api/admin/pairings/approve",
       "/api/admin/instances/approve",
       "/api/admin/revoke",
-    ].includes(path)
+    ].includes(path ?? "")
   )
     return;
   await authorize(request);
@@ -49,9 +53,7 @@ export async function admin(
     });
   try {
     if (read) {
-      const state: ReturnType<Relay["adminState"]> = JSON.parse(
-        await relay.adminStateJson(),
-      );
+      const state: AdminState = JSON.parse(await relay.adminStateJson());
       return Response.json(
         path.endsWith("pairings")
           ? { pairings: state.pairings.filter((p) => !p.deviceId) }

@@ -1,12 +1,14 @@
 {
   "name": "@agenvo/protocol",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./events": "./src/events.ts",
-    "./index": "./src/index.ts"
+    "./index": "./src/index.ts",
+    "./address": "./src/address.ts",
+    "./messages": "./src/messages.ts"
   },
   "dependencies": {
     "zod": "4.6.5"

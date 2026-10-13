@@ -37,7 +37,7 @@ async function fixture(t: any) {
       retryDelay: 100,
     });
   });
-  const config = { ORIGIN: origin, ADMIN_SECRET: secret };
+  const config = { BASE_URL: origin, ADMIN_SECRET: secret };
   return { store, config, auth: new OwnerAuth(store, config) };
 }
 function cookie(response: Response) {
@@ -46,6 +46,73 @@ function cookie(response: Response) {
     .map((v) => v.split(";")[0])
     .join("; ");
 }
+
+test("same-host instances keep independent cookies, sessions and logout", async (t) => {
+  const { store } = await fixture(t);
+  const bases = [origin + "/team/alice", origin + "/tools/agents"];
+  const owners = bases.map(
+    (BASE_URL) => new OwnerAuth(store, { BASE_URL, ADMIN_SECRET: secret }),
+  );
+  const responses = await Promise.all(
+    owners.map((owner, i) =>
+      owner.fetch(
+        new Request(bases[i] + "/login", {
+          method: "POST",
+          headers: { Origin: origin },
+          body: new URLSearchParams({ secret, next: "/admin" }),
+        }),
+        "test",
+      ),
+    ),
+  );
+  const cookies = responses.map(cookie);
+  assert.notEqual(cookies[0].split("=")[0], cookies[1].split("=")[0]);
+  for (let i = 0; i < 2; i++) {
+    assert.equal(
+      responses[i].headers.get("Location"),
+      new URL(bases[i]).pathname + "/admin",
+    );
+    assert.match(
+      responses[i].headers.get("Set-Cookie")!,
+      /^__Host-.*; Path=\/; Secure; HttpOnly; SameSite=Lax/,
+    );
+    assert.equal(
+      await owners[i].authenticated(
+        new Request(bases[i] + "/admin", {
+          headers: { Cookie: cookies.join("; ") },
+        }),
+      ),
+      true,
+    );
+  }
+  const renamed = cookies[1].split("=")[0] + "=" + cookies[0].split("=")[1];
+  assert.equal(
+    await owners[1].authenticated(
+      new Request(bases[1] + "/admin", { headers: { Cookie: renamed } }),
+    ),
+    false,
+  );
+  const logout = await owners[0].fetch(
+    new Request(bases[0] + "/logout", {
+      method: "POST",
+      headers: { Origin: origin, Cookie: cookies.join("; ") },
+    }),
+    "test",
+  );
+  assert.equal(logout.headers.get("Location"), "/team/alice/login");
+  assert.equal(
+    await owners[0].authenticated(
+      new Request(bases[0] + "/admin", { headers: { Cookie: cookies[0] } }),
+    ),
+    false,
+  );
+  assert.equal(
+    await owners[1].authenticated(
+      new Request(bases[1] + "/admin", { headers: { Cookie: cookies[1] } }),
+    ),
+    true,
+  );
+});
 
 test("owner sessions persist, rotate on login, expire and reject cross-origin use", async (t) => {
   const { store, config, auth } = await fixture(t);
@@ -69,7 +136,7 @@ test("owner sessions persist, rotate on login, expire and reject cross-origin us
   assert.equal(
     await new OwnerAuth(store, {
       ...config,
-      ORIGIN: "https://other.test",
+      BASE_URL: "https://other.test",
     }).authenticated(browser),
     false,
   );
@@ -222,4 +289,48 @@ test("invalid login renders only the browser's selected language", async (t) => 
     assert.ok(body.includes(expected));
     assert.ok(!body.includes(absent));
   }
+});
+
+test("OAuth callbacks navigate after the form response without broadening form-action", async () => {
+  const { consentPage, consentRedirect } =
+    await import("@agenvo/relay/admin/page");
+  const target =
+    "https://client.example/callback?code=test&state=%22%3Ctest%3E";
+  const browser = request("/authorize", {
+    method: "POST",
+    headers: { "Accept-Language": "zh-CN" },
+  });
+  const consent = consentPage(
+    browser,
+    origin,
+    {
+      clientName: "Test client",
+      redirectHost: "client.example",
+    },
+    "test-handle",
+  );
+  assert.match(
+    consent.headers.get("content-security-policy")!,
+    /form-action 'self';/,
+  );
+  const headers = new Headers({ Location: target });
+  headers.append("Set-Cookie", "consent=; Max-Age=0; Secure; HttpOnly");
+  const response = consentRedirect(browser, origin, target, headers);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("location"), null);
+  assert.equal(response.headers.get("refresh"), "0;url=" + target);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(response.headers.get("referrer-policy"), "same-origin");
+  assert.match(
+    response.headers.get("content-security-policy")!,
+    /form-action 'self';/,
+  );
+  assert.match(response.headers.get("set-cookie")!, /Max-Age=0/);
+  const body = await response.text();
+  assert.match(body, /正在返回客户端/);
+  assert.match(
+    body,
+    /href="https:\/\/client.example\/callback\?code=test&#38;state=%22%3Ctest%3E" rel="noreferrer"/,
+  );
+  assert.doesNotMatch(body, /<script|<form/);
 });

@@ -1,8 +1,10 @@
+import { RelayAddress } from "@agenvo/protocol/address";
 import { logger } from "@agenvo/logging";
 import { sendWebhook } from "@agenvo/relay/webhook";
 import { OwnerAuth } from "@agenvo/relay/admin/auth";
 import { DurableObject } from "cloudflare:workers";
-import { Relay, type RecordStore } from "@agenvo/relay/core";
+import { Relay } from "@agenvo/relay/core";
+import type { RecordStore } from "@agenvo/relay/store";
 import { PROTOCOL, type Call } from "@agenvo/protocol";
 
 const log = logger.child({ component: "worker.relay" });
@@ -52,10 +54,15 @@ export class AgenvoRelay extends DurableObject<Env> {
         );
       },
     };
-    this.owner = new OwnerAuth(store, env);
+    this.owner = new OwnerAuth(store, {
+      ...env,
+      BASE_URL: new RelayAddress(env.BASE_URL).baseUrl,
+    });
     this.relay = new Relay({
-      origin: env.ORIGIN,
+      baseUrl: new RelayAddress(env.BASE_URL).baseUrl,
       store,
+      fetchRelease: (url, init) => this.fetchRelease(url, init),
+      background: (task) => this.ctx.waitUntil(task),
       sockets: (id) => ctx.getWebSockets(id),
       accept: (ws, id) => ctx.acceptWebSocket(ws as WebSocket, [id]),
       sendWebhook: (url, body, headers) =>
@@ -68,6 +75,12 @@ export class AgenvoRelay extends DurableObject<Env> {
     ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair("agenvo:ping", "agenvo:pong"),
     );
+  }
+  protected fetchRelease(url: string, init: RequestInit): Promise<Response> {
+    return fetch(url, init);
+  }
+  release(grant: string) {
+    return this.relay.release(grant);
   }
   protected deliverWebhook(
     url: string,
@@ -96,7 +109,7 @@ export class AgenvoRelay extends DurableObject<Env> {
       request.headers.get("authorization")?.replace(/^Bearer /, "") ?? "";
     if (!(await this.relay.authenticateDevice(id, secret)))
       return Response.json({ error: "unauthorized" }, { status: 401 });
-    const path = new URL(request.url).pathname;
+    const path = new RelayAddress(this.env.BASE_URL).route(request.url);
     if (path === "/disconnect" && request.method === "POST")
       return Response.json(this.relay.revoke("device", id));
     if (path !== "/connect") return new Response(null, { status: 404 });
@@ -160,6 +173,17 @@ export class AgenvoRelay extends DurableObject<Env> {
   }
   instances(grant: string, options: Parameters<Relay["instances"]>[1]) {
     return this.relay.instances(grant, options);
+  }
+  describe(
+    grant: string,
+    target: {
+      deviceId: string;
+      instanceId: string;
+      query: string;
+      cursor?: string;
+    },
+  ) {
+    return this.relay.describe(grant, target);
   }
   call(grant: string, input: Call) {
     return this.relay.call(grant, input);

@@ -1,3 +1,4 @@
+import { baseUrlSchema } from "@agenvo/protocol/address";
 import { z } from "zod";
 import { homedir } from "node:os";
 import { join, resolve, dirname, isAbsolute } from "node:path";
@@ -13,10 +14,12 @@ import {
   unlink,
 } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   canonical,
   digest,
   identifier,
+  instanceSchema,
   Fault,
   type Instance,
 } from "@agenvo/protocol";
@@ -27,6 +30,7 @@ export const absolutePath = z
 export const commonInstanceFields = {
   id: identifier,
   label: z.string().min(1).max(128),
+  context: instanceSchema.shape.context,
 };
 export type InstanceConfig = z.infer<
   z.ZodObject<typeof commonInstanceFields>
@@ -37,14 +41,7 @@ export const configSchema = <T extends InstanceConfig>(
   z
     .strictObject({
       schema: z.literal(1),
-      relay: z
-        .string()
-        .url()
-        .refine((value) => {
-          const url = new URL(value);
-          return url.protocol === "https:" && url.origin === value;
-        }, "Relay must be a canonical HTTPS origin")
-        .optional(),
+      relay: baseUrlSchema.optional(),
       deviceId: z.string().uuid().optional(),
       name: z.string().max(128),
       instances: z.array(instanceSchema).max(128),
@@ -73,7 +70,26 @@ export async function atomicJson(path: string, value: unknown) {
       mode: 0o600,
       flag: "wx",
     });
-    await rename(temp, path);
+    // Windows can deny replacement while a reader or scanner holds the target.
+    // Retry only publication of this complete snapshot; never unlink the old
+    // file, which would expose missing or partial credentials/configuration.
+    const deadline = Date.now() + 1000;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await rename(temp, path);
+        break;
+      } catch (error) {
+        if (
+          process.platform !== "win32" ||
+          !["EACCES", "EPERM", "EBUSY"].includes(
+            (error as NodeJS.ErrnoException).code ?? "",
+          ) ||
+          Date.now() >= deadline
+        )
+          throw error;
+        await delay(Math.min(10 * 2 ** attempt, 100, deadline - Date.now()));
+      }
+    }
   } finally {
     await unlink(temp).catch(() => {});
   }
@@ -110,11 +126,12 @@ export async function descriptor(
   capabilityRevision: string,
   execution = "full-access",
 ): Promise<Instance> {
-  const { label, ...settings } = config;
+  const { label, context, ...settings } = config;
   const scope = { ...settings, execution };
   return {
     instanceId: config.id,
     label,
+    ...(context === undefined ? {} : { context }),
     kind: config.kind,
     scope,
     fingerprint: await digest(canonical(scope)),

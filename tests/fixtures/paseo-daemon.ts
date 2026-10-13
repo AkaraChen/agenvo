@@ -18,7 +18,8 @@ export async function paseoFixture(modernCreation = false) {
   let serverId = "paseo-fixture",
     epoch = "epoch-1",
     dropSend = false,
-    dropCreate = false;
+    dropCreate = false,
+    dropArchive = false;
   const project = {
     projectKey: "fixture",
     projectName: "Fixture",
@@ -283,10 +284,17 @@ export async function paseoFixture(modernCreation = false) {
           update(agent!);
           break;
         case "archive_workspace_request":
+          if (dropArchive) {
+            dropArchive = false;
+            socket.close();
+            break;
+          }
           reply("archive_workspace_response", {
             workspaceId: p.workspaceId,
-            archivedAt: new Date().toISOString(),
-            error: null,
+            archivedAt:
+              p.workspaceId === "wks_missing" ? null : new Date().toISOString(),
+            error:
+              p.workspaceId === "wks_missing" ? "Workspace not found" : null,
           });
           break;
         default:
@@ -307,6 +315,9 @@ export async function paseoFixture(modernCreation = false) {
     },
     dropNextCreate() {
       dropCreate = true;
+    },
+    dropNextArchive() {
+      dropArchive = true;
     },
     replaceHistory(id: string) {
       epoch = randomUUID();

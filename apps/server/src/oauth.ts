@@ -1,3 +1,11 @@
+import express from "express";
+import { createOAuthMetadata } from "@modelcontextprotocol/sdk/server/auth/router.js";
+import { metadataHandler } from "@modelcontextprotocol/sdk/server/auth/handlers/metadata.js";
+import { tokenHandler } from "@modelcontextprotocol/sdk/server/auth/handlers/token.js";
+import { clientRegistrationHandler } from "@modelcontextprotocol/sdk/server/auth/handlers/register.js";
+import { revocationHandler } from "@modelcontextprotocol/sdk/server/auth/handlers/revoke.js";
+import { BRAND_NAME } from "@agenvo/relay/brand";
+import { RelayAddress } from "@agenvo/protocol/address";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { type Response } from "express";
 import {
@@ -18,8 +26,9 @@ import {
 } from "@modelcontextprotocol/sdk/server/auth/errors.js";
 import { redirectUriMatches } from "@modelcontextprotocol/sdk/server/auth/handlers/authorize.js";
 import { type AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
-import { type Relay, type RecordStore } from "@agenvo/relay/core";
-import { consentPage } from "@agenvo/relay/admin/page";
+import type { Relay } from "@agenvo/relay/core";
+import type { RecordStore } from "@agenvo/relay/store";
+import { consentPage, consentRedirect } from "@agenvo/relay/admin/page";
 import { ownerSessionToken } from "@agenvo/relay/admin/auth";
 import { Fault } from "@agenvo/protocol";
 
@@ -50,7 +59,7 @@ export class VpsOAuth implements OAuthServerProvider {
   constructor(
     private store: RecordStore,
     private relay: Relay,
-    readonly origin: string,
+    readonly baseUrl: string,
   ) {}
   readonly clientsStore = {
     getClient: (id: string) => {
@@ -103,7 +112,7 @@ export class VpsOAuth implements OAuthServerProvider {
   private validate(params: AuthorizationParams) {
     if (params.scopes?.some((s) => s !== scope))
       throw new InvalidScopeError("Unsupported scope");
-    if (params.resource && params.resource.href !== this.origin + "/mcp")
+    if (params.resource && params.resource.href !== this.baseUrl + "/mcp")
       throw new InvalidRequestError("Wrong resource");
     if (!/^[A-Za-z0-9_-]{43}$/.test(params.codeChallenge))
       throw new InvalidRequestError("Use S256 PKCE");
@@ -126,10 +135,10 @@ export class VpsOAuth implements OAuthServerProvider {
       const handle = secret();
       this.store.put("oauth:consent:" + hash(handle), {
         authorizationUrl: request.url,
-        session: hash(ownerSessionToken(request)),
+        session: hash(ownerSessionToken(request, this.baseUrl)),
         expires: Date.now() + 600000,
       });
-      return consentPage(request, details, handle);
+      return consentPage(request, this.baseUrl, details, handle);
     }
     if (request.method !== "POST") return new Response(null, { status: 405 });
     const data = await request.formData();
@@ -143,7 +152,7 @@ export class VpsOAuth implements OAuthServerProvider {
       if (
         !value ||
         value.expires <= Date.now() ||
-        value.session !== hash(ownerSessionToken(request))
+        value.session !== hash(ownerSessionToken(request, this.baseUrl))
       )
         throw new Fault("permission_denied");
       this.store.remove(key);
@@ -160,22 +169,19 @@ export class VpsOAuth implements OAuthServerProvider {
     else {
       const target = new URL(details.redirectUri);
       target.searchParams.set("error", "access_denied");
-      target.searchParams.set("iss", this.origin + "/");
+      target.searchParams.set("iss", this.baseUrl);
       if (details.params.state !== undefined)
         target.searchParams.set("state", details.params.state);
       redirectTo = target.href;
     }
-    return new Response(null, {
-      status: 302,
-      headers: { Location: redirectTo, "Cache-Control": "no-store" },
-    });
+    return consentRedirect(request, this.baseUrl, redirectTo);
   }
 
   inspect(authorizationUrl: string) {
     const url = new URL(authorizationUrl);
     if (
-      url.origin !== this.origin ||
-      url.pathname !== "/authorize" ||
+      url.origin !== new URL(this.baseUrl).origin ||
+      new RelayAddress(this.baseUrl).route(url.href) !== "/authorize" ||
       url.hash ||
       url.username ||
       url.password
@@ -234,7 +240,7 @@ export class VpsOAuth implements OAuthServerProvider {
     } satisfies Code);
     const target = new URL(redirectUri);
     target.searchParams.set("code", code);
-    target.searchParams.set("iss", this.origin + "/");
+    target.searchParams.set("iss", this.baseUrl);
     if (details.params.state !== undefined)
       target.searchParams.set("state", details.params.state);
     return { redirectTo: target.href };
@@ -265,7 +271,7 @@ export class VpsOAuth implements OAuthServerProvider {
     const code = this.code(client, value);
     if (
       redirect !== code.redirectUri ||
-      (resource && resource.href !== this.origin + "/mcp")
+      (resource && resource.href !== this.baseUrl + "/mcp")
     )
       throw new InvalidGrantError("Authorization binding mismatch");
     return this.store.transaction(() => {
@@ -325,7 +331,7 @@ export class VpsOAuth implements OAuthServerProvider {
     }
     if (
       scopes?.some((s) => s !== scope) ||
-      (resource && resource.href !== this.origin + "/mcp")
+      (resource && resource.href !== this.baseUrl + "/mcp")
     )
       throw new InvalidGrantError("Authorization binding mismatch");
     return this.store.transaction(() => {
@@ -346,7 +352,7 @@ export class VpsOAuth implements OAuthServerProvider {
       clientId: token.clientId,
       scopes: [scope],
       expiresAt: Math.floor(token.expires / 1000),
-      resource: new URL(this.origin + "/mcp"),
+      resource: new URL(this.baseUrl + "/mcp"),
       extra: { grantId: token.grantId },
     };
   }
@@ -375,4 +381,49 @@ export class VpsOAuth implements OAuthServerProvider {
     for (const kind of ["client", "code", "access", "refresh", "consent"])
       this.store.expire("oauth:" + kind + ":", Date.now());
   }
+}
+
+/** Mount the SDK handlers at the same public paths advertised in discovery. */
+export function oauthRouter(provider: VpsOAuth, address: RelayAddress) {
+  const router = express.Router({ caseSensitive: true });
+  const metadata = createOAuthMetadata({
+    provider,
+    issuerUrl: new URL(address.baseUrl),
+    scopesSupported: [scope],
+  });
+  Object.assign(metadata, {
+    issuer: address.baseUrl,
+    authorization_endpoint: address.url("/authorize"),
+    token_endpoint: address.url("/token"),
+    registration_endpoint: address.url("/register"),
+    revocation_endpoint: address.url("/revoke"),
+  });
+  // Express string routes interpret characters such as ':' and '+' as syntax.
+  // Match configured URL paths literally, including arbitrary mount segments.
+  const mount = (path: string, handler: express.RequestHandler) =>
+    router.use(
+      new RegExp("^" + path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?=/|$)"),
+      handler,
+    );
+  mount(
+    new URL(address.authorizationMetadataUrl).pathname,
+    metadataHandler(metadata),
+  );
+  mount(
+    new URL(address.resourceMetadataUrl).pathname,
+    metadataHandler({
+      resource: address.url("/mcp"),
+      authorization_servers: [address.baseUrl],
+      scopes_supported: [scope],
+      bearer_methods_supported: ["header"],
+      resource_name: BRAND_NAME,
+    }),
+  );
+  mount(address.path("/token"), tokenHandler({ provider }));
+  mount(
+    address.path("/register"),
+    clientRegistrationHandler({ clientsStore: provider.clientsStore }),
+  );
+  mount(address.path("/revoke"), revocationHandler({ provider }));
+  return router;
 }

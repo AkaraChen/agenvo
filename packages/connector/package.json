@@ -1,12 +1,11 @@
 {
   "name": "@agenvo/connector",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/main.ts",
     "./adapters/adapter": "./src/adapters/adapter.ts",
-    "./adapters/management": "./src/adapters/management.ts",
     "./adapters/observations": "./src/adapters/observations.ts",
     "./backend": "./src/backend.ts",
     "./cli/admin-client": "./src/cli/admin-client.ts",
@@ -19,9 +18,9 @@
     "./main": "./src/main.ts"
   },
   "dependencies": {
-    "@agenvo/protocol": "0.1.0",
+    "@agenvo/protocol": "0.2.0",
     "zod": "4.6.5",
     "ws": "8.22.0",
-    "@agenvo/logging": "0.1.0"
+    "@agenvo/logging": "0.2.0"
   }
 }

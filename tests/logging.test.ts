@@ -1,3 +1,4 @@
+import { callCode } from "./support/code.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mcp, type McpRelay } from "@agenvo/relay/mcp";
@@ -12,16 +13,30 @@ test("MCP logs readable, correlated outcomes on stderr without request or native
   });
   const secret = "fixture-sensitive-content";
   const cases = [
-    { result: { execution: "accepted", result: secret }, level: "info" },
-    { result: new Fault("device_offline", secret), level: "warn" },
-    { result: new Error(secret, { cause: new Error(secret) }), level: "error" },
+    {
+      result: { execution: "accepted", result: secret },
+      level: "info",
+      summary: "accepted",
+    },
+    {
+      result: new Fault("device_offline", secret),
+      level: "warn",
+      summary: "not_started (device_offline)",
+    },
+    {
+      result: new Error(secret, { cause: new Error(secret) }),
+      level: "error",
+      summary: "unknown (internal_error)",
+    },
   ] as const;
   for (const [id, scenario] of cases.entries()) {
     const relay: McpRelay = {
-      instances: () => ({ execution: "accepted" }),
+      release: () => null,
+      instances: () => ({ execution: "accepted", result: { items: [] } }),
+      describe: async () => ({ execution: "accepted", result: { items: [] } }),
       call: async () => {
         if (scenario.result instanceof Error) throw scenario.result;
-        return scenario.result as Outcome;
+        return { ...scenario.result, requestId: `native-${id}` } as Outcome;
       },
       eventsList: () => ({}),
       eventsSubscribe: async () => ({}),
@@ -35,20 +50,20 @@ test("MCP logs readable, correlated outcomes on stderr without request or native
           Accept: "application/json, text/event-stream",
           "MCP-Protocol-Version": "2026-07-28",
           "Mcp-Method": "tools/call",
-          "Mcp-Name": "runtime_call",
+          "Mcp-Name": "execute",
         },
         body: JSON.stringify({
           jsonrpc: "2.0",
           id,
           method: "tools/call",
           params: {
-            name: "runtime_call",
-            arguments: {
+            name: "execute",
+            arguments: callCode({
               deviceId: "device",
               instanceId: "runtime",
               method: "thread/read",
               params: { text: secret },
-            },
+            }),
             _meta: {
               "io.modelcontextprotocol/protocolVersion": "2026-07-28",
               "io.modelcontextprotocol/clientInfo": {
@@ -62,32 +77,38 @@ test("MCP logs readable, correlated outcomes on stderr without request or native
       }),
       relay,
       "grant",
+      "https://relay.test",
     );
     assert.equal(response.status, 200, await response.clone().text());
     const body = (await response.json()) as any;
     const outcome = JSON.parse(body.result.content[0].text);
-    assert.equal(lines.length, id + 1);
-    const record = JSON.parse(lines[id]);
-    assert.equal(record.service, "agenvo");
-    assert.equal(record.component, "relay.mcp");
-    assert.equal(record.event, "mcp.tool.completed");
+    const records = lines.map((line) => JSON.parse(line));
+    const record = records.filter((r) => r.event === "runtime.call.completed")[
+      id
+    ];
     assert.equal(record.level, scenario.level);
-    assert.match(
-      record.message,
-      /^MCP tool runtime_call (completed|failed: .+)$/,
-    );
-    assert.equal(record.requestId, outcome.requestId);
     assert.equal(record.deviceId, "device");
     assert.equal(record.instanceId, "runtime");
     assert.equal(record.method, "thread/read");
-    assert.equal(record.errorCode, outcome.error?.code);
-    assert.equal(record.execution, outcome.execution);
-    assert.ok(record.durationMs >= 0);
-    if (scenario.level === "error") {
-      assert.equal(record.err.type, "Error");
-      assert.match(record.err.stack, /logging.test.ts/);
+    assert.equal(
+      record.message,
+      `Native call thread/read on device/runtime: ${scenario.summary}`,
+    );
+    const completed = records.filter((r) => r.event === "mcp.tool.completed")[
+      id
+    ];
+    assert.match(completed.requestId, /^[0-9a-f-]{36}$/);
+    assert.equal(completed.execution, undefined);
+    if (!(scenario.result instanceof Error)) {
+      assert.equal(record.requestId, outcome.requestId);
+      assert.notEqual(completed.requestId, outcome.requestId);
     }
-    assert.ok(!lines[id].includes(secret));
+    assert.equal(completed.tool, "execute");
+    assert.ok(!lines.join("\n").includes(secret));
   }
-  assert.equal(stdout.mock.callCount(), 0);
+  // Node's test runner also writes its binary event transport to stdout.
+  assert.equal(
+    stdout.mock.calls.filter((c) => typeof c.arguments[0] === "string").length,
+    0,
+  );
 });
