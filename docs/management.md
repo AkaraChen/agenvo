@@ -48,10 +48,14 @@ after an uncertain result.
 
 `read` preserves Paseo's native capture `start`/`end` offsets. Narrow the range
 if a capture exceeds the relay result limit. `send-keys` accepts Paseo key
-descriptors such as `{key: "Enter"}` or `{key: "c", ctrl: true}`. It uses
-Paseo's native encoder and tracks input modes from the native restore/output
-stream, including application cursor mode. Unsupported keys are rejected
-before any input is sent.
+descriptors such as `{key: "Enter"}` or `{key: "c", ctrl: true}` and uses
+Paseo's native encoder. Arrow keys and modified Enter also require `inputMode`:
+pass `{}` for normal mode, `{applicationCursorKeys: true}` for application
+cursor keys, or the application's `kittyKeyboardFlags` / `win32InputMode` for
+modified Enter. Omitted fields within `inputMode` use normal-mode values.
+The caller must know the target application's mode: Paseo's screen restore
+does not establish that input modes have finished replaying. Unsupported keys
+or missing required modes reject the whole batch before any input is sent.
 
 To register a cloned directory in Paseo's project list, discover
 `paseo.projects.add` and pass its `cwd`, then verify with

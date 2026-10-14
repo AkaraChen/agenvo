@@ -111,17 +111,28 @@ test(
         ),
       (output) => output.includes("MODE_READY"),
     );
-    await call("paseo.terminals.send-keys", {
+    // Attach after the application has enabled its input mode, as a new
+    // connector would when taking over an already running terminal.
+    await adapter.close();
+    await adapter.init();
+    const missingMode = await adapter.call("paseo.terminals.send-keys", {
       terminalId,
       keys: [{ key: "ArrowUp" }],
     });
-    await until(
+    assert.equal(missingMode.error?.code, "invalid_params");
+    await call("paseo.terminals.send-keys", {
+      terminalId,
+      keys: [{ key: "ArrowUp" }],
+      inputMode: { applicationCursorKeys: true },
+    });
+    const keyOutput = await until(
       async () =>
         JSON.stringify(
           await call("paseo.terminals.read", { terminalId, start: 0, end: 80 }),
         ),
-      (output) => output.includes("KEYHEX=1b4f41"),
+      (output) => /KEYHEX=[0-9a-f]+/.test(output),
     );
+    assert.ok(keyOutput.includes("KEYHEX=1b4f41"), keyOutput);
     await call("paseo.terminals.close", { terminalId });
     assert.ok(
       !JSON.stringify(

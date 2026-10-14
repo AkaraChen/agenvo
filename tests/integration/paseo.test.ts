@@ -64,6 +64,33 @@ test(
           }),
         }),
       );
+    const [terminalEntry] = await search("paseo.terminals.send-keys", true);
+    const terminalKeys = terminalEntry.methods.find(
+      (method: any) => method.name === "paseo.terminals.send-keys",
+    );
+    assert.ok(terminalKeys.inputSchema.properties.inputMode);
+    const missingMode = await outcome("paseo.terminals.send-keys", {
+      terminalId: "terminal",
+      keys: [{ key: "ArrowUp" }],
+    });
+    assert.equal(missingMode.execution, "not_started");
+    assert.equal(missingMode.error.code, "invalid_params");
+    await call("paseo.terminals.send-keys", {
+      terminalId: "terminal",
+      keys: [{ key: "ArrowUp" }],
+      inputMode: { applicationCursorKeys: true },
+    });
+    await call("paseo.agents.list");
+    assert.deepEqual(
+      daemon.requests.filter((p) => p.type === "terminal_input"),
+      [
+        {
+          type: "terminal_input",
+          terminalId: "terminal",
+          message: { type: "input", data: "\x1bOA" },
+        },
+      ],
+    );
     await lab.rpc("events/subscribe", lab.subscription(device, "paseo"));
     const discover = async () =>
       (await call("paseo.agents.list")).entries.find(

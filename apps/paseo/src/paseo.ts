@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { encodeTerminalKeyInput } from "@getpaseo/protocol/terminal-key-input";
-import { TerminalInputModeTracker } from "@getpaseo/protocol/terminal-input-mode";
 import {
   AgentPermissionResponseSchema,
   FetchAgentsRequestMessageSchema,
@@ -79,14 +78,6 @@ export class PaseoAdapter implements Adapter {
   >();
   private controlled = new Set<string>();
   private approvals = new Set<string>();
-  private terminalInputs = new Map<
-    string,
-    {
-      tracker: TerminalInputModeTracker;
-      subscription: ReturnType<DaemonClient["observeTerminal"]>;
-      restored: Promise<void>;
-    }
-  >();
 
   constructor(readonly config: PaseoConfig) {
     const define = <S extends z.ZodType>(
@@ -377,18 +368,41 @@ export class PaseoAdapter implements Adapter {
           )
           .min(1)
           .max(64),
+        inputMode: z
+          .strictObject({
+            applicationCursorKeys: z.boolean().default(false),
+            kittyKeyboardFlags: z.number().int().nonnegative().default(0),
+            win32InputMode: z.boolean().default(false),
+          })
+          .optional(),
       }),
       false,
-      "Send Paseo key descriptors (e.g. {key: 'Enter'}, {key: 'c', ctrl: true}) using native encoding and terminal modes. Unknown keys are rejected before sending. Confirms transport submission only.",
+      "Send Paseo key descriptors (e.g. {key: 'Enter'}, {key: 'c', ctrl: true}) using native encoding. Arrow keys and modified Enter require explicit inputMode: {} for normal mode, or the target application's applicationCursorKeys, kittyKeyboardFlags and win32InputMode. Paseo does not expose a synchronized mode snapshot. Unsupported keys or missing modes are rejected before any input is sent. Confirms transport submission only.",
       async (p) => {
-        const client = this.connected();
-        const inputMode = await this.terminalInputMode(p.terminalId, client);
+        // Paseo restores the screen before replaying input modes, with no
+        // completion marker when all modes are off. Do not infer readiness
+        // from a snapshot, an output frame, or a delay.
+        if (
+          !p.inputMode &&
+          p.keys.some(
+            (key) =>
+              ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
+                key.key,
+              ) ||
+              (key.key === "Enter" &&
+                (key.ctrl || key.alt || key.shift || key.meta)),
+          )
+        )
+          throw new Fault(
+            "invalid_params",
+            "inputMode is required for arrow keys and modified Enter; use {} for normal mode or specify the target application's modes",
+          );
         const encoded = p.keys.map((key) =>
-          encodeTerminalKeyInput(key, { inputMode }),
+          encodeTerminalKeyInput(key, { inputMode: p.inputMode }),
         );
         if (encoded.some((data) => !data))
           throw new Fault("invalid_params", "Unsupported Paseo terminal key");
-        this.connected(client).sendTerminalInput(p.terminalId, {
+        this.connected().sendTerminalInput(p.terminalId, {
           type: "input",
           data: encoded.join(""),
         });
@@ -419,95 +433,8 @@ export class PaseoAdapter implements Adapter {
       terminalTarget,
       false,
       "Kill a native terminal and its running program. Preserve required output before closing.",
-      async (p) => {
-        const result = await this.connected().killTerminal(p.terminalId);
-        if (result.success) this.terminalInputs.delete(p.terminalId);
-        return result;
-      },
+      (p) => this.connected().killTerminal(p.terminalId),
     );
-  }
-  private async terminalInputMode(id: string, client: DaemonClient) {
-    let entry = this.terminalInputs.get(id);
-    if (!entry) {
-      if (this.terminalInputs.size >= 128)
-        throw new Fault(
-          "resource_exhausted",
-          "At most 128 terminal input modes can be observed per connection",
-        );
-      const tracker = new TerminalInputModeTracker();
-      const decoder = new TextDecoder();
-      let resolve!: () => void;
-      let reject!: (error: unknown) => void;
-      const restored = {
-        promise: new Promise<void>((yes, no) => {
-          resolve = yes;
-          reject = no;
-        }),
-        resolve: () => resolve(),
-        reject: (error: unknown) => reject(error),
-      };
-      const subscription = client.observeTerminal(
-        id,
-        (event) => {
-          if (event.type === "restore") {
-            tracker.reset();
-            decoder.decode();
-            tracker.feed(decoder.decode(event.data, { stream: true }));
-            restored.resolve();
-          } else if (event.type === "output") {
-            tracker.feed(decoder.decode(event.data, { stream: true }));
-          }
-        },
-        { restore: { mode: "visible-snapshot" } },
-      );
-      entry = { tracker, subscription, restored: restored.promise };
-      this.terminalInputs.set(id, entry);
-      const remove = () => {
-        if (this.terminalInputs.get(id) === entry)
-          this.terminalInputs.delete(id);
-      };
-      subscription.subscribe({
-        snapshot: () => {},
-        update: (message) => {
-          if (message.type === "terminal_stream_exit") {
-            remove();
-            restored.reject(
-              new Fault("runtime_unavailable", "Terminal observation ended"),
-            );
-          }
-        },
-        error: (error) => {
-          remove();
-          restored.reject(error);
-        },
-      });
-    }
-    let timeout: NodeJS.Timeout | undefined;
-    try {
-      await Promise.race([
-        Promise.all([entry.subscription.ready, entry.restored]),
-        new Promise((_, reject) => {
-          timeout = setTimeout(
-            () =>
-              reject(
-                new Fault(
-                  "runtime_unavailable",
-                  "Terminal input mode snapshot timed out",
-                ),
-              ),
-            8000,
-          );
-        }),
-      ]);
-    } catch (error) {
-      if (this.terminalInputs.get(id) === entry) this.terminalInputs.delete(id);
-      await entry.subscription.release().catch(() => {});
-      throw error;
-    } finally {
-      clearTimeout(timeout);
-    }
-    this.connected(client);
-    return entry.tracker.getState();
   }
   connected(expected?: DaemonClient) {
     if (
@@ -591,7 +518,6 @@ export class PaseoAdapter implements Adapter {
     this.timelines.clear();
     this.controlled.clear();
     this.approvals.clear();
-    this.terminalInputs.clear();
     this.onAvailabilityChange?.();
     this.emit("agenvo.resync_required", undefined, {
       reason: "daemon_disconnected",
@@ -783,7 +709,6 @@ export class PaseoAdapter implements Adapter {
     this.available = false;
     this.timelines.clear();
     this.controlled.clear();
-    this.terminalInputs.clear();
     await client?.close();
   }
 }
