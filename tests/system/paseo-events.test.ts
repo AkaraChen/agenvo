@@ -100,6 +100,11 @@ test(
       ),
       /ISOLATED_MODEL_RESULT/,
     );
+    // The real daemon answers for a turn that started no subagents.
+    assert.deepEqual(
+      await call("paseo.agents.subagents", { agentId: thread.id }),
+      { agentId: thread.id, loaded: true, nesting: true, subagents: [] },
+    );
     model.hold();
     const count = model.requests.length;
     await call("paseo.agents.send", {
@@ -119,6 +124,10 @@ test(
     await call("paseo.agents.archive", { agentId: external.id });
     const archived = await client.fetchAgent(external.id);
     assert.ok(archived?.agent.archivedAt);
+    assert.equal(
+      (await call("paseo.agents.subagents", { agentId: external.id })).loaded,
+      false,
+    );
     const archivedCount = model.requests.length;
     await call("paseo.agents.send", {
       agentId: thread.id,

@@ -266,3 +266,112 @@ test(
     assert.equal(unavailable.error.code, "device_offline");
   },
 );
+
+test(
+  "Paseo lists an agent's provider subagents, nested ones included, and refuses daemons without them",
+  { timeout: 30000 },
+  async (t) => {
+    const lab = await eventsLab(t);
+    const daemon = await paseoFixture();
+    lab.cleanup(() => daemon.close());
+    const parent = daemon.add("Parent");
+    const other = daemon.add("Unrelated agent in the same workspace");
+    const child = (id: string, status: string, parentSubagentId?: string) => ({
+      id,
+      parentAgentId: parent.id,
+      parentSubagentId,
+      provider: "claude",
+      title: "x".repeat(300),
+      description: "A long prompt the connector leaves out",
+      status,
+      createdAt: "2026-10-14T00:00:00.000Z",
+      updatedAt: "2026-10-14T00:01:00.000Z",
+      toolCallId: "toolu_" + id,
+      cwd: "/fixture",
+      subtitle: null,
+    });
+    daemon.subagents.set(parent.id, [
+      child("a", "completed"),
+      child("b", "running"),
+      child("c", "running", "b"),
+    ]);
+    daemon.subagents.set(other.id, [child("z", "running")]);
+    const device = await lab.connect([
+      {
+        id: "paseo",
+        kind: "paseo",
+        label: "Isolated Paseo",
+        endpoint: daemon.endpoint,
+        serverId: daemon.serverId,
+      },
+    ]);
+    const call = (method: string, params = {}) =>
+      lab.call(device, "paseo", method, params);
+    const outcome = async (method: string, params = {}) =>
+      nativeOutcome(
+        await lab.rpc("tools/call", {
+          name: "execute",
+          arguments: callCode({
+            deviceId: device,
+            instanceId: "paseo",
+            method,
+            params,
+          }),
+        }),
+      );
+
+    const all = await call("paseo.agents.subagents", { agentId: parent.id });
+    assert.equal(all.loaded, true);
+    assert.equal(all.nesting, true);
+    assert.deepEqual(
+      all.subagents.map((s: any) => [s.id, s.parentSubagentId, s.status]),
+      [
+        ["a", null, "completed"],
+        ["b", null, "running"],
+        ["c", "b", "running"],
+      ],
+    );
+    assert.equal(all.subagents[0].title.length, 200);
+    assert.equal(Object.hasOwn(all.subagents[0], "description"), false);
+    const running = await call("paseo.agents.subagents", {
+      agentId: parent.id,
+      status: "running",
+    });
+    assert.deepEqual(
+      running.subagents.map((s: any) => s.id),
+      ["b", "c"],
+    );
+    assert.equal(
+      (await outcome("paseo.agents.subagents", { agentId: "missing" })).error
+        .code,
+      "not_found",
+    );
+
+    // A closed agent is not loaded to be listed.
+    const listed = daemon.requests.length;
+    parent.status = "closed";
+    const closed = await call("paseo.agents.subagents", { agentId: parent.id });
+    assert.deepEqual(closed, {
+      agentId: parent.id,
+      loaded: false,
+      nesting: true,
+      subagents: [],
+    });
+    assert.equal(
+      daemon.requests
+        .slice(listed)
+        .some((p) => p.type === "agent.provider_subagents.list.request"),
+      false,
+    );
+
+    // An old daemon does not answer as if there were none.
+    daemon.features.providerSubagents = false;
+    daemon.disconnect();
+    const refused = await until(
+      () => outcome("paseo.agents.subagents", { agentId: other.id }),
+      (r) => r.error?.code === "unsupported_capability",
+      10000,
+    );
+    assert.equal(refused.execution, "not_started");
+  },
+);
