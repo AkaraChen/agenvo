@@ -47,6 +47,9 @@ export const historyInput = agentTarget.extend({
   limit: z.number().int().min(1).max(50).default(20),
   projection: z.enum(["canonical", "projected"]).default("projected"),
 });
+export const subagentsInput = agentTarget.extend({
+  status: z.enum(["running", "completed", "failed", "canceled"]).optional(),
+});
 export const permissionInput = agentTarget.extend({
   requestId: z.string().min(1),
   response: AgentPermissionResponseSchema,
@@ -230,6 +233,13 @@ export class PaseoAdapter implements Adapter {
         const { agentId, ...options } = p;
         return this.connected().fetchAgentTimeline(agentId, options);
       },
+    );
+    define(
+      "paseo.agents.subagents",
+      subagentsInput,
+      true,
+      "Read the provider subagents Paseo tracks for a native agent by full agent ID, nested ones included (parentSubagentId), optionally only those with one status. Paseo keeps them in daemon memory: a restarted daemon or a closed agent (loaded: false) has none. Daemons without provider subagents refuse with unsupported_capability.",
+      (p) => this.subagents(p.agentId, p.status),
     );
     define(
       "paseo.interactions.respond",
@@ -611,6 +621,41 @@ export class PaseoAdapter implements Adapter {
     if (result.agent.id !== id)
       throw new Fault("invalid_params", "Use the complete discovered Agent ID");
     return result.agent;
+  }
+  async subagents(
+    id: string,
+    status?: z.infer<typeof subagentsInput>["status"],
+  ) {
+    const client = this.connected();
+    const features = client.getLastServerInfoMessage()?.features;
+    if (features?.providerSubagents !== true)
+      throw new Fault(
+        "unsupported_capability",
+        "This Paseo daemon does not report provider subagents; update Paseo",
+      );
+    const agent = await this.get(id, client);
+    // Listing loads a stored agent, starting its provider: a closed one is
+    // answered without it. Paseo cancels an agent's subagents as it closes.
+    if (agent.archivedAt || agent.status === "closed")
+      return { agentId: id, loaded: false, nesting: true, subagents: [] };
+    const listed = await this.connected(client).listProviderSubagents(id);
+    return {
+      agentId: id,
+      loaded: true,
+      // Without it, a nested subagent's parentSubagentId may be missing.
+      nesting: features.providerSubagentNesting === true,
+      subagents: listed.subagents
+        .filter((s) => !status || s.status === status)
+        .map((s) => ({
+          id: s.id,
+          parentSubagentId: s.parentSubagentId ?? null,
+          provider: s.provider,
+          title: s.title?.slice(0, 200) ?? null,
+          status: s.status,
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+        })),
+    };
   }
   async observe(id: string, client = this.connected()) {
     this.connected(client);

@@ -11,6 +11,12 @@ export async function paseoFixture(modernCreation = false) {
   await once(server, "listening");
   const agents = new Map<string, AgentSnapshotPayload>();
   const requests: any[] = [];
+  // Provider subagents by parent agent, as the daemon's store lists them.
+  const subagents = new Map<string, any[]>();
+  const features: Record<string, boolean> = {
+    providerSubagents: true,
+    providerSubagentNesting: true,
+  };
   const subscriptions = new Map<
     WebSocket,
     { directory?: string; timelines: Map<string, string> }
@@ -114,6 +120,7 @@ export async function paseoFixture(modernCreation = false) {
             ownedSubscriptions: true,
             selectiveAgentTimeline: true,
             creationLifecycle: modernCreation,
+            ...features,
           },
         });
         return;
@@ -261,6 +268,15 @@ export async function paseoFixture(modernCreation = false) {
           );
           update(agent!);
           break;
+        case "agent.provider_subagents.list.request":
+          reply("agent.provider_subagents.list.response", {
+            parentAgentId: p.parentAgentId,
+            subagents: subagents.get(p.parentAgentId) ?? [],
+            error: agents.has(p.parentAgentId)
+              ? null
+              : `Agent not found: ${p.parentAgentId}`,
+          });
+          break;
         case "cancel_agent_request":
           reply("cancel_agent_response", {
             agentId: p.agentId,
@@ -307,6 +323,8 @@ export async function paseoFixture(modernCreation = false) {
     serverId,
     agents,
     requests,
+    subagents,
+    features,
     add,
     update,
     stream,
