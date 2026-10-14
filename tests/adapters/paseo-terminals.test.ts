@@ -100,39 +100,55 @@ test(
         ),
       (output) => output.includes("AG_RUN_ok"),
     );
-    await call("paseo.terminals.run", {
-      terminalId,
-      command: `"${process.execPath}" -e "process.stdin.setRawMode(true);process.stdout.write(String.fromCharCode(27)+'[?1h'+['MODE','READY'].join('_'));process.stdin.once('data',b=>{process.stdout.write('KEYHEX='+b.toString('hex')+String.fromCharCode(27)+'[?1l');process.exit()})"`,
-    });
-    await until(
-      async () =>
-        JSON.stringify(
-          await call("paseo.terminals.read", { terminalId, start: 0, end: 80 }),
-        ),
-      (output) => output.includes("MODE_READY"),
-    );
-    // Attach after the application has enabled its input mode, as a new
-    // connector would when taking over an already running terminal.
-    await adapter.close();
-    await adapter.init();
-    const missingMode = await adapter.call("paseo.terminals.send-keys", {
-      terminalId,
-      keys: [{ key: "ArrowUp" }],
-    });
-    assert.equal(missingMode.error?.code, "invalid_params");
-    await call("paseo.terminals.send-keys", {
-      terminalId,
-      keys: [{ key: "ArrowUp" }],
-      inputMode: { applicationCursorKeys: true },
-    });
-    const keyOutput = await until(
-      async () =>
-        JSON.stringify(
-          await call("paseo.terminals.read", { terminalId, start: 0, end: 80 }),
-        ),
-      (output) => /KEYHEX=[0-9a-f]+/.test(output),
-    );
-    assert.ok(keyOutput.includes("KEYHEX=1b4f41"), keyOutput);
+    for (const mode of [
+      { name: "NORMAL", sequence: "[?1l", input: {}, expected: "1b5b41" },
+      {
+        name: "APPLICATION",
+        sequence: "[?1h",
+        input: { inputMode: { applicationCursorKeys: true } },
+        expected: "1b4f41",
+      },
+    ]) {
+      await call("paseo.terminals.run", {
+        terminalId,
+        command: `"${process.execPath}" -e "process.stdin.setRawMode(true);process.stdout.write(String.fromCharCode(27)+'${mode.sequence}'+['MODE','${mode.name}','READY'].join('_'));process.stdin.once('data',b=>{process.stdout.write('KEY_${mode.name}='+b.toString('hex')+String.fromCharCode(27)+'[?1l');process.exit()})"`,
+      });
+      await until(
+        async () =>
+          JSON.stringify(
+            await call("paseo.terminals.read", {
+              terminalId,
+              start: 0,
+              end: 80,
+            }),
+          ),
+        (output) => output.includes(`MODE_${mode.name}_READY`),
+      );
+      // A new connection must encode its first key from the caller's choice,
+      // without relying on observations from before the application started.
+      await adapter.close();
+      await adapter.init();
+      await call("paseo.terminals.send-keys", {
+        terminalId,
+        keys: [{ key: "ArrowUp" }],
+        ...mode.input,
+      });
+      const keyOutput = await until(
+        async () =>
+          JSON.stringify(
+            await call("paseo.terminals.read", {
+              terminalId,
+              start: 0,
+              end: 80,
+            }),
+          ),
+        (output) => new RegExp(`KEY_${mode.name}=[0-9a-f]+`).test(output),
+      );
+      assert.ok(
+        keyOutput.includes(`KEY_${mode.name}=${mode.expected}`),
+        keyOutput,
+      );
+    }
     await call("paseo.terminals.close", { terminalId });
     assert.ok(
       !JSON.stringify(

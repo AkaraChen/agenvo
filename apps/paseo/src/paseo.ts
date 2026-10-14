@@ -325,7 +325,7 @@ export class PaseoAdapter implements Adapter {
       "paseo.terminals.run",
       terminalTarget.extend({ command: z.string().max(48000) }),
       false,
-      "Send command text followed by Enter. Confirms transport submission only, not native receipt, command completion or exit status; read output to observe the result.",
+      "Submit input as command text followed by Enter to a terminal. Confirms transport submission only; inspect output to determine command completion and exit status.",
       async (p) => {
         this.connected().sendTerminalInput(p.terminalId, {
           type: "input",
@@ -341,7 +341,7 @@ export class PaseoAdapter implements Adapter {
       "paseo.terminals.send-text",
       terminalTarget.extend({ text: z.string().min(1).max(48000) }),
       false,
-      "Send literal terminal input without adding Enter. Confirms transport submission only.",
+      "Submit input as literal text to a terminal without adding Enter. Confirms transport submission only.",
       async (p) => {
         this.connected().sendTerminalInput(p.terminalId, {
           type: "input",
@@ -377,26 +377,8 @@ export class PaseoAdapter implements Adapter {
           .optional(),
       }),
       false,
-      "Send Paseo key descriptors (e.g. {key: 'Enter'}, {key: 'c', ctrl: true}) using native encoding. Arrow keys and modified Enter require explicit inputMode: {} for normal mode, or the target application's applicationCursorKeys, kittyKeyboardFlags and win32InputMode. Paseo does not expose a synchronized mode snapshot. Unsupported keys or missing modes are rejected before any input is sent. Confirms transport submission only.",
+      "Submit input as Paseo key descriptors to a terminal (e.g. {key: 'Enter'}, {key: 'c', ctrl: true}). Uses native encoding in normal mode by default; optional inputMode overrides applicationCursorKeys, kittyKeyboardFlags and win32InputMode without detecting the application's mode. Unsupported keys reject the whole batch before sending. Confirms transport submission only.",
       async (p) => {
-        // Paseo restores the screen before replaying input modes, with no
-        // completion marker when all modes are off. Do not infer readiness
-        // from a snapshot, an output frame, or a delay.
-        if (
-          !p.inputMode &&
-          p.keys.some(
-            (key) =>
-              ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(
-                key.key,
-              ) ||
-              (key.key === "Enter" &&
-                (key.ctrl || key.alt || key.shift || key.meta)),
-          )
-        )
-          throw new Fault(
-            "invalid_params",
-            "inputMode is required for arrow keys and modified Enter; use {} for normal mode or specify the target application's modes",
-          );
         const encoded = p.keys.map((key) =>
           encodeTerminalKeyInput(key, { inputMode: p.inputMode }),
         );
@@ -420,7 +402,7 @@ export class PaseoAdapter implements Adapter {
         stripAnsi: z.boolean().default(true),
       }),
       true,
-      "Capture native terminal output. start/end use Paseo capture offsets (negative offsets read recent lines); narrow the range when the result is too large. Output is not durable history or proof of success.",
+      "Read output from a native terminal. start/end use Paseo capture offsets (negative offsets read recent lines); narrow the range when the result is too large. Output is not durable history or proof of success.",
       (p) =>
         this.connected().captureTerminal(p.terminalId, {
           start: p.start,

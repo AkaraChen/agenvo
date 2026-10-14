@@ -46,11 +46,13 @@ Paseo 使用 `/ws` WebSocket。客户端先发送 `hello`，包含 `clientId`、
 
 `paseo.terminals` 保留原生 terminal ID，通过原生方法创建、列出、读取和关闭普通 shell；`run` 附加回车，`send-text` 直接发送输入字节，`send-keys` 使用原生 `encodeTerminalKeyInput`。输入操作只确认传输提交，不确认程序收到输入、命令完成或退出码。项目注册使用 `paseo.projects.add`，与创建 workspace 分开。
 
-方向键和组合 Enter 的编码依赖目标程序的输入模式，调用方必须显式提供 `inputMode`。`{}` 明确选择普通模式；`applicationCursorKeys`、`kittyKeyboardFlags` 和 `win32InputMode` 沿用原生字段。Enter、Ctrl-C 等模式无关按键无需此参数。整个按键批次在发送前校验，缺少必需模式或包含不支持的按键时不发送任何前缀。
+`send-keys` 默认使用原生编码器的普通模式，`inputMode` 是可选覆盖，`applicationCursorKeys`、`kittyKeyboardFlags` 和 `win32InputMode` 沿用原生字段。默认模式未必适合所有交互程序；调用 Agent 根据程序和输出选择编码，Connector 不把模式判断变成调用门槛。整个按键批次在发送前校验，包含不支持的按键时不发送任何前缀。
+
+能力描述使用共同的 `submit input`、`read output` 术语，让 Agent 通过同一组搜索词发现终端操作。Connector 不自动重放输入；结果不确定时，Agent 根据原生输出和操作的可重复性决定是否重试。命令完成和业务成功继续由 Agent 判断。
 
 Paseo 0.11.1 和 0.11.2 的 `terminal-session-controller` 先发送屏幕 restore，再由 `TerminalOutputCoalescer` 发送输入模式 preamble；所有模式关闭时 preamble 为空，没有恢复完成标记。因此屏幕快照、第一帧输出或固定延时都不能可靠确定模式已恢复。Connector 不维护第二份推断的模式状态，也不为发送按键建立常驻终端订阅。自动模式选择需要原生协议提供完整模式快照或明确的恢复完成边界。
 
-原生测试在程序开启 application cursor 模式后重启 Connector，验证缺少模式时拒绝发送，显式指定模式后程序收到 `ESC O A`。协议 fixture 另验证普通方向键、Kitty/Win32 组合 Enter，以及拒绝批次不会发送部分输入。
+原生测试在程序准备接收按键后重启 Connector，验证省略模式时程序收到普通方向键 `ESC [ A`，指定 application cursor 模式时收到 `ESC O A`。协议 fixture 另验证 Kitty/Win32 组合 Enter，以及不支持的按键不会造成部分输入。MCP 集成测试覆盖共同搜索词发现、可选模式 schema 和两种编码的实际传输。
 
 ## 需要保留的原生语义
 

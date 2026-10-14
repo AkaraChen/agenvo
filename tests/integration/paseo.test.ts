@@ -64,17 +64,30 @@ test(
           }),
         }),
       );
-    const [terminalEntry] = await search("paseo.terminals.send-keys", true);
+    const [terminalEntry] = await search("submit input terminal", true);
+    assert.deepEqual(
+      terminalEntry.methods.map((method: any) => method.name).sort(),
+      [
+        "paseo.terminals.run",
+        "paseo.terminals.send-keys",
+        "paseo.terminals.send-text",
+      ],
+    );
+    const [terminalOutput] = await search("read output terminal");
+    assert.ok(
+      terminalOutput.methods.some(
+        (method: any) => method.name === "paseo.terminals.read",
+      ),
+    );
     const terminalKeys = terminalEntry.methods.find(
       (method: any) => method.name === "paseo.terminals.send-keys",
     );
     assert.ok(terminalKeys.inputSchema.properties.inputMode);
-    const missingMode = await outcome("paseo.terminals.send-keys", {
+    const defaultMode = await outcome("paseo.terminals.send-keys", {
       terminalId: "terminal",
       keys: [{ key: "ArrowUp" }],
     });
-    assert.equal(missingMode.execution, "not_started");
-    assert.equal(missingMode.error.code, "invalid_params");
+    assert.equal(defaultMode.execution, "accepted");
     await call("paseo.terminals.send-keys", {
       terminalId: "terminal",
       keys: [{ key: "ArrowUp" }],
@@ -84,6 +97,11 @@ test(
     assert.deepEqual(
       daemon.requests.filter((p) => p.type === "terminal_input"),
       [
+        {
+          type: "terminal_input",
+          terminalId: "terminal",
+          message: { type: "input", data: "\x1b[A" },
+        },
         {
           type: "terminal_input",
           terminalId: "terminal",

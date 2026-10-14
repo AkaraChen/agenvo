@@ -4,7 +4,7 @@ import { PaseoAdapter } from "../apps/paseo/src/paseo.js";
 import { paseoFixture } from "./fixtures/paseo-daemon.js";
 import { until } from "./support/environment.js";
 
-test("Paseo terminal keys require explicit modes before sending mode-dependent input", async (t) => {
+test("Paseo terminal keys use normal mode by default and accept native mode overrides", async (t) => {
   const fixture = await paseoFixture();
   t.after(() => fixture.close());
   const adapter = new PaseoAdapter({
@@ -16,17 +16,11 @@ test("Paseo terminal keys require explicit modes before sending mode-dependent i
   });
   t.after(() => adapter.close());
   await adapter.init();
-  for (const keys of [
-    [{ key: "Enter" }, { key: "ArrowUp" }],
-    [{ key: "Enter", shift: true }],
-    [{ key: "Enter" }, { key: "unknown-key" }],
-  ]) {
-    const result = await adapter.call("paseo.terminals.send-keys", {
-      terminalId: "terminal",
-      keys,
-    });
-    assert.equal(result.error?.code, "invalid_params");
-  }
+  const invalid = await adapter.call("paseo.terminals.send-keys", {
+    terminalId: "terminal",
+    keys: [{ key: "Enter" }, { key: "unknown-key" }],
+  });
+  assert.equal(invalid.error?.code, "invalid_params");
   // A correlated request drains earlier WebSocket messages before inspecting
   // whether rejected batches sent any prefix to the terminal.
   await adapter.call("paseo.agents.list", {});
@@ -36,6 +30,8 @@ test("Paseo terminal keys require explicit modes before sending mode-dependent i
   );
   for (const [params, expected] of [
     [{ keys: [{ key: "Enter" }, { key: "c", ctrl: true }] }, "\r\x03"],
+    [{ keys: [{ key: "ArrowUp" }] }, "\x1b[A"],
+    [{ keys: [{ key: "Enter", shift: true }] }, "\r"],
     [{ keys: [{ key: "ArrowUp" }], inputMode: {} }, "\x1b[A"],
     [
       {
